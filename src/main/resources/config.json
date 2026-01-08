@@ -1,0 +1,10 @@
+{
+  "targetPath": "THtest",
+  "updatePath": "update",
+  "deletePath": "delete",
+  "backupPath": "old",
+  "logPath": "logs",
+  "confirmBeforeReplace": true,
+  "createBackup": true,
+  "logLevel": "INFO"
+}

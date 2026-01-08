@@ -1,139 +1,149 @@
 package com.awei.frt.utils;
 
 import com.awei.frt.model.Config;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
  * 配置加载器
+ * 负责加载和解析配置文件
  */
 public class ConfigLoader {
-    private static final Logger logger = LoggerFactory.getLogger(ConfigLoader.class);
-    private static final String CONFIG_FILE = "config.json";
     
     /**
-     * 获取项目根目录
+     * 加载配置
+     * 按优先级顺序查找配置文件：
+     * 1. FRT项目根目录外部的config.json
+     * 2. resources目录下的config.json
+     * 3. 使用默认配置
      */
-    private static Path getProjectRoot() {
-        try {
-            // 从当前类的位置向上找到项目根目录
-            Path currentPath = Paths.get(ConfigLoader.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            
-            // 如果是 classes 目录，向上两级到项目根目录
-            if (currentPath.toString().contains("classes")) {
-                return currentPath.getParent().getParent();
-            }
-            
-            // 如果是 target 目录，向上到项目根目录
-            if (currentPath.toString().contains("target")) {
-                return currentPath.getParent();
-            }
-            
-            // 否则使用当前工作目录
-            return Paths.get("").toAbsolutePath();
-        } catch (Exception e) {
-            logger.warn("无法确定项目根目录，使用当前目录", e);
-            return Paths.get("").toAbsolutePath();
-        }
-    }
-    
-    /**
-     * 获取 FRT 同级目录（父目录）
-     * 例如: c:/Users/xxx/FRT/FRT -> c:/Users/xxx/FRT/
-     */
-    private static Path getParentDirectory() {
-        Path projectRoot = getProjectRoot();
-        Path parentPath = projectRoot.getParent();
-        if (parentPath != null) {
-            return parentPath;
-        }
-        logger.warn("无法获取父目录，使用项目根目录");
-        return projectRoot;
-    }
-    
-    /**
-     * 从指定路径尝试加载配置文件
-     */
-    private static Config tryLoadConfig(Path configPath) {
-        if (!Files.exists(configPath)) {
-            logger.debug("配置文件不存在: {}", configPath);
-            return null;
+    public static Config loadConfig() {
+        // 1. 尝试从FRT项目根目录外部加载
+        Path externalConfig = getExternalConfigPath();
+        if (Files.exists(externalConfig)) {
+            System.out.println("📋 从外部加载配置: " + externalConfig);
+            return loadFromPath(externalConfig);
         }
         
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            Config config = mapper.readValue(configPath.toFile(), Config.class);
-            logger.info("配置文件加载成功: {}", configPath);
-            return config;
-        } catch (IOException e) {
-            logger.warn("配置文件加载失败: {}", configPath, e);
-            return null;
+        // 2. 尝试从resources目录加载
+        Path resourceConfig = getResourceConfigPath();
+        if (resourceConfig != null && Files.exists(resourceConfig)) {
+            System.out.println("📋 从resources加载配置: " + resourceConfig);
+            return loadFromPath(resourceConfig);
         }
+        
+        // 3. 使用默认配置
+        System.out.println("📋 使用默认配置");
+        Config defaultConfig = new Config();
+        defaultConfig.setBaseDirectory(Paths.get(".").toAbsolutePath());
+        return defaultConfig;
     }
     
     /**
-     * 从 resources 目录加载配置文件
+     * 从指定路径加载配置
      */
-    private static Config loadConfigFromResources() {
-        try (InputStream is = ConfigLoader.class.getClassLoader().getResourceAsStream(CONFIG_FILE)) {
-            if (is != null) {
-                ObjectMapper mapper = new ObjectMapper();
-                Config config = mapper.readValue(is, Config.class);
-                logger.info("从 resources 加载配置文件成功: {}", CONFIG_FILE);
+    private static Config loadFromPath(Path configPath) {
+        try {
+            String jsonContent = Files.readString(configPath);
+            Config config = parseConfig(jsonContent);
+            if (config != null) {
+                // 设置基准目录为当前工作目录（项目根目录）
+                config.setBaseDirectory(Paths.get(".").toAbsolutePath());
                 return config;
             }
-        } catch (Exception ignored) {
-            logger.debug("从 resources 加载配置文件失败", ignored);
+        } catch (Exception e) {
+            System.err.println("⚠️  加载配置失败: " + e.getMessage());
         }
         return null;
     }
     
     /**
-     * 获取默认配置
+     * 使用Gson解析配置JSON
      */
-    private static Config getDefaultConfig() {
-        Config config = new Config();
-        logger.info("使用默认配置");
-        return config;
+    private static Config parseConfig(String json) {
+        try {
+            GsonBuilder gsonBuilder = new GsonBuilder();
+            
+            // 注册Path类型的自定义反序列化器
+            gsonBuilder.registerTypeAdapter(Path.class, new JsonDeserializer<Path>() {
+                @Override
+                public Path deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext context) {
+                    if (jsonElement.isJsonPrimitive()) {
+                        String pathString = jsonElement.getAsString();
+                        if (pathString != null && !pathString.isEmpty()) {
+                            return Paths.get(pathString);
+                        }
+                    }
+                    // 如果JSON值为null或空字符串，返回null
+                    return null;
+                }
+            });
+            
+            Gson gson = gsonBuilder.create();
+            Config config = gson.fromJson(json, Config.class);
+            
+            // 如果config为null，创建一个新的默认配置
+            if (config == null) {
+                config = new Config();
+            }
+            
+            return config;
+        } catch (Exception e) {
+            System.err.println("⚠️  解析配置失败: " + e.getMessage());
+            e.printStackTrace(); // 添加堆栈跟踪以更好地诊断问题
+            return null;
+        }
     }
     
     /**
-     * 加载配置文件
-     * 优先级：FRT同级目录 > 项目根目录 > resources目录 > 默认配置
+     * 获取外部配置路径（与FRT项目同级的目录）
      */
-    public static Config loadConfig() {
-        // 1. 优先尝试从FRT同级目录加载配置
-        Path parentConfigPath = getParentDirectory().resolve(CONFIG_FILE);
-        Config config = tryLoadConfig(parentConfigPath);
-        if (config != null) {
-            logger.info("使用FRT同级目录配置: {}", parentConfigPath);
-            return config;
+    private static Path getExternalConfigPath() {
+        // 使用系统属性获取用户目录，然后获取其父目录
+        String userDirStr = System.getProperty("user.dir");
+        Path userDir = Paths.get(userDirStr);
+        System.out.println("当前项目目录: " + userDir);
+        
+        // 获取当前项目目录的父目录，即FRT项目同级目录
+        Path parentDir = userDir.getParent();
+        System.out.println("FRT项目同级目录: " + parentDir);
+        
+        // 如果获取失败，则回退到当前目录
+        if (parentDir == null) {
+            parentDir = userDir;
+            System.out.println("无法获取上级目录，使用当前目录: " + parentDir);
         }
         
-        // 2. 尝试从项目根目录加载配置
-        Path projectConfigPath = getProjectRoot().resolve(CONFIG_FILE);
-        config = tryLoadConfig(projectConfigPath);
-        if (config != null) {
-            logger.info("使用项目根目录配置: {}", projectConfigPath);
-            return config;
+        return parentDir.resolve("config.json");
+    }
+    
+    /**
+     * 获取资源目录配置路径
+     */
+    private static Path getResourceConfigPath() {
+        try {
+            // 尝试从classpath获取资源路径
+            return Paths.get(ConfigLoader.class
+                .getProtectionDomain()
+                .getCodeSource()
+                .getLocation()
+                .toURI())
+                .getParent()
+                .resolve("config.json");
+        } catch (Exception e) {
+            // 如果无法获取资源路径，返回null
+            return null;
         }
-        
-        // 3. 尝试从resources目录加载配置
-        config = loadConfigFromResources();
-        if (config != null) {
-            logger.info("使用resources目录配置: {}", CONFIG_FILE);
-            return config;
-        }
-        
-        // 4. 使用默认配置
-        logger.info("未找到任何配置文件，使用默认配置");
-        return getDefaultConfig();
     }
 }

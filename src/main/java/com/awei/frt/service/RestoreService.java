@@ -1,84 +1,123 @@
 package com.awei.frt.service;
 
 import com.awei.frt.model.Config;
-import com.awei.frt.utils.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.awei.frt.model.ProcessingResult;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.Scanner;
 
 /**
  * 恢复服务
+ * 用于从备份中恢复文件
  */
 public class RestoreService {
-    private static final Logger logger = LoggerFactory.getLogger(RestoreService.class);
+    
     private final Config config;
-    
-    public RestoreService(Config config) {
+    private final Scanner scanner;
+
+    public RestoreService(Config config, Scanner scanner) {
         this.config = config;
+        this.scanner = scanner;
     }
-    
-    /**
-     * 获取项目根目录
-     */
-    private Path getProjectRoot() {
-        try {
-            // 从当前类的位置向上找到项目根目录
-            Path currentPath = Paths.get(getClass().getProtectionDomain().getCodeSource().getLocation().toURI());
-            
-            // 如果是 classes 目录，向上两级到项目根目录
-            if (currentPath.toString().contains("classes")) {
-                return currentPath.getParent().getParent();
-            }
-            
-            // 如果是 target 目录，向上到项目根目录
-            if (currentPath.toString().contains("target")) {
-                return currentPath.getParent();
-            }
-            
-            // 否则使用当前工作目录
-            return Paths.get("").toAbsolutePath();
-        } catch (Exception e) {
-            logger.warn("无法确定项目根目录，使用当前目录", e);
-            return Paths.get("").toAbsolutePath();
-        }
-    }
-    
+
     /**
      * 执行恢复操作
+     * @return 处理结果
      */
-    public void executeRestore() {
+    public ProcessingResult executeRestore() {
         try {
-            Path projectRoot = getProjectRoot();
-            Path backupPath = projectRoot.resolve(config.getBackupPath());
-            Path targetPath = projectRoot.resolve(config.getTargetPath());
+            System.out.println("🔄 开始执行恢复操作...");
             
+            Path basePath = config.getBaseDirectory();
+            Path backupPath = basePath.resolve(config.getBackupPath());
+            Path targetPath = basePath.resolve(config.getTargetPath());
+            
+            // 检查备份目录是否存在
             if (!Files.exists(backupPath)) {
-                logger.warn("备份目录不存在: {}", backupPath);
-                System.out.println("备份目录不存在: " + backupPath);
-                return;
+                System.out.println("⚠️  备份目录不存在: " + backupPath);
+                System.out.println("💡  无法执行恢复操作");
+                return createErrorResult("备份目录不存在");
             }
             
-            if (!Files.exists(targetPath)) {
-                logger.warn("目标目录不存在: {}", targetPath);
-                System.out.println("目标目录不存在: " + targetPath);
-                return;
+            // 确认恢复操作
+            System.out.printf("⚠️  确认从 %s 恢复到 %s ? (y/n): ", backupPath, targetPath);
+            String input = scanner.nextLine().trim().toLowerCase();
+            if (!"y".equals(input) && !"yes".equals(input)) {
+                System.out.println("⏭️  用户取消恢复操作");
+                return createSkippedResult();
             }
             
-            System.out.println("正在恢复备份...");
-            System.out.println("备份目录: " + backupPath);
-            System.out.println("目标目录: " + targetPath);
+            // 执行恢复操作
+            int restoredCount = restoreFromBackup(backupPath, targetPath);
             
-            // TODO: 实现完整的恢复逻辑
-            System.out.println("恢复功能待实现");
-            logger.info("恢复操作完成");
+            System.out.println("✅ 恢复操作完成！");
+            System.out.printf("📋 恢复了 %d 个文件%n", restoredCount);
+            
+            ProcessingResult result = new ProcessingResult();
+            result.setSuccessCount(restoredCount);
+            result.setSuccess(true);
+            return result;
             
         } catch (Exception e) {
-            logger.error("恢复操作失败", e);
-            System.err.println("恢复操作失败: " + e.getMessage());
+            System.err.println("❌ 恢复操作失败: " + e.getMessage());
+            e.printStackTrace();
+            
+            return createErrorResult(e.getMessage());
         }
+    }
+    
+    /**
+     * 从备份目录恢复文件到目标目录
+     */
+    private int restoreFromBackup(Path backupPath, Path targetPath) throws IOException {
+        int restoredCount = 0;
+        
+        // 遍历备份目录中的所有文件
+        try (var files = Files.list(backupPath)) {
+            for (Path backupFile : (Iterable<Path>) files::iterator) {
+                if (Files.isRegularFile(backupFile)) {
+                    // 计算目标文件路径
+                    Path targetFile = targetPath.resolve(backupFile.getFileName());
+                    
+                    // 确保目标目录存在
+                    if (targetFile.getParent() != null) {
+                        Files.createDirectories(targetFile.getParent());
+                    }
+                    
+                    // 恢复文件
+                    Files.copy(backupFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                    System.out.printf("✅ 恢复文件: %s -> %s%n", backupFile, targetFile);
+                    restoredCount++;
+                } else if (Files.isDirectory(backupFile)) {
+                    // 递归恢复子目录
+                    Path targetSubDir = targetPath.resolve(backupFile.getFileName());
+                    restoredCount += restoreFromBackup(backupFile, targetSubDir);
+                }
+            }
+        }
+        
+        return restoredCount;
+    }
+    
+    /**
+     * 创建错误结果
+     */
+    private ProcessingResult createErrorResult(String errorMessage) {
+        ProcessingResult result = new ProcessingResult();
+        result.setErrorCount(1);
+        result.setSuccess(false);
+        return result;
+    }
+    
+    /**
+     * 创建跳过结果
+     */
+    private ProcessingResult createSkippedResult() {
+        ProcessingResult result = new ProcessingResult();
+        result.setSuccess(true);
+        return result;
     }
 }
