@@ -3,7 +3,7 @@ package com.awei.frt.core.strategy;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileLeaf;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.model.ReplaceRule;
+import com.awei.frt.model.MatchRule;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,7 +13,7 @@ import java.nio.file.Path;
  * 实现文件内容替换操作
  */
 public class ReplaceStrategy implements OperationStrategy {
-    
+
     @Override
     public void execute(FileNode node, String rule, OperationContext context) {
         if (rule == null || rule.trim().isEmpty()) {
@@ -44,15 +44,15 @@ public class ReplaceStrategy implements OperationStrategy {
 
         try {
             // 解析规则
-            ReplaceRule replaceRule = ReplaceRule.fromJson(rule);
-            if (replaceRule == null) {
+            MatchRule matchRule = MatchRule.fromJson(rule);
+            if (matchRule == null) {
                 context.skip(node.getRelativePath(), "规则解析失败");
                 return;
             }
 
             // 检查文件是否匹配规则中的模式
             String fileName = targetPath.getFileName().toString();
-            if (!replaceRule.matches(fileName)) {
+            if (!matchRule.matches(fileName)) {
                 context.skip(node.getRelativePath(), "文件不匹配规则模式");
                 return;
             }
@@ -62,7 +62,7 @@ public class ReplaceStrategy implements OperationStrategy {
             String originalContent = content;
 
             // 执行替换
-            for (ReplaceRule.Replacement replacement : replaceRule.getReplacements()) {
+            for (MatchRule.Replacement replacement : matchRule.getReplacements()) {
                 if (replacement.getOldValue() != null && replacement.getNewValue() != null) {
                     content = content.replace(replacement.getOldValue(), replacement.getNewValue());
                 }
@@ -75,14 +75,13 @@ public class ReplaceStrategy implements OperationStrategy {
             }
 
             // 确认操作
-            if (replaceRule.isConfirmBeforeReplace() && 
-                !context.confirm("替换", fileLeaf.getPath(), targetPath)) {
+            if (!context.confirm("替换", fileLeaf.getPath(), targetPath)) {
                 context.skip(node.getRelativePath(), "用户取消");
                 return;
             }
 
             // 如果需要备份且尚未备份，则执行备份
-            if (replaceRule.isBackup()) {
+            if (context.confirm("是否覆盖旧恢复点", fileLeaf.getPath(), targetPath)) {
                 context.backup(targetPath);
             }
 

@@ -7,10 +7,8 @@ import java.time.LocalDateTime;
  * 记录每次文件操作的详细信息
  */
 public class OperationRecord {
-    public enum OperationType {
-        ADD, REPLACE, DELETE, RESTORE
-    }
-    
+
+    private String strategyType;       // 策略类型
     private String operationType;      // 操作类型：ADD, REPLACE, DELETE
     private String sourcePath;         // 源文件路径
     private String targetPath;         // 目标文件路径
@@ -22,17 +20,25 @@ public class OperationRecord {
         this.timestamp = LocalDateTime.now();
     }
 
-    public OperationRecord(String operationType, String sourcePath, String targetPath, 
-                          boolean success, String errorMessage) {
+    public OperationRecord(String strategyType, String operationType, String sourcePath, String targetPath, boolean success, String errorMessage) {
+        this.strategyType = strategyType;
         this.operationType = operationType;
         this.sourcePath = sourcePath;
         this.targetPath = targetPath;
+        this.timestamp = LocalDateTime.now();
         this.success = success;
         this.errorMessage = errorMessage;
-        this.timestamp = LocalDateTime.now();
     }
 
     // Getter 和 Setter 方法
+    public String getStrategyType() {
+        return strategyType;
+    }
+
+    public void setStrategyType(String strategyType) {
+        this.strategyType = strategyType;
+    }
+
     public String getOperationType() {
         return operationType;
     }
@@ -84,7 +90,8 @@ public class OperationRecord {
     @Override
     public String toString() {
         return "OperationRecord{" +
-                "operationType='" + operationType + '\'' +
+                "strategyType='" + strategyType + '\'' +
+                ", operationType='" + operationType + '\'' +
                 ", sourcePath='" + sourcePath + '\'' +
                 ", targetPath='" + targetPath + '\'' +
                 ", timestamp=" + timestamp +

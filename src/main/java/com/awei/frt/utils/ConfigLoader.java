@@ -6,9 +6,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonPrimitive;
-import com.google.gson.JsonSerializationContext;
-import com.google.gson.JsonSerializer;
 
 import java.lang.reflect.Type;
 import java.nio.file.Files;
@@ -46,7 +43,8 @@ public class ConfigLoader {
         // 3. 使用默认配置
         System.out.println("📋 使用默认配置");
         Config defaultConfig = new Config();
-        defaultConfig.setBaseDirectory(Paths.get(".").toAbsolutePath());
+        // 设置基准目录为项目所在目录
+        defaultConfig.setBaseDirectory(Paths.get(".").normalize().toAbsolutePath().getParent());
         return defaultConfig;
     }
     
@@ -58,8 +56,8 @@ public class ConfigLoader {
             String jsonContent = Files.readString(configPath);
             Config config = parseConfig(jsonContent);
             if (config != null) {
-                // 设置基准目录为当前工作目录（项目根目录）
-                config.setBaseDirectory(Paths.get(".").toAbsolutePath());
+                // 设置基准目录为项目所在目录
+                config.setBaseDirectory(Paths.get(".").normalize().toAbsolutePath().getParent());
                 return config;
             }
         } catch (Exception e) {
@@ -110,18 +108,17 @@ public class ConfigLoader {
      * 获取外部配置路径（与FRT项目同级的目录）
      */
     private static Path getExternalConfigPath() {
-        // 使用系统属性获取用户目录，然后获取其父目录
-        String userDirStr = System.getProperty("user.dir");
-        Path userDir = Paths.get(userDirStr);
-        System.out.println("当前项目目录: " + userDir);
+        // 获取当前工作目录
+        Path currentDir = Paths.get(".").normalize().toAbsolutePath();
+        System.out.println("当前项目目录: " + currentDir);
         
-        // 获取当前项目目录的父目录，即FRT项目同级目录
-        Path parentDir = userDir.getParent();
-        System.out.println("FRT项目同级目录: " + parentDir);
+        // 获取当前项目目录的父目录，即FRT项目目录
+        Path parentDir = currentDir.getParent();
+        System.out.println("FRT项目目录: " + parentDir);
         
         // 如果获取失败，则回退到当前目录
         if (parentDir == null) {
-            parentDir = userDir;
+            parentDir = currentDir;
             System.out.println("无法获取上级目录，使用当前目录: " + parentDir);
         }
         
@@ -133,14 +130,8 @@ public class ConfigLoader {
      */
     private static Path getResourceConfigPath() {
         try {
-            // 尝试从classpath获取资源路径
-            return Paths.get(ConfigLoader.class
-                .getProtectionDomain()
-                .getCodeSource()
-                .getLocation()
-                .toURI())
-                .getParent()
-                .resolve("config.json");
+            // 尝试从classpath获取资源路径,Path.of()平台兼容性好
+            return Path.of("src","main","resources","config.json");
         } catch (Exception e) {
             // 如果无法获取资源路径，返回null
             return null;

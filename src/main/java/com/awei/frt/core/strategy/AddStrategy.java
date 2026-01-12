@@ -3,7 +3,7 @@ package com.awei.frt.core.strategy;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileLeaf;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.model.ReplaceRule;
+import com.awei.frt.model.MatchRule;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +14,7 @@ import java.nio.file.StandardCopyOption;
  * 实现文件新增操作
  */
 public class AddStrategy implements OperationStrategy {
-    
+
     @Override
     public void execute(FileNode node, String rule, OperationContext context) {
         if (rule == null || rule.trim().isEmpty()) {
@@ -39,7 +39,7 @@ public class AddStrategy implements OperationStrategy {
 
         try {
             // 解析规则
-            ReplaceRule addRule = ReplaceRule.fromJson(rule);
+            MatchRule addRule = MatchRule.fromJson(rule);
             if (addRule == null) {
                 context.skip(node.getRelativePath(), "规则解析失败");
                 return;
@@ -59,8 +59,7 @@ public class AddStrategy implements OperationStrategy {
             }
 
             // 确认操作
-            if (addRule.isConfirmBeforeReplace() && 
-                !context.confirm("新增", fileLeaf.getPath(), targetPath)) {
+            if (!context.confirm("新增", fileLeaf.getPath(), targetPath)) {
                 context.skip(node.getRelativePath(), "用户取消");
                 return;
             }
@@ -73,9 +72,9 @@ public class AddStrategy implements OperationStrategy {
 
             // 复制文件到目标位置
             Files.copy(fileLeaf.getPath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
-            
-            // 如果需要备份且文件是新创建的，则记录操作
-            if (addRule.isBackup()) {
+
+            // 是否备份且文件是新创建的，则记录操作
+            if (!context.confirm("是否覆盖旧恢复点", fileLeaf.getPath(), targetPath)) {
                 context.backup(targetPath);
             }
 

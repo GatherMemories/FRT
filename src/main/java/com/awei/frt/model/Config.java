@@ -7,7 +7,7 @@ import java.nio.file.Path;
  * 存储系统运行所需的基本配置信息
  */
 public class Config {
-    private Path baseDirectory;      // 基准目录
+    private Path baseDirectory;      // 基准目录（固定项目所在目录）
     private Path updatePath;         // 更新文件目录（默认：update）
     private Path targetPath;         // 目标目录（默认：THtest）
     private Path deletePath;         // 删除文件目录（默认：delete）

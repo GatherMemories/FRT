@@ -72,7 +72,7 @@ public class ProcessingResult {
             operationRecords = new ArrayList<>();
         }
         operationRecords.add(record);
-        
+
         // 根据记录更新计数
         if (record.isSuccess()) {
             successCount++;
@@ -85,8 +85,8 @@ public class ProcessingResult {
     /**
      * 添加跳过的操作记录
      */
-    public void addSkippedRecord(String operationType, String sourcePath, String targetPath) {
-        OperationRecord record = new OperationRecord(operationType, sourcePath, targetPath, false, "跳过操作");
+    public void addSkippedRecord(String TargetPath, String operationType, String sourcePath, String targetPath) {
+        OperationRecord record = new OperationRecord(TargetPath, operationType, sourcePath, targetPath, false, "跳过操作");
         operationRecords.add(record);
         skipCount++;
     }

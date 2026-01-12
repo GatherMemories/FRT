@@ -1,8 +1,11 @@
 package com.awei.frt.core.node;
 
+import com.awei.frt.constants.RulesConstants;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.context.RuleInheritanceContext;
 import com.awei.frt.core.strategy.OperationStrategy;
+import com.awei.frt.factory.StrategyFactory;
+import com.awei.frt.model.MatchRule;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,27 +28,40 @@ public class FolderNode extends FileNode {
     }
 
     @Override
-    public void process(OperationStrategy strategy, String rule, OperationContext context) {
-        // 为当前文件夹创建规则继承上下文
+    public void process(RuleInheritanceContext localRuleIC, OperationContext context, String operationType) {
+        // 创建当前文件夹的规则上下文副本（本层变量）
         RuleInheritanceContext ruleContext = new RuleInheritanceContext(context.getRuleInheritanceContext());
-        
+
         // 获取当前文件夹的有效规则
-        String effectiveRule = ruleContext.getEffectiveRule(this.path);
-        
+        MatchRule effectiveRule = ruleContext.getEffectiveRule(this.path);
+        // 获取当前文件夹的策略类型
+        OperationStrategy strategy = StrategyFactory.createStrategy(effectiveRule.getStrategyType());
+
         // 处理当前文件夹（如果需要）
         if (effectiveRule != null) {
-            strategy.execute(this, effectiveRule, context);
+            strategy.execute(this, context, operationType);
         }
-        
+
+        // 先处理文件再处理文件夹（暂存文件夹节点）
+        List<FolderNode> pendingFolderNodeList = new ArrayList<>(20);
+
         // 处理子节点
         for (FileNode child : children) {
-            // 为子节点创建新的规则继承上下文
+            if(child instanceof FolderNode){
+                pendingFolderNodeList.add((FolderNode) child);
+                continue;
+            }
+            // 为子节点创建新的规则继承上下文（是否继承规则）
             RuleInheritanceContext childRuleContext = ruleContext.createChildContext(child.getPath());
             context.setRuleInheritanceContext(childRuleContext);
-            
-            // 获取子节点的有效规则并处理
-            String childRule = childRuleContext.getEffectiveRule(child.getPath());
-            child.process(strategy, childRule, context);
+
+            child.process(childRuleContext, context, operationType);
+        }
+        for (FolderNode child : pendingFolderNodeList){
+            // 为子节点创建新的规则继承上下文（是否继承规则）
+            RuleInheritanceContext childRuleContext = ruleContext.createChildContext(child.getPath());
+            context.setRuleInheritanceContext(childRuleContext);
+            child.process(childRuleContext, context, operationType);
         }
     }
 
@@ -108,18 +124,18 @@ public class FolderNode extends FileNode {
 
         try (Stream<Path> stream = Files.list(path)) {
             List<Path> paths = stream.collect(Collectors.toList());
-            
+
             for (Path childPath : paths) {
-                String childRelativePath = relativePath.isEmpty() ? 
-                    childPath.getFileName().toString() : 
+                String childRelativePath = relativePath.isEmpty() ?
+                    childPath.getFileName().toString() :
                     relativePath + "/" + childPath.getFileName();
-                
+
                 // 跳过规则配置文件，但记录它们的存在
                 String fileName = childPath.getFileName().toString();
                 if (isRuleFile(fileName)) {
                     continue; // 规则文件不作为普通子节点添加，但会影响规则继承
                 }
-                
+
                 if (Files.isDirectory(childPath)) {
                     FolderNode folderNode = new FolderNode(childPath, childRelativePath);
                     folderNode.buildChildren(); // 递归构建
@@ -137,9 +153,11 @@ public class FolderNode extends FileNode {
      * 检查是否是规则文件
      */
     private boolean isRuleFile(String fileName) {
-        return fileName.equals("replace.json") || 
-               fileName.equals("add.json") || 
-               fileName.equals("delete.json");
+        String ruleType = RulesConstants.FileNames.MATCHING_RULES_JSON;
+        if (fileName.equals(ruleType)) {
+            return true;
+        }
+        return false;
     }
 
     @Override

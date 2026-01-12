@@ -9,10 +9,11 @@ import com.awei.frt.core.node.FileNode;
  */
 public interface OperationStrategy {
     /**
-     * 执行操作
-     * @param node 要操作的节点
-     * @param rule 操作规则
+     * 执行操作（增、删、改）
+     * @param node 文件节点
      * @param context 操作上下文
+     * @param operationType 操作类型（增、删、改--限制）
      */
-    void execute(FileNode node, String rule, OperationContext context);
+    void execute(FileNode node, OperationContext context, String operationType);
+
 }

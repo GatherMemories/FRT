@@ -1,7 +1,9 @@
 package com.awei.frt.core.node;
 
 import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.context.RuleInheritanceContext;
 import com.awei.frt.core.strategy.OperationStrategy;
+import com.awei.frt.factory.StrategyFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,8 +18,12 @@ public class FileLeaf extends FileNode {
     }
 
     @Override
-    public void process(OperationStrategy strategy, String rule, OperationContext context) {
-        strategy.execute(this, rule, context);
+    public void process(RuleInheritanceContext localRuleIC, OperationContext context, String operationType) {
+        if(localRuleIC == null){
+            return;
+        }
+        OperationStrategy strategy = StrategyFactory.createStrategy(localRuleIC.getRuleChain().getStrategyType());
+        strategy.execute(this, context, operationType);
     }
 
     @Override

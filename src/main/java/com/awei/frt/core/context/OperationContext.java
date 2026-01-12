@@ -14,19 +14,26 @@ import java.util.Scanner;
  * 管理操作的状态和执行结果
  */
 public class OperationContext {
-    private final Path basePath;
-    private final Path targetBasePath;
-    private final Path backupPath;
-    private final Scanner scanner;
+    private final Path basePath;              // 基准路径，用于计算相对路径
+    private final Path targetBasePath;        // 目标基准路径，文件操作的目标目录
+    private final Path backupPath;            // 备份路径，用于存储备份文件
+    private final Scanner scanner;            // 输入扫描器，用于用户交互确认
 
-    private final List<String> records = new ArrayList<>();
-    private int successCount = 0;
-    private int skipCount = 0;
-    private int errorCount = 0;
+    private final List<String> records = new ArrayList<>(); // 操作记录列表
+    private int successCount = 0;             // 成功操作计数
+    private int skipCount = 0;                // 跳过操作计数
+    private int errorCount = 0;               // 错误操作计数
     
-    private RuleInheritanceContext ruleInheritanceContext;
-    private final ProcessingResult processingResult;
+    private RuleInheritanceContext ruleInheritanceContext; // 规则继承上下文，管理规则继承关系
+    private final ProcessingResult processingResult;       // 处理结果对象，汇总处理结果
 
+    /**
+     * 构造函数，初始化操作上下文
+     * @param basePath 基准路径
+     * @param targetBasePath 目标基准路径
+     * @param backupPath 备份路径
+     * @param scanner 输入扫描器
+     */
     public OperationContext(Path basePath, Path targetBasePath, Path backupPath, Scanner scanner) {
         this.basePath = basePath;
         this.targetBasePath = targetBasePath;
@@ -36,14 +43,27 @@ public class OperationContext {
         this.processingResult = new ProcessingResult();
     }
 
+    /**
+     * 获取目标路径
+     * @param relativePath 相对路径
+     * @return 标准化的目标路径
+     */
     public Path getTargetPath(String relativePath) {
         return targetBasePath.resolve(relativePath).normalize();
     }
 
+    /**
+     * 获取基准路径
+     * @return 基准路径
+     */
     public Path getBasePath() {
         return basePath;
     }
 
+    /**
+     * 备份指定路径的文件
+     * @param targetPath 目标路径
+     */
     public void backup(Path targetPath) {
         try {
             if (!Files.exists(backupPath)) {
@@ -69,6 +89,13 @@ public class OperationContext {
         }
     }
 
+    /**
+     * 确认操作
+     * @param operation 操作类型
+     * @param sourcePath 源路径
+     * @param targetPath 目标路径
+     * @return 用户确认结果
+     */
     public boolean confirm(String operation, Path sourcePath, Path targetPath) {
         if (targetPath != null) {
             System.out.printf("⚠️  确认 %s: %s -> %s ? (y/n): ",
@@ -82,6 +109,12 @@ public class OperationContext {
         return "y".equals(input) || "yes".equals(input);
     }
 
+    /**
+     * 记录成功操作
+     * @param type 操作类型
+     * @param source 源路径
+     * @param target 目标路径
+     */
     public void recordSuccess(String type, Path source, Path target) {
         records.add(type + ": " + source + " -> " + target);
         successCount++;
@@ -95,21 +128,38 @@ public class OperationContext {
         }
     }
 
+    /**
+     * 记录跳过的操作
+     * @param relativePath 相对路径
+     * @param reason 跳过原因
+     */
     public void skip(String relativePath, String reason) {
         skipCount++;
         System.out.printf("⏭️  跳过: %s (%s)%n", relativePath, reason);
     }
 
+    /**
+     * 记录错误操作
+     * @param relativePath 相对路径
+     * @param e 异常对象
+     */
     public void recordError(String relativePath, Exception e) {
         errorCount++;
         System.err.printf("❌ 处理失败: %s (%s)%n",
             relativePath, e.getMessage());
     }
 
+    /**
+     * 获取操作记录列表
+     * @return 操作记录列表
+     */
     public List<String> getRecords() {
         return records;
     }
 
+    /**
+     * 打印处理统计信息
+     */
     public void printStatistics() {
         System.out.println("-----------------------------------------");
         System.out.println("📊 处理统计:");
@@ -123,31 +173,59 @@ public class OperationContext {
         System.out.println("-----------------------------------------");
     }
 
+    /**
+     * 获取处理统计信息字符串
+     * @return 统计信息字符串
+     */
     public String getStatistics() {
         return String.format("成功: %d, 跳过: %d, 失败: %d",
             successCount, skipCount, errorCount);
     }
 
+    /**
+     * 获取规则继承上下文
+     * @return 规则继承上下文
+     */
     public RuleInheritanceContext getRuleInheritanceContext() {
         return ruleInheritanceContext;
     }
 
+    /**
+     * 设置规则继承上下文
+     * @param ruleInheritanceContext 规则继承上下文
+     */
     public void setRuleInheritanceContext(RuleInheritanceContext ruleInheritanceContext) {
         this.ruleInheritanceContext = ruleInheritanceContext;
     }
 
+    /**
+     * 获取成功操作计数
+     * @return 成功操作计数
+     */
     public int getSuccessCount() {
         return successCount;
     }
 
+    /**
+     * 获取跳过操作计数
+     * @return 跳过操作计数
+     */
     public int getSkipCount() {
         return skipCount;
     }
 
+    /**
+     * 获取错误操作计数
+     * @return 错误操作计数
+     */
     public int getErrorCount() {
         return errorCount;
     }
 
+    /**
+     * 获取处理结果对象
+     * @return 处理结果对象
+     */
     public ProcessingResult getResult() {
         processingResult.setSuccessCount(successCount);
         processingResult.setSkipCount(skipCount);
@@ -156,6 +234,11 @@ public class OperationContext {
         return processingResult;
     }
 
+    /**
+     * 获取相对路径
+     * @param path 路径
+     * @return 相对路径
+     */
     public Path getRelativePath(Path path) {
         try {
             return basePath.relativize(path);

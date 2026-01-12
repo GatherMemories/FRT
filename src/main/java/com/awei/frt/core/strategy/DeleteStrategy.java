@@ -3,7 +3,7 @@ package com.awei.frt.core.strategy;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileLeaf;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.model.ReplaceRule;
+import com.awei.frt.model.MatchRule;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,7 +13,7 @@ import java.nio.file.Path;
  * 实现文件删除操作
  */
 public class DeleteStrategy implements OperationStrategy {
-    
+
     @Override
     public void execute(FileNode node, String rule, OperationContext context) {
         if (rule == null || rule.trim().isEmpty()) {
@@ -44,7 +44,7 @@ public class DeleteStrategy implements OperationStrategy {
 
         try {
             // 解析规则
-            ReplaceRule deleteRule = ReplaceRule.fromJson(rule);
+            MatchRule deleteRule = MatchRule.fromJson(rule);
             if (deleteRule == null) {
                 context.skip(node.getRelativePath(), "规则解析失败");
                 return;
@@ -58,16 +58,16 @@ public class DeleteStrategy implements OperationStrategy {
             }
 
             // 确认操作
-            if (deleteRule.isConfirmBeforeReplace() && 
-                !context.confirm("删除", fileLeaf.getPath(), targetPath)) {
+            if (!context.confirm("删除", fileLeaf.getPath(), targetPath)) {
                 context.skip(node.getRelativePath(), "用户取消");
                 return;
             }
 
             // 如果需要备份，则先备份
-            if (deleteRule.isBackup()) {
-                context.backup(targetPath);
+            if (!context.confirm("是否覆盖旧恢复点", fileLeaf.getPath(), targetPath)) {
+                context.skip(node.getRelativePath(), "用户取消");
             }
+
 
             // 删除文件
             Files.delete(targetPath);

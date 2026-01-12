@@ -1,5 +1,8 @@
 package com.awei.frt.core.context;
 
+import com.awei.frt.constants.RulesConstants;
+import com.awei.frt.model.MatchRule;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -11,52 +14,48 @@ import java.util.List;
  * 子节点优先使用自己的规则，否则继承父节点规则
  */
 public class RuleInheritanceContext {
-    private final List<String> ruleChain;           // 规则链（存储规则内容）
-    private final List<Path> rulePathChain;         // 规则路径链（存储规则文件路径）
-    private final List<String> ruleTypeChain;       // 规则类型链（replace.json, add.json, delete.json）
+    private final MatchRule ruleChain;           // 匹配规则（存储规则内容）
 
     public RuleInheritanceContext() {
-        this.ruleChain = new ArrayList<>();
-        this.rulePathChain = new ArrayList<>();
-        this.ruleTypeChain = new ArrayList<>();
+        this.ruleChain = null;
     }
-    
+
     public RuleInheritanceContext(RuleInheritanceContext other) {
         if (other != null) {
-            this.ruleChain = new ArrayList<>(other.ruleChain);
-            this.rulePathChain = new ArrayList<>(other.rulePathChain);
-            this.ruleTypeChain = new ArrayList<>(other.ruleTypeChain);
+            this.ruleChain = other.ruleChain;
         } else {
-            this.ruleChain = new ArrayList<>();
-            this.rulePathChain = new ArrayList<>();
-            this.ruleTypeChain = new ArrayList<>();
+            this.ruleChain = null;
         }
     }
-    
-    private RuleInheritanceContext(List<String> ruleChain, List<Path> rulePathChain, List<String> ruleTypeChain) {
-        this.ruleChain = new ArrayList<>(ruleChain);
-        this.rulePathChain = new ArrayList<>(rulePathChain);
-        this.ruleTypeChain = new ArrayList<>(ruleTypeChain);
+
+    public RuleInheritanceContext(MatchRule ruleChain) {
+        this.ruleChain = ruleChain;
+    }
+
+    public MatchRule getRuleChain() {
+        return ruleChain;
     }
 
     /**
      * 加载当前节点的本地规则
      * 按优先级顺序查找：replace.json -> add.json -> delete.json
+     * 使用 Gson 解析为 MatchRule 对象
      */
-    private String loadLocalRule(Path nodePath) {
+    private MatchRule loadLocalRule(Path nodePath) {
         // 按优先级顺序查找规则文件
-        String[] ruleTypes = {"replace.json", "add.json", "delete.json"};
-        
+        String[] ruleTypes = RulesConstants.FileNames.ALL_RULE_FILES;
+
         for (String ruleType : ruleTypes) {
             Path ruleFile = nodePath.resolve(ruleType);
             if (Files.exists(ruleFile)) {
                 try {
-                    String rule = Files.readString(ruleFile);
-                    System.out.println("📋 加载规则: " + ruleFile + " (类型: " + ruleType + ")");
-                    return rule;
+                    String ruleJson = Files.readString(ruleFile);
+                    MatchRule rule = MatchRule.fromJson(ruleJson);
+                    rule.setPath(ruleFile); // 设置规则文件路径
+                } catch (java.io.IOException e) {
+                    System.err.println("⚠️  读取规则文件失败: " + ruleFile + " - " + e.getMessage());
                 } catch (Exception e) {
-                    System.err.println("⚠️  加载规则失败: " + ruleFile + " - " + e.getMessage());
-                    return null;
+                    System.err.println("⚠️  解析规则失败: " + ruleFile + " - " + e.getMessage());
                 }
             }
         }
@@ -67,24 +66,23 @@ public class RuleInheritanceContext {
      * 获取当前节点的有效规则
      * 优先级：本地规则 > 父节点规则 > null
      */
-    public String getEffectiveRule(Path currentNode) {
+    public MatchRule getEffectiveRule(Path currentNode) {
         // 优先使用当前节点的规则
-        String localRule = loadLocalRule(currentNode);
+        MatchRule localRule = loadLocalRule(currentNode);
         if (localRule != null) {
-            System.out.println("✓ 节点 " + currentNode + " 使用本地规则");
+            System.out.println("✓ 节点 " + currentNode + " (使用本地规则)");
             return localRule;
         }
 
         // 继承最近的父节点规则
-        if (!ruleChain.isEmpty()) {
-            String inheritedRule = ruleChain.get(ruleChain.size() - 1);
-            Path inheritedFrom = rulePathChain.get(rulePathChain.size() - 1);
-            System.out.println("→ 节点 " + currentNode + " 继承规则，来自 " + inheritedFrom);
+        if (ruleChain != null && ruleChain.isInheritToSubfolders()) {
+            MatchRule inheritedRule = ruleChain;
+            System.out.println("→ 节点 " + currentNode + " (继承规则)");
             return inheritedRule;
         }
 
         // 没有规则
-        System.out.println("○ 节点 " + currentNode + " 无可用规则");
+        System.out.println("○ 节点 " + currentNode + " (无可用规则)");
         return null;
     }
 
@@ -94,102 +92,9 @@ public class RuleInheritanceContext {
      * 否则继承父节点的规则
      */
     public RuleInheritanceContext createChildContext(Path childPath) {
-        String childRule = loadLocalRule(childPath);
+        MatchRule childRule = getEffectiveRule(childPath);
 
-        List<String> newRuleChain = new ArrayList<>(ruleChain);
-        List<Path> newRulePathChain = new ArrayList<>(rulePathChain);
-        List<String> newRuleTypeChain = new ArrayList<>(ruleTypeChain);
-
-        if (childRule != null) {
-            newRuleChain.add(childRule);
-            newRulePathChain.add(childPath);
-            // 确定规则类型
-            String ruleType = determineRuleType(childPath);
-            newRuleTypeChain.add(ruleType);
-            System.out.println("★ 子节点 " + childPath + " 有自己的规则，更新规则链");
-        } else {
-            System.out.println("→ 子节点 " + childPath + " 无规则，将继承父节点规则");
-        }
-
-        return new RuleInheritanceContext(newRuleChain, newRulePathChain, newRuleTypeChain);
+        return new RuleInheritanceContext(childRule);
     }
 
-    /**
-     * 确定节点的规则类型
-     */
-    private String determineRuleType(Path nodePath) {
-        String[] ruleTypes = {"replace.json", "add.json", "delete.json"};
-        
-        for (String ruleType : ruleTypes) {
-            Path ruleFile = nodePath.resolve(ruleType);
-            if (Files.exists(ruleFile)) {
-                return ruleType;
-            }
-        }
-        return "none"; // 没有规则文件
-    }
-
-    /**
-     * 检查是否有任何规则
-     */
-    public boolean hasAnyRule() {
-        return !ruleChain.isEmpty();
-    }
-
-    /**
-     * 获取规则深度（规则链长度）
-     */
-    public int getRuleDepth() {
-        return ruleChain.size();
-    }
-
-    /**
-     * 获取规则来源信息
-     */
-    public String getRuleSourceInfo() {
-        if (ruleChain.isEmpty()) {
-            return "无规则";
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < ruleChain.size(); i++) {
-            sb.append("层级 ").append(i + 1).append(": ").append(rulePathChain.get(i))
-              .append(" (").append(ruleTypeChain.get(i)).append(")");
-            if (i < ruleChain.size() - 1) {
-                sb.append(" -> ");
-            }
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 获取当前有效的规则类型
-     */
-    public String getCurrentRuleType() {
-        if (ruleTypeChain.isEmpty()) {
-            return "none";
-        }
-        return ruleTypeChain.get(ruleTypeChain.size() - 1);
-    }
-
-    /**
-     * 获取规则链的副本
-     */
-    public List<String> getRuleChain() {
-        return new ArrayList<>(ruleChain);
-    }
-
-    /**
-     * 获取规则路径链的副本
-     */
-    public List<Path> getRulePathChain() {
-        return new ArrayList<>(rulePathChain);
-    }
-
-    /**
-     * 获取规则类型链的副本
-     */
-    public List<String> getRuleTypeChain() {
-        return new ArrayList<>(ruleTypeChain);
-    }
 }
