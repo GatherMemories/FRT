@@ -1,5 +1,6 @@
 package com.awei.frt.core.context;
 
+import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 
 import java.nio.file.Files;
@@ -14,6 +15,7 @@ import java.util.Scanner;
  * 管理操作的状态和执行结果
  */
 public class OperationContext {
+    private final Config config;
     private final Path basePath;              // 基准路径，用于计算相对路径
     private final Path targetBasePath;        // 目标基准路径，文件操作的目标目录
     private final Path backupPath;            // 备份路径，用于存储备份文件
@@ -23,24 +25,36 @@ public class OperationContext {
     private int successCount = 0;             // 成功操作计数
     private int skipCount = 0;                // 跳过操作计数
     private int errorCount = 0;               // 错误操作计数
-    
+
     private RuleInheritanceContext ruleInheritanceContext; // 规则继承上下文，管理规则继承关系
     private final ProcessingResult processingResult;       // 处理结果对象，汇总处理结果
 
+    // 操作类型（用于 ProcessingResult-->OperationRecord-->operationType）
+    public static final String OPERATION_RENAME = "operation_rename";
+    public static final String OPERATION_ADD = "operation_add";
+    public static final String OPERATION_REPLACE = "operation_replace";
+    public static final String OPERATION_DELETE = "operation_delete";
+
     /**
      * 构造函数，初始化操作上下文
-     * @param basePath 基准路径
-     * @param targetBasePath 目标基准路径
-     * @param backupPath 备份路径
+     * @param config 配置对象
      * @param scanner 输入扫描器
      */
-    public OperationContext(Path basePath, Path targetBasePath, Path backupPath, Scanner scanner) {
-        this.basePath = basePath;
-        this.targetBasePath = targetBasePath;
-        this.backupPath = backupPath;
+    public OperationContext(Config config, Scanner scanner) {
+        this.config = config;
         this.scanner = scanner;
+        this.basePath = config.getBaseDirectory();
+        this.targetBasePath = basePath.resolve(config.getTargetPath());
+        this.backupPath = basePath.resolve(config.getBackupPath());
         this.ruleInheritanceContext = new RuleInheritanceContext(); // 初始化默认规则继承上下文
         this.processingResult = new ProcessingResult();
+    }
+
+    /**
+     * 获取配置对象
+     */
+    public Config getConfig() {
+        return config;
     }
 
     /**
@@ -73,7 +87,7 @@ public class OperationContext {
             // 创建备份文件名（添加时间戳或序列号以避免冲突）
             String fileName = targetPath.getFileName().toString();
             Path backupFile = backupPath.resolve(fileName).normalize();
-            
+
             // 如果备份文件已存在，添加序号
             int counter = 1;
             while (Files.exists(backupFile)) {
@@ -82,7 +96,7 @@ public class OperationContext {
                 backupFile = backupPath.resolve(nameWithoutExt + "_" + counter + ext).normalize();
                 counter++;
             }
-            
+
             Files.copy(targetPath, backupFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (Exception e) {
             System.err.println("❌ 备份失败: " + targetPath + " - " + e.getMessage());
@@ -226,11 +240,7 @@ public class OperationContext {
      * 获取处理结果对象
      * @return 处理结果对象
      */
-    public ProcessingResult getResult() {
-        processingResult.setSuccessCount(successCount);
-        processingResult.setSkipCount(skipCount);
-        processingResult.setErrorCount(errorCount);
-        processingResult.setSuccess(errorCount == 0);
+    public ProcessingResult getProcessingResult() {
         return processingResult;
     }
 

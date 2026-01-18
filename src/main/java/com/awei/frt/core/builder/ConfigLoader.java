@@ -1,4 +1,4 @@
-package com.awei.frt.utils;
+package com.awei.frt.core.builder;
 
 import com.awei.frt.model.Config;
 import com.google.gson.Gson;
@@ -17,7 +17,7 @@ import java.nio.file.Paths;
  * 负责加载和解析配置文件
  */
 public class ConfigLoader {
-    
+
     /**
      * 加载配置
      * 按优先级顺序查找配置文件：
@@ -32,14 +32,14 @@ public class ConfigLoader {
             System.out.println("📋 从外部加载配置: " + externalConfig);
             return loadFromPath(externalConfig);
         }
-        
+
         // 2. 尝试从resources目录加载
         Path resourceConfig = getResourceConfigPath();
         if (resourceConfig != null && Files.exists(resourceConfig)) {
             System.out.println("📋 从resources加载配置: " + resourceConfig);
             return loadFromPath(resourceConfig);
         }
-        
+
         // 3. 使用默认配置
         System.out.println("📋 使用默认配置");
         Config defaultConfig = new Config();
@@ -47,7 +47,7 @@ public class ConfigLoader {
         defaultConfig.setBaseDirectory(Paths.get(".").normalize().toAbsolutePath().getParent());
         return defaultConfig;
     }
-    
+
     /**
      * 从指定路径加载配置
      */
@@ -65,14 +65,14 @@ public class ConfigLoader {
         }
         return null;
     }
-    
+
     /**
      * 使用Gson解析配置JSON
      */
     private static Config parseConfig(String json) {
         try {
             GsonBuilder gsonBuilder = new GsonBuilder();
-            
+
             // 注册Path类型的自定义反序列化器
             gsonBuilder.registerTypeAdapter(Path.class, new JsonDeserializer<Path>() {
                 @Override
@@ -87,15 +87,15 @@ public class ConfigLoader {
                     return null;
                 }
             });
-            
+
             Gson gson = gsonBuilder.create();
             Config config = gson.fromJson(json, Config.class);
-            
+
             // 如果config为null，创建一个新的默认配置
             if (config == null) {
                 config = new Config();
             }
-            
+
             return config;
         } catch (Exception e) {
             System.err.println("⚠️  解析配置失败: " + e.getMessage());
@@ -103,7 +103,7 @@ public class ConfigLoader {
             return null;
         }
     }
-    
+
     /**
      * 获取外部配置路径（与FRT项目同级的目录）
      */
@@ -111,20 +111,20 @@ public class ConfigLoader {
         // 获取当前工作目录
         Path currentDir = Paths.get(".").normalize().toAbsolutePath();
         System.out.println("当前项目目录: " + currentDir);
-        
+
         // 获取当前项目目录的父目录，即FRT项目目录
         Path parentDir = currentDir.getParent();
         System.out.println("FRT项目目录: " + parentDir);
-        
+
         // 如果获取失败，则回退到当前目录
         if (parentDir == null) {
             parentDir = currentDir;
             System.out.println("无法获取上级目录，使用当前目录: " + parentDir);
         }
-        
+
         return parentDir.resolve("config.json");
     }
-    
+
     /**
      * 获取资源目录配置路径
      */

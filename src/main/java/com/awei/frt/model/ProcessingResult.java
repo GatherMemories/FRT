@@ -1,5 +1,6 @@
 package com.awei.frt.model;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -68,9 +69,6 @@ public class ProcessingResult {
      * 添加操作记录
      */
     public void addOperationRecord(OperationRecord record) {
-        if (operationRecords == null) {
-            operationRecords = new ArrayList<>();
-        }
         operationRecords.add(record);
 
         // 根据记录更新计数
@@ -85,8 +83,8 @@ public class ProcessingResult {
     /**
      * 添加跳过的操作记录
      */
-    public void addSkippedRecord(String TargetPath, String operationType, String sourcePath, String targetPath) {
-        OperationRecord record = new OperationRecord(TargetPath, operationType, sourcePath, targetPath, false, "跳过操作");
+    public void addSkippedRecord(String strategyType, String operationType, Path sourcePath, Path targetPath, String sourceFileSign, String targetFileSign) {
+        OperationRecord record = new OperationRecord(strategyType, operationType, sourcePath, targetPath,sourceFileSign, targetFileSign,false, "跳过操作");
         operationRecords.add(record);
         skipCount++;
     }

@@ -14,6 +14,6 @@ public interface OperationStrategy {
      * @param context 操作上下文
      * @param operationType 操作类型（增、删、改--限制）
      */
-    void execute(FileNode node, OperationContext context, String operationType);
+    void execute(FileNode node, OperationContext context, String[] operationType);
 
 }

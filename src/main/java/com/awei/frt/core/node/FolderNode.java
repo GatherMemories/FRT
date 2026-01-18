@@ -28,43 +28,41 @@ public class FolderNode extends FileNode {
     }
 
     @Override
-    public void process(RuleInheritanceContext localRuleIC, OperationContext context, String operationType) {
+    public void process(RuleInheritanceContext localRuleIC, OperationContext context, String[] operationType) {
         // 创建当前文件夹的规则上下文副本（本层变量）
         RuleInheritanceContext ruleContext = new RuleInheritanceContext(context.getRuleInheritanceContext());
 
         // 获取当前文件夹的有效规则
-        MatchRule effectiveRule = ruleContext.getEffectiveRule(this.path);
+        MatchRule effectiveRule = ruleContext.getEffectiveRule(this);
+        context.setRuleInheritanceContext(ruleContext);
+        if (effectiveRule == null || effectiveRule.getStrategyType() == null){
+            return;
+        }
         // 获取当前文件夹的策略类型
         OperationStrategy strategy = StrategyFactory.createStrategy(effectiveRule.getStrategyType());
 
         // 处理当前文件夹（如果需要）
-        if (effectiveRule != null) {
-            strategy.execute(this, context, operationType);
-        }
+        strategy.execute(this, context, operationType);
 
         // 先处理文件再处理文件夹（暂存文件夹节点）
         List<FolderNode> pendingFolderNodeList = new ArrayList<>(20);
 
         // 处理子节点
         for (FileNode child : children) {
-            if(child instanceof FolderNode){
+            if(child.isDirectory()){
                 pendingFolderNodeList.add((FolderNode) child);
                 continue;
             }
-            // 为子节点创建新的规则继承上下文（是否继承规则）
-            RuleInheritanceContext childRuleContext = ruleContext.createChildContext(child.getPath());
-            context.setRuleInheritanceContext(childRuleContext);
 
-            child.process(childRuleContext, context, operationType);
+            child.process(ruleContext, context, operationType);
         }
         for (FolderNode child : pendingFolderNodeList){
-            // 为子节点创建新的规则继承上下文（是否继承规则）
-            RuleInheritanceContext childRuleContext = ruleContext.createChildContext(child.getPath());
-            context.setRuleInheritanceContext(childRuleContext);
-            child.process(childRuleContext, context, operationType);
+
+            child.process(ruleContext, context, operationType);
         }
     }
 
+    // 处理子节点（文件）
     @Override
     public boolean isDirectory() {
         return true;

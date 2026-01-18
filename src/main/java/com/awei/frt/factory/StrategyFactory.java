@@ -13,7 +13,7 @@ public class StrategyFactory {
     // 策略映射表（策略缓存，单例）
     private static Map<String, OperationStrategy> strategyMap = new HashMap<>();
     // StrategyFactory单例
-    private static StrategyFactory instance = new StrategyFactory();
+    private static volatile StrategyFactory instance = new StrategyFactory();
 
     public enum StrategyType {
         FILE_NAME("FileName", "文件名处理策略"),

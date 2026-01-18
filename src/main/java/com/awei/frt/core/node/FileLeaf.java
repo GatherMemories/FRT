@@ -18,8 +18,8 @@ public class FileLeaf extends FileNode {
     }
 
     @Override
-    public void process(RuleInheritanceContext localRuleIC, OperationContext context, String operationType) {
-        if(localRuleIC == null){
+    public void process(RuleInheritanceContext localRuleIC, OperationContext context, String[] operationType) {
+        if(localRuleIC == null || localRuleIC.getRuleChain() == null || localRuleIC.getRuleChain().getStrategyType() == null){
             return;
         }
         OperationStrategy strategy = StrategyFactory.createStrategy(localRuleIC.getRuleChain().getStrategyType());

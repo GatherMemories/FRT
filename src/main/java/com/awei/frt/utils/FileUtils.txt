@@ -14,7 +14,7 @@ import java.util.stream.Stream;
  */
 public class FileUtils {
     private static final Logger logger = LoggerFactory.getLogger(FileUtils.class);
-    
+
     /**
      * 递归获取目录下所有文件
      */
@@ -23,19 +23,55 @@ public class FileUtils {
         try (Stream<Path> stream = Files.walk(directory)) {
             stream.filter(Files::isRegularFile)
                   .forEach(files::add);
+        } catch (Exception e) {
+            logger.warn("获取文件列表失败: {}", directory, e);
         }
         return files;
     }
-    
+
     /**
      * 复制文件
      */
-    public static void copyFile(Path source, Path target) throws IOException {
-        Files.createDirectories(target.getParent());
-        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-        logger.debug("文件复制完成: {} -> {}", source, target);
+    public static Boolean copyFile(Path source, Path target) throws IOException {
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            logger.debug("文件复制完成: {} -> {}", source, target);
+            return true;
+        }catch (Exception e) {
+            logger.warn("文件复制失败: {} -> {}", source, target, e);
+        }
+        return false;
     }
-    
+
+    /*
+     * 移动文件
+     */
+    public static Boolean moveFile(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+            logger.debug("文件移动完成: {} -> {}", source, target);
+            return true;
+        } catch (Exception e) {
+            logger.warn("文件移动失败: {} -> {}", source, target, e);
+        }
+        return false;
+    }
+
+    /*
+     * 删除文件
+     */
+    public static Boolean deleteFile(Path file) throws IOException {
+        try {
+            Files.delete(file);
+            logger.debug("文件删除完成: {}", file);
+            return true;
+        } catch (Exception e) {
+            logger.warn("文件删除失败: {}", file, e);
+        }
+        return false;
+    }
+
     /**
      * 递归删除目录
      */
@@ -54,7 +90,7 @@ public class FileUtils {
             logger.debug("目录删除完成: {}", directory);
         }
     }
-    
+
     /**
      * 创建目录（如果不存在）
      */
@@ -64,14 +100,14 @@ public class FileUtils {
             logger.debug("目录创建完成: {}", directory);
         }
     }
-    
+
     /**
      * 获取相对路径
      */
     public static String getRelativePath(Path base, Path path) {
         return base.relativize(path).toString().replace('\\', '/');
     }
-    
+
     /**
      * 检查文件名是否匹配模式
      */
@@ -79,7 +115,7 @@ public class FileUtils {
         if (patterns == null || patterns.isEmpty()) {
             return true;
         }
-        
+
         return patterns.stream().anyMatch(pattern -> {
             // 简单的 glob 模式匹配
             String regex = pattern.replace(".", "\\.")

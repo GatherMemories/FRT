@@ -10,7 +10,7 @@ import com.awei.frt.core.node.FileNode;
 public class FileNameStrategy implements OperationStrategy {
 
     @Override
-    public void execute(FileNode node, OperationContext context, String operationType) {
+    public void execute(FileNode node, OperationContext context, String[] operationType) {
 
     }
 

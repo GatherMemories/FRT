@@ -1,10 +1,9 @@
 package com.awei.frt;
 
-import com.awei.frt.core.node.FileNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.RestoreService;
-import com.awei.frt.utils.ConfigLoader;
+import com.awei.frt.core.builder.ConfigLoader;
 
 import java.util.Scanner;
 
@@ -57,7 +56,6 @@ public class Main {
                         break;
                     case "2":
                         System.out.println("\n🔄 执行恢复操作...");
-                        restoreService.executeRestore();
                         break;
                     case "3":
                         System.out.println("\n👋 程序退出，再见！");

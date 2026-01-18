@@ -1,6 +1,8 @@
 package com.awei.frt.core.context;
 
 import com.awei.frt.constants.RulesConstants;
+import com.awei.frt.core.builder.MatchRuleLoader;
+import com.awei.frt.core.node.FileNode;
 import com.awei.frt.model.MatchRule;
 
 import java.nio.file.Files;
@@ -14,7 +16,7 @@ import java.util.List;
  * 子节点优先使用自己的规则，否则继承父节点规则
  */
 public class RuleInheritanceContext {
-    private final MatchRule ruleChain;           // 匹配规则（存储规则内容）
+    private MatchRule ruleChain;           // 匹配规则（存储规则内容）
 
     public RuleInheritanceContext() {
         this.ruleChain = null;
@@ -35,6 +37,9 @@ public class RuleInheritanceContext {
     public MatchRule getRuleChain() {
         return ruleChain;
     }
+    public void setRuleChain(MatchRule ruleChain) {
+        this.ruleChain = ruleChain;
+    }
 
     /**
      * 加载当前节点的本地规则
@@ -50,8 +55,9 @@ public class RuleInheritanceContext {
             if (Files.exists(ruleFile)) {
                 try {
                     String ruleJson = Files.readString(ruleFile);
-                    MatchRule rule = MatchRule.fromJson(ruleJson);
+                    MatchRule rule = MatchRuleLoader.fromJson(ruleJson);
                     rule.setPath(ruleFile); // 设置规则文件路径
+                    return rule;
                 } catch (java.io.IOException e) {
                     System.err.println("⚠️  读取规则文件失败: " + ruleFile + " - " + e.getMessage());
                 } catch (Exception e) {
@@ -66,23 +72,31 @@ public class RuleInheritanceContext {
      * 获取当前节点的有效规则
      * 优先级：本地规则 > 父节点规则 > null
      */
-    public MatchRule getEffectiveRule(Path currentNode) {
+    public MatchRule getEffectiveRule(FileNode currentNode) {
+        // 如果是文件，直接返回当前文件夹规则
+        if(!currentNode.isDirectory()){
+            return ruleChain;
+        }
+
+        // 处理根节点相对路径
+        String relativePath = currentNode.getRelativePath().isEmpty() ? "/" : currentNode.getRelativePath();
         // 优先使用当前节点的规则
-        MatchRule localRule = loadLocalRule(currentNode);
+        MatchRule localRule = loadLocalRule(currentNode.getPath());
         if (localRule != null) {
-            System.out.println("✓ 节点 " + currentNode + " (使用本地规则)");
+            setRuleChain(localRule);
+            System.out.println("✓ 节点 " + relativePath + " (使用本地规则: "+ localRule.getStrategyType() + ")");
             return localRule;
         }
 
         // 继承最近的父节点规则
         if (ruleChain != null && ruleChain.isInheritToSubfolders()) {
             MatchRule inheritedRule = ruleChain;
-            System.out.println("→ 节点 " + currentNode + " (继承规则)");
+            System.out.println("→ 节点 " + relativePath + " (继承规则: "+ inheritedRule.getStrategyType() + ")");
             return inheritedRule;
         }
 
         // 没有规则
-        System.out.println("○ 节点 " + currentNode + " (无可用规则)");
+        System.out.println("○ 节点 " + relativePath + " (无规则: 跳过)");
         return null;
     }
 
@@ -91,7 +105,7 @@ public class RuleInheritanceContext {
      * 如果子节点有自己的规则，则将其添加到规则链中
      * 否则继承父节点的规则
      */
-    public RuleInheritanceContext createChildContext(Path childPath) {
+    public RuleInheritanceContext createChildContext(FileNode childPath) {
         MatchRule childRule = getEffectiveRule(childPath);
 
         return new RuleInheritanceContext(childRule);
