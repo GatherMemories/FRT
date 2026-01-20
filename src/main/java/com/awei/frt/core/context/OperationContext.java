@@ -251,7 +251,7 @@ public class OperationContext {
      */
     public Path getRelativePath(Path path) {
         try {
-            return basePath.relativize(path);
+            return basePath.relativize(path).normalize();
         } catch (Exception e) {
             // 如果无法相对化，则返回原始路径
             return path;

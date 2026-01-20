@@ -3,7 +3,7 @@ package com.awei.frt.service;
 import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.core.uitls.FileUtils;
+import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 
@@ -64,7 +64,7 @@ public class FileUpdateServiceNew {
             }
             System.out.println("🔄 正在执行update文件夹...");
             System.out.println("-----------------------------------------");
-            FileUtils.executeOperations(context.getProcessingResult().getOperationRecords());
+            FileUtil.executeOperations(context.getProcessingResult().getOperationRecords());
             System.out.println("-----------------------------------------");
 
 

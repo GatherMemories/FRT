@@ -3,6 +3,7 @@ package com.awei.frt.core.strategy;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileSignUtil;
+import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
 import me.andreasmelone.basicmodinfoparser.BasicModInfo;
 import me.andreasmelone.basicmodinfoparser.Platform;
@@ -40,7 +41,7 @@ public class McModStrategy implements OperationStrategy{
         Path entryTargetPath = context.getTargetPath(node.getRelativePath());
         // 如果目标文件夹不存在，则不处理
         if (!Files.exists(entryTargetPath)) {
-            System.out.println(strategyType + " 策略-目标文件夹不存在: " + entryTargetPath);
+            System.out.println(strategyType + " 策略->目标文件夹不存在: " + entryTargetPath);
             return;
         }
         // 判断操作类型
@@ -56,64 +57,38 @@ public class McModStrategy implements OperationStrategy{
         for (String modId : currentModInfoMap.keySet()) {
             ModInfo currentModInfo = currentModInfoMap.get(modId);
             ModInfo targetModInfo = targetModInfoMap.get(modId);
-            // 获取源文件特征 和 目标文件特征
-            String sourceFileHash = FileSignUtil.getFileMd5(currentModInfo.getPath());
-            String targetFileHash = "";
-            if(targetModInfo != null){
-                targetFileHash = FileSignUtil.getFileMd5(targetModInfo.getPath());
-            }
+
             // 源文件和目标文件绝对路径
             Path sourceFilePath = currentModInfo.getPath();
             Path targetFilePath = entryTargetPath.resolve(currentModInfo.getPath().getFileName()).normalize();
 
+            // 创建操作记录对象，设置基础值
+            OperationRecord operationRecord = new OperationRecord();
+            operationRecord.setStrategyType(strategyType);
+
+
             // 如果目标层没有该mod，则新增
             if (addType && targetModInfo == null) {
-                // context 对象记录操作
-                OperationRecord operationRecord = new OperationRecord(
-                        strategyType,
-                        OperationContext.OPERATION_ADD,
-                        sourceFilePath,
-                        targetFilePath,
-                        sourceFileHash,
-                        targetFileHash,
-                        true,
-                        ""
-                );
+
+                boolean b = FileUtil.addFile(sourceFilePath, targetFilePath, operationRecord);
                 context.getProcessingResult().addOperationRecord(operationRecord);
-                System.out.println("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ")");
+                System.out.println("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
                 continue;
             }
             // 如果目标层有该mod，则替换
             if (replaceType && currentModInfo.getId().equals(targetModInfo.getId())) {
-                OperationRecord operationRecord = new OperationRecord(
-                        strategyType,
-                        OperationContext.OPERATION_REPLACE,
-                        sourceFilePath,
-                        targetFilePath,
-                        sourceFileHash,
-                        targetFileHash,
-                        true,
-                        ""
-                );
+
+                boolean b = FileUtil.replaceFile(sourceFilePath, targetFilePath, operationRecord);
                 context.getProcessingResult().addOperationRecord(operationRecord);
-                System.out.println("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ")" +
-                        " --> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ")");
+                System.out.println("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
+                        " --> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ")" + (b ? "成功" : "失败"));
                 continue;
             }
             // 删除操作
             if (deleteType && targetModInfo != null) {
-                OperationRecord operationRecord = new OperationRecord(
-                        strategyType,
-                        OperationContext.OPERATION_DELETE,
-                        targetFilePath,
-                        targetFilePath,
-                        "",
-                        targetFileHash,
-                        true,
-                        ""
-                );
+                boolean b = FileUtil.deleteFile(targetFilePath, operationRecord);
                 context.getProcessingResult().addOperationRecord(operationRecord);
-                System.out.println("- " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ")");
+                System.out.println("- " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
                 continue;
             }
         }

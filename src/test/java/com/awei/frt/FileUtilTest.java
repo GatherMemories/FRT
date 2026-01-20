@@ -1,10 +1,5 @@
 package com.awei.frt;
 
-import com.awei.frt.core.uitls.FileUtils;
-
-import java.nio.file.Path;
-import java.nio.file.Paths;
-
 /**
  * @Author: mou_ren
  * @Date: 2026/1/18 22:33
