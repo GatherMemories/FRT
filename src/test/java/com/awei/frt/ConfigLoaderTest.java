@@ -14,7 +14,7 @@ public class ConfigLoaderTest {
         System.out.println("Testing ConfigLoader with Gson Path deserialization fix...");
 
         // 加载配置
-        Config config = ConfigLoader.loadConfig();
+        Config config = ConfigLoader.getConfig();
 
         // 验证配置不为null
         assertNotNull(config, "Config should not be null");
@@ -35,8 +35,6 @@ public class ConfigLoaderTest {
             assertTrue(config.getLogPath() instanceof Path, "Log path should be a Path instance");
 
             // 验证配置的其他属性
-            assertTrue(config.isConfirmBeforeReplace(), "Confirm before replace should be true by default");
-            assertTrue(config.isCreateBackup(), "Create backup should be true by default");
             assertEquals("INFO", config.getLogLevel(), "Log level should be INFO by default");
         }
     }

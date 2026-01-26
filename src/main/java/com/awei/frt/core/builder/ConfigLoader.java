@@ -18,6 +18,25 @@ import java.nio.file.Paths;
  */
 public class ConfigLoader {
 
+    // 加载好的配置文件
+    private static Config config;
+    // 更新文件夹（绝对路径）
+    private static Path updatePath;
+    // 目标文件夹（绝对路径）
+    private static Path targetPath;
+    // 删除文件夹（绝对路径）
+    private static Path deletePath;
+    // 备份文件夹（绝对路径）
+    private static Path backupPath;
+    // logs文件夹（绝对路径）
+    private static Path logsPath;
+
+    public static Config getConfig() {
+        if (config == null) {
+            config = loadConfig();
+        }
+        return config;
+    }
     /**
      * 加载配置
      * 按优先级顺序查找配置文件：
@@ -25,7 +44,7 @@ public class ConfigLoader {
      * 2. resources目录下的config.json
      * 3. 使用默认配置
      */
-    public static Config loadConfig() {
+    private static Config loadConfig() {
         // 1. 尝试从FRT项目根目录外部加载
         Path externalConfig = getExternalConfigPath();
         if (Files.exists(externalConfig)) {
@@ -40,12 +59,7 @@ public class ConfigLoader {
             return loadFromPath(resourceConfig);
         }
 
-        // 3. 使用默认配置
-        System.out.println("📋 使用默认配置");
-        Config defaultConfig = new Config();
-        // 设置基准目录为项目所在目录
-        defaultConfig.setBaseDirectory(Paths.get(".").normalize().toAbsolutePath().getParent());
-        return defaultConfig;
+        return null;
     }
 
     /**
@@ -55,11 +69,6 @@ public class ConfigLoader {
         try {
             String jsonContent = Files.readString(configPath);
             Config config = parseConfig(jsonContent);
-            if (config != null) {
-                // 设置基准目录为项目所在目录
-                config.setBaseDirectory(Paths.get(".").normalize().toAbsolutePath().getParent());
-                return config;
-            }
         } catch (Exception e) {
             System.err.println("⚠️  加载配置失败: " + e.getMessage());
         }
@@ -91,15 +100,26 @@ public class ConfigLoader {
             Gson gson = gsonBuilder.create();
             Config config = gson.fromJson(json, Config.class);
 
-            // 如果config为null，创建一个新的默认配置
+            // 配置检查
             if (config == null) {
-                config = new Config();
+                throw new IllegalArgumentException("配置文件内容为空");
             }
+
+            // 检查目标目录是否存在（包括是否是文件夹）
+            if (config.getTargetPath() == null
+                    || config.getTargetPath().toString().isEmpty()
+                    || !Files.isDirectory(config.getBaseDirectory().resolve(config.getTargetPath()).normalize())) {
+                System.err.println("⚠️  配置错误: 目标目录不存在或不是文件夹（程序停止）");
+                return null;
+            }
+
+            // 设置静态变量
+            setStaticPath(config);
 
             return config;
         } catch (Exception e) {
             System.err.println("⚠️  解析配置失败: " + e.getMessage());
-            e.printStackTrace(); // 添加堆栈跟踪以更好地诊断问题
+            e.printStackTrace();
             return null;
         }
     }
@@ -110,11 +130,9 @@ public class ConfigLoader {
     private static Path getExternalConfigPath() {
         // 获取当前工作目录
         Path currentDir = Paths.get(".").normalize().toAbsolutePath();
-        System.out.println("当前项目目录: " + currentDir);
 
         // 获取当前项目目录的父目录，即FRT项目目录
         Path parentDir = currentDir.getParent();
-        System.out.println("FRT项目目录: " + parentDir);
 
         // 如果获取失败，则回退到当前目录
         if (parentDir == null) {
@@ -137,4 +155,47 @@ public class ConfigLoader {
             return null;
         }
     }
+
+    /**
+     * 设置静态变量（配置的绝对路径）
+     * @return
+     */
+    private static void setStaticPath(Config config) {
+        if (config == null) {
+            return;
+        }
+
+        targetPath = config.getBaseDirectory().resolve(config.getTargetPath()).normalize();
+        updatePath = config.getBaseDirectory().resolve(config.getUpdatePath()).normalize();
+        deletePath = config.getBaseDirectory().resolve(config.getDeletePath()).normalize();
+        backupPath = config.getBaseDirectory().resolve(config.getBackupPath()).normalize();
+        logsPath = config.getBaseDirectory().resolve(config.getLogLevel()).normalize();
+    }
+
+
+    // 获取更新文件夹（绝对路径）
+    public static Path getUpdatePath() {
+        return updatePath;
+    }
+
+    // 获取目标文件夹（绝对路径）
+    public static Path getTargetPath() {
+        return targetPath;
+    }
+
+    // 获取删除文件夹（绝对路径）
+    public static Path getDeletePath() {
+        return deletePath;
+    }
+
+    // 获取备份文件夹（绝对路径）
+    public static Path getBackupPath() {
+        return backupPath;
+    }
+
+    // 获取logs文件夹（绝对路径）
+    public static Path getLogsPath() {
+        return logsPath;
+    }
+
 }

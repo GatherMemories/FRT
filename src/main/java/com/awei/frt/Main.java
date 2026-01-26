@@ -19,17 +19,22 @@ public class Main {
 
         try {
             // 加载配置
-            Config config = ConfigLoader.loadConfig();
+            Config config = ConfigLoader.getConfig();
             if (config == null) {
-                System.err.println("❌ 配置加载失败，使用默认配置");
-                config = new Config();
+                // 配置加载失败，退出程序
+                System.err.println("❌ 配置加载失败，请检查配置文件");
+                System.exit(1);
+                return;
             }
 
             System.out.println("📋 配置信息:");
             System.out.println("   基准目录: " + config.getBaseDirectory());
             System.out.println("   更新目录: " + config.getUpdatePath());
+            System.out.println("   删除目录: " + config.getDeletePath());
             System.out.println("   目标目录: " + config.getTargetPath());
             System.out.println("   备份目录: " + config.getBackupPath());
+            System.out.println("   日志目录: " + config.getLogPath());
+            System.out.println("   日志级别: " + config.getLogLevel());
             System.out.println();
 
             Scanner scanner = new Scanner(System.in);
@@ -37,6 +42,7 @@ public class Main {
             // 创建服务实例
             FileUpdateServiceNew updateService = new FileUpdateServiceNew(config, scanner);
             RestoreService restoreService = new RestoreService(config, scanner);
+
 
             // 显示菜单
             while (true) {

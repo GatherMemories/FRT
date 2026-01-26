@@ -1,30 +1,34 @@
 package com.awei.frt.model;
 
+import java.io.IOException;
+import java.io.Serial;
+import java.io.Serializable;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
  * 配置模型
  * 存储系统运行所需的基本配置信息
  */
-public class Config {
-    private Path baseDirectory;      // 基准目录（固定项目所在目录）
-    private Path updatePath;         // 更新文件目录（默认：update）
+public class Config implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private transient Path baseDirectory;      // 基准目录（固定项目所在目录）
+    private transient Path updatePath;         // 更新文件目录（默认：update）
     private Path targetPath;         // 目标目录（默认：THtest）
-    private Path deletePath;         // 删除文件目录（默认：delete）
-    private Path backupPath;         // 备份目录（默认：old）
-    private Path logPath;            // 日志目录（默认：logs）
-    private boolean confirmBeforeReplace; // 是否在替换前确认（默认：true）
-    private boolean createBackup;    // 是否创建备份（默认：true）
+    private transient Path deletePath;         // 删除文件目录（默认：delete）
+    private transient Path backupPath;         // 备份目录（默认：old）
+    private transient Path logPath;            // 日志目录（默认：logs）
     private String logLevel;         // 日志级别（默认：INFO）
 
     public Config() {
+        this.baseDirectory = Path.of(".").normalize().toAbsolutePath().getParent();
         this.updatePath = Path.of("update");
         this.targetPath = Path.of("THtest");
         this.deletePath = Path.of("delete");
-        this.backupPath = Path.of("old");
+        this.backupPath = Path.of("backup");
         this.logPath = Path.of("logs");
-        this.confirmBeforeReplace = true;
-        this.createBackup = true;
         this.logLevel = "INFO";
     }
 
@@ -77,22 +81,6 @@ public class Config {
         this.logPath = logPath;
     }
 
-    public boolean isConfirmBeforeReplace() {
-        return confirmBeforeReplace;
-    }
-
-    public void setConfirmBeforeReplace(boolean confirmBeforeReplace) {
-        this.confirmBeforeReplace = confirmBeforeReplace;
-    }
-
-    public boolean isCreateBackup() {
-        return createBackup;
-    }
-
-    public void setCreateBackup(boolean createBackup) {
-        this.createBackup = createBackup;
-    }
-
     public String getLogLevel() {
         return logLevel;
     }
@@ -109,9 +97,8 @@ public class Config {
                 ", targetPath=" + targetPath +
                 ", backupPath=" + backupPath +
                 ", logPath=" + logPath +
-                ", confirmBeforeReplace=" + confirmBeforeReplace +
-                ", createBackup=" + createBackup +
                 ", logLevel='" + logLevel + '\'' +
                 '}';
     }
+
 }
