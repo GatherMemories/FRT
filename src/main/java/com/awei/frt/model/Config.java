@@ -30,6 +30,17 @@ public class Config implements Serializable {
         this.backupPath = Path.of("backup");
         this.logPath = Path.of("logs");
         this.logLevel = "INFO";
+
+        // 默认创建目录
+        try {
+            Files.createDirectories(baseDirectory.resolve(updatePath));
+            Files.createDirectories(baseDirectory.resolve(targetPath));
+            Files.createDirectories(baseDirectory.resolve(deletePath));
+            Files.createDirectories(baseDirectory.resolve(backupPath));
+            Files.createDirectories(baseDirectory.resolve(logPath));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     // Getter 和 Setter 方法

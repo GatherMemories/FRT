@@ -22,9 +22,6 @@ public class OperationContext {
     private final Scanner scanner;            // 输入扫描器，用于用户交互确认
 
     private final List<String> records = new ArrayList<>(); // 操作记录列表
-    private int successCount = 0;             // 成功操作计数
-    private int skipCount = 0;                // 跳过操作计数
-    private int errorCount = 0;               // 错误操作计数
 
     private RuleInheritanceContext ruleInheritanceContext; // 规则继承上下文，管理规则继承关系
     private final ProcessingResult processingResult;       // 处理结果对象，汇总处理结果
@@ -123,53 +120,6 @@ public class OperationContext {
         return "y".equals(input) || "yes".equals(input);
     }
 
-    /**
-     * 记录成功操作
-     * @param type 操作类型
-     * @param source 源路径
-     * @param target 目标路径
-     */
-    public void recordSuccess(String type, Path source, Path target) {
-        records.add(type + ": " + source + " -> " + target);
-        successCount++;
-
-        if (source != null && target != null) {
-            System.out.printf("✅ %s成功: %s -> %s%n", type, source, target);
-        } else if (target != null) {
-            System.out.printf("✅ %s成功: %s%n", type, target);
-        } else if (source != null) {
-            System.out.printf("✅ %s成功: %s%n", type, source);
-        }
-    }
-
-    /**
-     * 记录跳过的操作
-     * @param relativePath 相对路径
-     * @param reason 跳过原因
-     */
-    public void skip(String relativePath, String reason) {
-        skipCount++;
-        System.out.printf("⏭️  跳过: %s (%s)%n", relativePath, reason);
-    }
-
-    /**
-     * 记录错误操作
-     * @param relativePath 相对路径
-     * @param e 异常对象
-     */
-    public void recordError(String relativePath, Exception e) {
-        errorCount++;
-        System.err.printf("❌ 处理失败: %s (%s)%n",
-            relativePath, e.getMessage());
-    }
-
-    /**
-     * 获取操作记录列表
-     * @return 操作记录列表
-     */
-    public List<String> getRecords() {
-        return records;
-    }
 
     /**
      * 打印处理统计信息
@@ -177,24 +127,16 @@ public class OperationContext {
     public void printStatistics() {
         System.out.println("-----------------------------------------");
         System.out.println("📊 处理统计:");
-        System.out.println("   ✅ 成功处理: " + successCount + " 个文件");
-        if (skipCount > 0) {
-            System.out.println("   ⏭️  跳过文件: " + skipCount + " 个文件");
+        System.out.println("   ✅ 成功处理: " + getSuccessCount() + " 个文件");
+        if (getSkipCount() > 0) {
+            System.out.println("   ⏭️  跳过文件: " + getSkipCount() + " 个文件");
         }
-        if (errorCount > 0) {
-            System.out.println("   ❌ 处理失败: " + errorCount + " 个文件");
+        if (getErrorCount() > 0) {
+            System.out.println("   ❌ 处理失败: " + getErrorCount() + " 个文件");
         }
         System.out.println("-----------------------------------------");
     }
 
-    /**
-     * 获取处理统计信息字符串
-     * @return 统计信息字符串
-     */
-    public String getStatistics() {
-        return String.format("成功: %d, 跳过: %d, 失败: %d",
-            successCount, skipCount, errorCount);
-    }
 
     /**
      * 获取规则继承上下文
@@ -217,7 +159,7 @@ public class OperationContext {
      * @return 成功操作计数
      */
     public int getSuccessCount() {
-        return successCount;
+        return this.processingResult.getSuccessCount();
     }
 
     /**
@@ -225,7 +167,7 @@ public class OperationContext {
      * @return 跳过操作计数
      */
     public int getSkipCount() {
-        return skipCount;
+        return this.processingResult.getSkipCount();
     }
 
     /**
@@ -233,7 +175,7 @@ public class OperationContext {
      * @return 错误操作计数
      */
     public int getErrorCount() {
-        return errorCount;
+        return this.processingResult.getErrorCount();
     }
 
     /**

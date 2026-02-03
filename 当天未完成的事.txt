@@ -1,4 +1,0 @@
-1/12
-1.完善策略类 和 FileUpdateServiceNew执行流程
-2.MatchRule类，replacements属性（额外传给策略类的值），数据结构和取值转换，需要改进
-3.备份功能，old-->(主操作+时间命名文件夹)-->增删改记录文件.json  和  旧文件*x

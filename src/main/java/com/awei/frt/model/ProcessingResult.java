@@ -1,6 +1,7 @@
 package com.awei.frt.model;
 
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,13 +10,16 @@ import java.util.List;
  * 存储文件处理操作的总体结果
  */
 public class ProcessingResult {
+    private LocalDateTime resultTime;  // 处理结果时间
     private int successCount;          // 成功处理的文件数
     private int skipCount;             // 跳过的文件数
     private int errorCount;            // 错误的文件数
     private List<OperationRecord> operationRecords; // 操作记录列表
     private boolean success;           // 整体操作是否成功
+    private Path resultPath;           // 结果文件路径
 
     public ProcessingResult() {
+        this.resultTime = LocalDateTime.now();
         this.successCount = 0;
         this.skipCount = 0;
         this.errorCount = 0;
@@ -24,6 +28,22 @@ public class ProcessingResult {
     }
 
     // Getter 和 Setter 方法
+    public Path getResultPath() {
+        return resultPath;
+    }
+
+    public void setResultPath(Path resultPath) {
+        this.resultPath = resultPath;
+    }
+
+    public LocalDateTime getResultTime() {
+        return resultTime;
+    }
+
+    public void setResultTime(LocalDateTime resultTime) {
+        this.resultTime = resultTime;
+    }
+
     public int getSuccessCount() {
         return successCount;
     }
@@ -78,15 +98,6 @@ public class ProcessingResult {
             errorCount++;
             success = false;
         }
-    }
-
-    /**
-     * 添加跳过的操作记录
-     */
-    public void addSkippedRecord(String strategyType, String operationType, Path sourcePath, Path targetPath, String sourceFileSign, String targetFileSign) {
-        OperationRecord record = new OperationRecord(strategyType, operationType, sourcePath, targetPath,sourceFileSign, targetFileSign,false, "跳过操作");
-        operationRecords.add(record);
-        skipCount++;
     }
 
     @Override

@@ -41,6 +41,7 @@ public class Main {
 
             // 创建服务实例
             FileUpdateServiceNew updateService = new FileUpdateServiceNew(config, scanner);
+//            FileDeleteService deleteService = new FileDeleteService(config, scanner);
             RestoreService restoreService = new RestoreService(config, scanner);
 
 
@@ -48,10 +49,11 @@ public class Main {
             while (true) {
                 System.out.println("=========================================");
                 System.out.println("📋 请选择操作:");
-                System.out.println("1. 更新");
-                System.out.println("2. 执行恢复操作");
-                System.out.println("3. 退出");
-                System.out.print("请输入选项 (1-3): ");
+                System.out.println("1. 更新文件");
+                System.out.println("2. 删除文件");
+                System.out.println("3. 执行恢复操作");
+                System.out.println("4. 退出");
+                System.out.print("请输入选项 (1-4): ");
 
                 String choice = scanner.nextLine().trim();
 
@@ -61,9 +63,14 @@ public class Main {
                         updateService.updateExecute();
                         break;
                     case "2":
-                        System.out.println("\n🔄 执行恢复操作...");
+                        System.out.println("\n🗑️  执行删除操作...");
+//                        deleteService.deleteExecute();
                         break;
                     case "3":
+                        System.out.println("\n🔄 执行恢复操作...");
+                        restoreService.executeRestore();
+                        break;
+                    case "4":
                         System.out.println("\n👋 程序退出，再见！");
                         return;
                     default:

@@ -112,6 +112,7 @@ public class FolderNode extends FileNode {
         return Files.isDirectory(path);
     }
 
+
     /**
      * 递归构建子节点
      */

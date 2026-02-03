@@ -13,6 +13,7 @@ public abstract class FileNode {
     protected final Path path;              // 节点的完整路径
     protected final String relativePath;    // 节点的相对路径
 
+    // 限制操作类型
     public static final String[] UPDATE_OPERATION = new String[]{OperationContext.OPERATION_ADD, OperationContext.OPERATION_REPLACE}; //更新操作类型
     public static final String[] DELETE_OPERATION = new String[]{OperationContext.OPERATION_DELETE}; //删除操作类型
 

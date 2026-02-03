@@ -58,10 +58,5 @@ public class FileLeaf extends FileNode {
         }
     }
 
-    /**
-     * 检查是否是文件
-     */
-    public boolean isFile() {
-        return Files.isRegularFile(path);
-    }
+
 }

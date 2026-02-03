@@ -69,6 +69,7 @@ public class ConfigLoader {
         try {
             String jsonContent = Files.readString(configPath);
             Config config = parseConfig(jsonContent);
+            return config;
         } catch (Exception e) {
             System.err.println("⚠️  加载配置失败: " + e.getMessage());
         }

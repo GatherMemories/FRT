@@ -1,5 +1,6 @@
 package com.awei.frt.core.uitls;
 
+import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
@@ -102,6 +103,8 @@ public class FileUtil {
             record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
             record.setSuccess(true);
 
+            // 添加备份文件
+            BackupFileLoader.addBackupFile(targetPath);
             return true;
         } catch (IOException e) {
             record.setSuccess(false);
@@ -141,6 +144,8 @@ public class FileUtil {
             record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
             record.setSuccess(true);
 
+            // 替换备份文件
+            BackupFileLoader.addBackupFile(targetPath);
             return true;
         } catch (IOException e) {
             record.setSuccess(false);
@@ -170,6 +175,9 @@ public class FileUtil {
             record.setSourcePath(filePath);
             record.setSourceFileSign(FileSignUtil.getFileMd5(filePath));
             record.setSuccess(true);
+
+            // 添加备份文件
+            BackupFileLoader.addBackupFile(filePath);
             return true;
         } catch (IOException e) {
             record.setSuccess(false);

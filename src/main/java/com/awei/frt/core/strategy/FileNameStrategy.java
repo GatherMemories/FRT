@@ -14,35 +14,6 @@ public class FileNameStrategy implements OperationStrategy {
 
     }
 
-    /**
-     *  增加操作
-     * @param node
-     * @param rule
-     * @param context
-     */
-    public void addExecute(FileNode node, String rule, OperationContext context) {
-
-    }
-
-    /**
-     *  删除操作
-     * @param node
-     * @param rule
-     * @param context
-     */
-    public void deleteExecute(FileNode node, String rule, OperationContext context) {
-
-    }
-
-    /**
-     *  修改操作
-     * @param node
-     * @param rule
-     * @param context
-     */
-    public void modifyExecute(FileNode node, String rule, OperationContext context) {
-
-    }
 
 
 }

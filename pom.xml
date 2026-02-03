@@ -21,7 +21,16 @@
             <artifactId>jackson-databind</artifactId>
             <version>2.15.2</version>
         </dependency>
-        <!-- SLF4J API: Java 简单日志门面，提供统一的日志接口 -->
+        <!-- Jackson Datatype JSR310: Jackson 的 JSR-310 日期/时间支持库 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>2.13.0</version> <!-- 或与你使用的jackson-core版本一致 -->
+        </dependency>
+
+        <!-- SLF4J API: Java 简单日志门面，提供统一的Gson gson = new Gson();
+JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
+日志接口 -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
