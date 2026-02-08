@@ -6,13 +6,15 @@ import com.awei.frt.core.node.FolderNode;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 文件树构建器
  * 负责从文件系统路径构建节点树结构
  */
 public class FileTreeBuilder {
-    
+
     /**
      * 构建文件树
      * @param rootPath 根路径
@@ -35,15 +37,25 @@ public class FileTreeBuilder {
      */
     public static void printTree(FileNode node, int depth) {
         String indent = "  ".repeat(Math.max(0, depth));
-        
+
         if (node.isDirectory()) {
+            int newDepth = depth + 1;
+            List<FileNode> FolderNodes = new ArrayList<>();
             System.out.println(indent + "📁 " + node.getName() + "/");
             FolderNode folderNode = (FolderNode) node;
             for (FileNode child : folderNode.getChildren()) {
-                printTree(child, depth + 1);
+                if (child.isDirectory()){
+                    FolderNodes.add(child);
+                    continue;
+                }
+                printTree(child, newDepth);
+            }
+            for (FileNode FolderNode : FolderNodes) {
+                printTree(FolderNode, newDepth);
             }
         } else {
             System.out.println(indent + "📄 " + node.getName());
         }
+
     }
 }

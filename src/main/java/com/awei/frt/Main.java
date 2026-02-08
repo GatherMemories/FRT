@@ -1,6 +1,7 @@
 package com.awei.frt;
 
 import com.awei.frt.model.Config;
+import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.core.builder.ConfigLoader;
@@ -27,21 +28,11 @@ public class Main {
                 return;
             }
 
-            System.out.println("📋 配置信息:");
-            System.out.println("   基准目录: " + config.getBaseDirectory());
-            System.out.println("   更新目录: " + config.getUpdatePath());
-            System.out.println("   删除目录: " + config.getDeletePath());
-            System.out.println("   目标目录: " + config.getTargetPath());
-            System.out.println("   备份目录: " + config.getBackupPath());
-            System.out.println("   日志目录: " + config.getLogPath());
-            System.out.println("   日志级别: " + config.getLogLevel());
-            System.out.println();
-
             Scanner scanner = new Scanner(System.in);
 
             // 创建服务实例
             FileUpdateServiceNew updateService = new FileUpdateServiceNew(config, scanner);
-//            FileDeleteService deleteService = new FileDeleteService(config, scanner);
+            FileDeleteService deleteService = new FileDeleteService(config, scanner);
             RestoreService restoreService = new RestoreService(config, scanner);
 
 
@@ -64,7 +55,7 @@ public class Main {
                         break;
                     case "2":
                         System.out.println("\n🗑️  执行删除操作...");
-//                        deleteService.deleteExecute();
+                        deleteService.deleteExecute();
                         break;
                     case "3":
                         System.out.println("\n🔄 执行恢复操作...");

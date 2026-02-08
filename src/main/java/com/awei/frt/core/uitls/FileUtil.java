@@ -74,6 +74,12 @@ public class FileUtil {
      */
     public static boolean addFile(Path sourcePath, Path targetPath, OperationRecord record) {
         try {
+            record.setOperationType(OperationContext.OPERATION_ADD);
+            record.setSourcePath(sourcePath);
+            record.setTargetPath(targetPath);
+            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
+            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
+
             if (sourcePath == null || !Files.isRegularFile(sourcePath)) {
                 record.setSuccess(false);
                 record.setErrorMessage("源文件不存在");
@@ -92,19 +98,13 @@ public class FileUtil {
                 record.setErrorMessage("目标文件已存在--新增操作失败");
                 return false;
             }
-
+            // 添加备份文件（新增不需要备份）
+            BackupFileLoader.addBackupFile(targetPath);
 
             Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-            record.setOperationType(OperationContext.OPERATION_ADD);
-            record.setSourcePath(sourcePath);
-            record.setTargetPath(targetPath);
-            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
-            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
             record.setSuccess(true);
 
-            // 添加备份文件
-            BackupFileLoader.addBackupFile(targetPath);
+
             return true;
         } catch (IOException e) {
             record.setSuccess(false);
@@ -123,6 +123,12 @@ public class FileUtil {
      */
     public static boolean replaceFile(Path sourcePath, Path targetPath, OperationRecord record) {
         try {
+            record.setOperationType(OperationContext.OPERATION_REPLACE);
+            record.setSourcePath(sourcePath);
+            record.setTargetPath(targetPath);
+            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
+            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
+
             if (sourcePath == null || !Files.isRegularFile(sourcePath)) {
                 record.setSuccess(false);
                 record.setErrorMessage("源文件不存在");
@@ -134,18 +140,12 @@ public class FileUtil {
                 record.setErrorMessage("目标路径不存在");
                 return false;
             }
-
-            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-            record.setOperationType(OperationContext.OPERATION_REPLACE);
-            record.setSourcePath(sourcePath);
-            record.setTargetPath(targetPath);
-            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
-            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
-            record.setSuccess(true);
-
             // 替换备份文件
             BackupFileLoader.addBackupFile(targetPath);
+
+            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            record.setSuccess(true);
+
             return true;
         } catch (IOException e) {
             record.setSuccess(false);
@@ -163,21 +163,23 @@ public class FileUtil {
      */
     public static boolean deleteFile(Path filePath, OperationRecord record) {
         try {
+            record.setOperationType(OperationContext.OPERATION_DELETE);
+            record.setSourcePath(filePath);
+            record.setTargetPath(filePath);
+            record.setSourceFileSign(FileSignUtil.getFileMd5(filePath));
+            record.setTargetFileSign(FileSignUtil.getFileMd5(filePath));
+
+
             if (filePath == null || !Files.isRegularFile(filePath)) {
                 record.setSuccess(false);
                 record.setErrorMessage("文件不存在、或不是文件");
                 return false;
             }
-
-            Files.delete(filePath);
-
-            record.setOperationType(OperationContext.OPERATION_DELETE);
-            record.setSourcePath(filePath);
-            record.setSourceFileSign(FileSignUtil.getFileMd5(filePath));
-            record.setSuccess(true);
-
             // 添加备份文件
             BackupFileLoader.addBackupFile(filePath);
+
+            Files.delete(filePath);
+            record.setSuccess(true);
             return true;
         } catch (IOException e) {
             record.setSuccess(false);

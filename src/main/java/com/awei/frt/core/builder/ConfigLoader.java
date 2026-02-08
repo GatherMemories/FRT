@@ -1,13 +1,14 @@
 package com.awei.frt.core.builder;
 
 import com.awei.frt.model.Config;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonDeserializationContext;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonElement;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.core.JsonParser;
 
-import java.lang.reflect.Type;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -30,6 +31,21 @@ public class ConfigLoader {
     private static Path backupPath;
     // logs文件夹（绝对路径）
     private static Path logsPath;
+
+    // Jackson ObjectMapper（线程安全，复用）
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+            .registerModule(new SimpleModule()
+                    .addDeserializer(Path.class, new JsonDeserializer<Path>() {
+                        @Override
+                        public Path deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                            String pathString = p.getValueAsString();
+                            if (pathString != null && !pathString.isEmpty()) {
+                                return Paths.get(pathString);
+                            }
+                            return null;
+                        }
+                    }));
 
     public static Config getConfig() {
         if (config == null) {
@@ -59,7 +75,12 @@ public class ConfigLoader {
             return loadFromPath(resourceConfig);
         }
 
-        return null;
+        // 3. 使用默认配置
+        System.out.println("📋 使用默认配置");
+        config = new Config();
+        // 设置静态变量（包含文件夹验证和创建逻辑）
+        setStaticPath(config);
+        return config;
     }
 
     /**
@@ -68,6 +89,10 @@ public class ConfigLoader {
     private static Config loadFromPath(Path configPath) {
         try {
             String jsonContent = Files.readString(configPath);
+            // 去除UTF-8 BOM（如果有）
+            if (jsonContent.startsWith("\uFEFF")) {
+                jsonContent = jsonContent.substring(1);
+            }
             Config config = parseConfig(jsonContent);
             return config;
         } catch (Exception e) {
@@ -77,44 +102,18 @@ public class ConfigLoader {
     }
 
     /**
-     * 使用Gson解析配置JSON
+     * 使用Jackson解析配置JSON
      */
     private static Config parseConfig(String json) {
         try {
-            GsonBuilder gsonBuilder = new GsonBuilder();
-
-            // 注册Path类型的自定义反序列化器
-            gsonBuilder.registerTypeAdapter(Path.class, new JsonDeserializer<Path>() {
-                @Override
-                public Path deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext context) {
-                    if (jsonElement.isJsonPrimitive()) {
-                        String pathString = jsonElement.getAsString();
-                        if (pathString != null && !pathString.isEmpty()) {
-                            return Paths.get(pathString);
-                        }
-                    }
-                    // 如果JSON值为null或空字符串，返回null
-                    return null;
-                }
-            });
-
-            Gson gson = gsonBuilder.create();
-            Config config = gson.fromJson(json, Config.class);
+            Config config = objectMapper.readValue(json, Config.class);
 
             // 配置检查
             if (config == null) {
                 throw new IllegalArgumentException("配置文件内容为空");
             }
 
-            // 检查目标目录是否存在（包括是否是文件夹）
-            if (config.getTargetPath() == null
-                    || config.getTargetPath().toString().isEmpty()
-                    || !Files.isDirectory(config.getBaseDirectory().resolve(config.getTargetPath()).normalize())) {
-                System.err.println("⚠️  配置错误: 目标目录不存在或不是文件夹（程序停止）");
-                return null;
-            }
-
-            // 设置静态变量
+            // 设置静态变量（包含文件夹验证和创建逻辑）
             setStaticPath(config);
 
             return config;
@@ -158,19 +157,98 @@ public class ConfigLoader {
     }
 
     /**
+     * 验证并确保文件夹存在
+     * @param basePath 基准目录
+     * @param configPath 配置路径（可为空）
+     * @param defaultPath 默认路径
+     * @param folderName 文件夹名称（用于日志输出）
+     * @return 实际使用的路径
+     */
+    private static Path validateAndEnsureDirectory(Path basePath, Path configPath,
+                                                   Path defaultPath, String folderName) {
+        Path actualPath;
+
+        if (configPath == null || configPath.toString().isEmpty() || defaultPath.equals(configPath)) {
+            // 使用默认值并创建文件夹
+            actualPath = basePath.resolve(defaultPath).normalize();
+            try {
+                Files.createDirectories(actualPath);
+                System.out.println("✅ 使用默认" + folderName + ": " + actualPath);
+            } catch (IOException e) {
+                System.err.println("⚠️  创建" + folderName + "失败: " + e.getMessage());
+            }
+        } else {
+            // 验证配置的路径
+            actualPath = basePath.resolve(configPath).normalize();
+            if (!Files.exists(actualPath)) {
+                System.err.println("⚠️  配置错误: " + folderName + "不存在: " + actualPath);
+                throw new IllegalArgumentException(folderName + "不存在");
+//                // 不存在则创建
+//                try {
+//                    Files.createDirectories(actualPath);
+//                    System.out.println("✅ 创建" + folderName + ": " + actualPath);
+//                } catch (IOException e) {
+//                    System.err.println("⚠️  创建" + folderName + "失败: " + e.getMessage());
+//                }
+            } else if (!Files.isDirectory(actualPath)) {
+                // 存在但不是文件夹
+                System.err.println("⚠️  配置错误: " + folderName + "不是有效文件夹: " + actualPath);
+                throw new IllegalArgumentException(folderName + "不是有效文件夹");
+            } else {
+                System.out.println("✅ " + folderName + "有效: " + actualPath);
+            }
+        }
+
+        return actualPath;
+    }
+
+    /**
      * 设置静态变量（配置的绝对路径）
-     * @return
+     * 验证并确保所有文件夹存在
      */
     private static void setStaticPath(Config config) {
         if (config == null) {
             return;
         }
 
-        targetPath = config.getBaseDirectory().resolve(config.getTargetPath()).normalize();
-        updatePath = config.getBaseDirectory().resolve(config.getUpdatePath()).normalize();
-        deletePath = config.getBaseDirectory().resolve(config.getDeletePath()).normalize();
-        backupPath = config.getBaseDirectory().resolve(config.getBackupPath()).normalize();
-        logsPath = config.getBaseDirectory().resolve(config.getLogLevel()).normalize();
+        Path basePath = config.getBaseDirectory();
+
+        // 定义默认值
+        Path defaultTargetPath = Path.of("THtest");
+        Path defaultUpdatePath = Path.of("update");
+        Path defaultDeletePath = Path.of("delete");
+        Path defaultBackupPath = Path.of("backup");
+        Path defaultLogPath = Path.of("logs");
+        String defaultLogLevel = "INFO";
+
+        System.out.println("📋 配置信息:");
+        System.out.println("   基准目录: " + config.getBaseDirectory());
+        System.out.println("   更新目录: " + config.getUpdatePath());
+        System.out.println("   删除目录: " + config.getDeletePath());
+        System.out.println("   目标目录: " + config.getTargetPath());
+        System.out.println("   备份目录: " + config.getBackupPath());
+        System.out.println("   日志目录: " + config.getLogPath());
+        System.out.println("   日志级别: " + config.getLogLevel());
+        System.out.println();
+
+        // 验证并设置各个文件夹路径
+        targetPath = validateAndEnsureDirectory(basePath, config.getTargetPath(),
+                                               defaultTargetPath, "目标目录");
+        updatePath = validateAndEnsureDirectory(basePath, config.getUpdatePath(),
+                                               defaultUpdatePath, "更新目录");
+        deletePath = validateAndEnsureDirectory(basePath, config.getDeletePath(),
+                                               defaultDeletePath, "删除目录");
+        backupPath = validateAndEnsureDirectory(basePath, config.getBackupPath(),
+                                               defaultBackupPath, "备份目录");
+        logsPath = validateAndEnsureDirectory(basePath, config.getLogPath(),
+                                             defaultLogPath, "日志目录");
+
+        config.setLogLevel(config.getLogLevel().isEmpty() ? defaultLogLevel : config.getLogLevel());
+        config.setTargetPath(targetPath.getFileName());
+        config.setUpdatePath(updatePath.getFileName());
+        config.setDeletePath(deletePath.getFileName());
+        config.setBackupPath(backupPath.getFileName());
+        config.setLogPath(logsPath.getFileName());
     }
 
 

@@ -16,11 +16,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -99,22 +96,23 @@ public class BackupFileLoader {
      */
     public static boolean addBackupFile(Path filePath) {
         try {
-            if (Files.isRegularFile(filePath)) {
-                // 检查文件是否已存在于备份文件列表中（存在更改为新路径）
-                String fileMd5 = FileSignUtil.getFileMd5(filePath);
-                Path backupFilePath = ConfigLoader.getBackupPath().resolve(filePath.getFileName()).normalize();
-                if (backupFiles.containsKey(fileMd5)) {
-                    backupFiles.put(fileMd5, backupFilePath);
-                    return true;
-                }
-
-                // 备份文件
-                Config config = ConfigLoader.getConfig();
-                Files.copy(filePath, backupFilePath, StandardCopyOption.REPLACE_EXISTING);
+            if (!Files.isRegularFile(filePath)) {
+                System.err.println("备份文件失败: 不是有效文件");
+                return false;
+            }
+            // 检查文件是否已存在于备份文件列表中（存在更改为新路径）
+            String fileMd5 = FileSignUtil.getFileMd5(filePath);
+            Path backupFilePath = ConfigLoader.getBackupPath().resolve(filePath.getFileName()).normalize();
+            if (backupFiles.containsKey(fileMd5)) {
                 backupFiles.put(fileMd5, backupFilePath);
                 return true;
             }
-            return false;
+
+            // 备份文件
+            Config config = ConfigLoader.getConfig();
+            Files.copy(filePath, backupFilePath, StandardCopyOption.REPLACE_EXISTING);
+            backupFiles.put(fileMd5, backupFilePath);
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
             return false;
@@ -154,7 +152,7 @@ public class BackupFileLoader {
     public static boolean saveOperationRecord(ProcessingResult record) {
         try {
             // 1. 检查record是否为null
-            if (record == null) {
+            if (record == null || record.getOperationRecords() == null || record.getOperationRecords().isEmpty()) {
                 System.err.println("保存操作记录失败: 记录对象为空");
                 return false;
             }
@@ -361,6 +359,15 @@ public class BackupFileLoader {
                     }
                 }
             }
+
+            // 6.5 按时间排序（降序：最新的在前）
+            results = results.entrySet().stream()
+                    .sorted(Map.Entry.<String, ProcessingResult>comparingByValue(
+                            Comparator.comparing(ProcessingResult::getResultTime).reversed()
+                    ))
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                            (oldValue, newValue) -> oldValue, LinkedHashMap::new));
+
 
             // 7. 更新静态变量
             operationRecordFiles = results;
@@ -731,7 +738,7 @@ public class BackupFileLoader {
             }
 
             // 4. 收集该备份记录引用的所有备份文件MD5
-            List<String> usedMd5List = new ArrayList<>();
+            Set<String> usedMd5List = new HashSet<>();
             List<OperationRecord> records = result.getOperationRecords();
             if (records != null) {
                 for (OperationRecord record : records) {
@@ -782,15 +789,16 @@ public class BackupFileLoader {
             // 7. 删除备份记录文件
             Path backupPath = ConfigLoader.getBackupPath();
             if (backupPath != null) {
-                Path recordPath = backupPath.resolve("record").resolve(fileName + ".json").normalize();
+                Path recordPath = backupPath.resolve("record").resolve(fileName).normalize();
                 if (Files.exists(recordPath)) {
                     Files.delete(recordPath);
-                    System.out.println("✓ 已删除备份记录文件: " + fileName + ".json");
+                    System.out.println("✓ 已删除备份记录文件: " + fileName);
                     return true;
                 }
             }
 
             System.err.println("删除备份记录文件失败: 文件不存在");
+            // 恢复删除操作
             return false;
 
         } catch (Exception e) {

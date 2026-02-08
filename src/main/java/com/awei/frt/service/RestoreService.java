@@ -1,6 +1,7 @@
 package com.awei.frt.service;
 
 import com.awei.frt.core.builder.BackupFileLoader;
+import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
@@ -46,6 +47,7 @@ public class RestoreService {
                 return;
             }
 
+            // 按时间排序备份记录（）
             List<String> fileNames = new ArrayList<>(operationRecords.keySet());
 
             // 循环菜单，允许用户选择多个备份进行恢复
@@ -54,8 +56,8 @@ public class RestoreService {
                 System.out.println("🔄 恢复操作");
                 System.out.println("=========================================");
 
-                // 2. 显示可用备份列表
-                System.out.println("\n📋 可用的备份记录:");
+                // 2. 显示可用备份列表（按时间倒序）
+                System.out.println("\n📋 可用的备份记录 (按时间倒序):");
                 System.out.println("-----------------------------------------");
 
                 for (int i = 0; i < fileNames.size(); i++) {
@@ -66,6 +68,7 @@ public class RestoreService {
                 System.out.println("-----------------------------------------");
                 System.out.println("0. 返回主菜单");
                 System.out.println("-1. 删除备份记录");
+                System.out.println("1-" + fileNames.size() + ". 恢复备份记录");
                 System.out.print("\n请输入选项 (0：返回, -1：删除, 1-" + fileNames.size() + "：恢复): ");
 
                 // 3. 用户选择
@@ -149,11 +152,11 @@ public class RestoreService {
                             boolean success = BackupFileLoader.deleteBackupRecord(deleteFileName);
                             if (success) {
                                 successCount++;
-                                fileNames.remove(index);
                                 operationRecords.remove(deleteFileName);
                             } else {
                                 failCount++;
                             }
+                            fileNames.remove(index);
                         }
 
                         System.out.println("✅ 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");
@@ -196,9 +199,9 @@ public class RestoreService {
                         String status = record.isSuccess() ? "✅" : "❌";
                         String opType = record.getOperationType();
                         String opTypeDisplay = switch (opType) {
-                            case "ADD" -> "新增";
-                            case "REPLACE" -> "更新";
-                            case "DELETE" -> "删除";
+                            case OperationContext.OPERATION_ADD -> "新增";
+                            case OperationContext.OPERATION_REPLACE -> "更新";
+                            case OperationContext.OPERATION_DELETE -> "删除";
                             default -> opType;
                         };
                         String timeStr = record.getTimestamp().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
@@ -250,7 +253,9 @@ public class RestoreService {
                         System.out.println("❌ 系统恢复失败，可能处于不一致状态");
                     }
 
-                    // 恢复完成后继续循环，允许用户选择其他备份
+                    // 按任意键继续
+                    System.out.println("\n请按任意键继续...");
+                    scanner.nextLine();
 
                 } catch (NumberFormatException e) {
                     System.out.println("❌ 无效的输入，请输入数字");

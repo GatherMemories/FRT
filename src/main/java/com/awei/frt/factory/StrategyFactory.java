@@ -16,7 +16,7 @@ public class StrategyFactory {
     private static volatile StrategyFactory instance = new StrategyFactory();
 
     public enum StrategyType {
-        FILE_NAME("FileName", "文件名处理策略"),
+        FILE_SAME_NAME("FileSameName", "文件名处理策略"),
         MC_MOD("McMod", "mcMod处理策略");
 
         private final String value;
@@ -81,8 +81,8 @@ public class StrategyFactory {
                         case MC_MOD:
                             strategy = new McModStrategy();
                             break;
-                        case FILE_NAME:
-                            strategy = new FileNameStrategy();
+                        case FILE_SAME_NAME:
+                            strategy = new FileSameNameStrategy();
                             break;
                         default:
                             throw new IllegalArgumentException("不支持的匹配策略类型: " + type);

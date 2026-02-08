@@ -39,11 +39,7 @@ public class McModStrategy implements OperationStrategy{
 
         // 获取对应层目标文件夹
         Path entryTargetPath = context.getTargetPath(node.getRelativePath());
-        // 如果目标文件夹不存在，则不处理
-        if (!Files.exists(entryTargetPath)) {
-            System.out.println(strategyType + " 策略->目标文件夹不存在: " + entryTargetPath);
-            return;
-        }
+
         // 判断操作类型
         boolean addType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_ADD));
         boolean replaceType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_REPLACE));
@@ -85,7 +81,7 @@ public class McModStrategy implements OperationStrategy{
                 continue;
             }
             // 删除操作
-            if (deleteType && targetModInfo != null) {
+            if (deleteType) {
                 boolean b = FileUtil.deleteFile(targetFilePath, operationRecord);
                 context.getProcessingResult().addOperationRecord(operationRecord);
                 System.out.println("- " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));

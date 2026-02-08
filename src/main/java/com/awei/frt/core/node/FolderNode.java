@@ -88,24 +88,6 @@ public class FolderNode extends FileNode {
     }
 
     /**
-     * 获取子文件列表
-     */
-    public List<FileNode> getFileChildren() {
-        return children.stream()
-                .filter(child -> !child.isDirectory())
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * 获取子目录列表
-     */
-    public List<FileNode> getDirectoryChildren() {
-        return children.stream()
-                .filter(FileNode::isDirectory)
-                .collect(Collectors.toList());
-    }
-
-    /**
      * 检查是否是目录
      */
     public boolean isDirectoryType() {
@@ -152,9 +134,11 @@ public class FolderNode extends FileNode {
      * 检查是否是规则文件
      */
     private boolean isRuleFile(String fileName) {
-        String ruleType = RulesConstants.FileNames.MATCHING_RULES_JSON;
-        if (fileName.equals(ruleType)) {
-            return true;
+        String[] ruleTypes = RulesConstants.FileNames.ALL_RULE_FILES;
+        for (String ruleType : ruleTypes) {
+            if (fileName.equals(ruleType)) {
+                return true;
+            }
         }
         return false;
     }
