@@ -178,18 +178,20 @@ public class ConfigLoader {
                 System.err.println("⚠️  创建" + folderName + "失败: " + e.getMessage());
             }
         } else {
-            // 验证配置的路径
-            actualPath = basePath.resolve(configPath).normalize();
+            // 判断路径类型并处理
+            if (Config.isAbsolutePath(configPath)) {
+                // 绝对路径：直接使用
+                actualPath = configPath.normalize();
+                System.out.println("🔍 检测到绝对路径: " + folderName + " = " + actualPath);
+            } else {
+                // 相对路径：基于基准目录解析
+                actualPath = basePath.resolve(configPath).normalize();
+                System.out.println("🔍 检测到相对路径，转换为绝对路径: " + folderName + " = " + actualPath);
+            }
+
             if (!Files.exists(actualPath)) {
                 System.err.println("⚠️  配置错误: " + folderName + "不存在: " + actualPath);
                 throw new IllegalArgumentException(folderName + "不存在");
-//                // 不存在则创建
-//                try {
-//                    Files.createDirectories(actualPath);
-//                    System.out.println("✅ 创建" + folderName + ": " + actualPath);
-//                } catch (IOException e) {
-//                    System.err.println("⚠️  创建" + folderName + "失败: " + e.getMessage());
-//                }
             } else if (!Files.isDirectory(actualPath)) {
                 // 存在但不是文件夹
                 System.err.println("⚠️  配置错误: " + folderName + "不是有效文件夹: " + actualPath);
@@ -204,7 +206,7 @@ public class ConfigLoader {
 
     /**
      * 设置静态变量（配置的绝对路径）
-     * 验证并确保所有文件夹存在
+     * 验证并确保所有文件夹存在，并将绝对路径转换为相对路径存储
      */
     private static void setStaticPath(Config config) {
         if (config == null) {
@@ -231,7 +233,7 @@ public class ConfigLoader {
         System.out.println("   日志级别: " + config.getLogLevel());
         System.out.println();
 
-        // 验证并设置各个文件夹路径
+        // 验证并设置各个文件夹路径，同时转换为相对路径存储
         targetPath = validateAndEnsureDirectory(basePath, config.getTargetPath(),
                                                defaultTargetPath, "目标目录");
         updatePath = validateAndEnsureDirectory(basePath, config.getUpdatePath(),
@@ -244,11 +246,14 @@ public class ConfigLoader {
                                              defaultLogPath, "日志目录");
 
         config.setLogLevel(config.getLogLevel().isEmpty() ? defaultLogLevel : config.getLogLevel());
-        config.setTargetPath(targetPath.getFileName());
-        config.setUpdatePath(updatePath.getFileName());
-        config.setDeletePath(deletePath.getFileName());
-        config.setBackupPath(backupPath.getFileName());
-        config.setLogPath(logsPath.getFileName());
+
+        // 将绝对路径转换为相对于基准目录的相对路径存储
+        config.setTargetPath(Config.toRelativePath(targetPath, basePath));
+        config.setUpdatePath(Config.toRelativePath(updatePath, basePath));
+        config.setDeletePath(Config.toRelativePath(deletePath, basePath));
+        config.setBackupPath(Config.toRelativePath(backupPath, basePath));
+        config.setLogPath(Config.toRelativePath(logsPath, basePath));
+
     }
 
 

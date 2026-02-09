@@ -15,7 +15,7 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) {
-        System.out.println("🚀 FRT - 多层级文件夹更新系统启动");
+        System.out.println(" FRT - 多层级文件夹更新系统启动");
         System.out.println("=========================================");
 
         try {
@@ -50,7 +50,7 @@ public class Main {
 
                 switch (choice) {
                     case "1":
-                        System.out.println("\n🔄 执行更新操作（增、删、改）...");
+                        System.out.println("\n🔄 执行更新操作（增加、替换）...");
                         updateService.updateExecute();
                         break;
                     case "2":
@@ -62,7 +62,7 @@ public class Main {
                         restoreService.executeRestore();
                         break;
                     case "4":
-                        System.out.println("\n👋 程序退出，再见！");
+                        System.out.println("\n程序退出");
                         return;
                     default:
                         System.out.println("\n❌ 无效选项，请重新选择");
