@@ -1,10 +1,9 @@
 {
-  "targetPath": "THtest233",
+  "baseDirectory": "C:/Users/5454564546/Desktop/FRT321",
   "updatePath": "update",
+  "targetPath": "C:/Users/5454564546/Desktop/FRT/THtest",
   "deletePath": "delete",
-  "backupPath": "old",
+  "backupPath": "backup",
   "logPath": "logs",
-  "confirmBeforeReplace": true,
-  "createBackup": true,
   "logLevel": "INFO"
 }

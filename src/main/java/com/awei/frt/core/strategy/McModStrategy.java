@@ -77,7 +77,7 @@ public class McModStrategy implements OperationStrategy{
                 boolean b = FileUtil.replaceFile(sourceFilePath, targetFilePath, operationRecord);
                 context.getProcessingResult().addOperationRecord(operationRecord);
                 System.out.println("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
-                        " --> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ")" + (b ? "成功" : "失败"));
+                        "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
                 continue;
             }
             // 删除操作

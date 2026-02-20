@@ -1,10 +1,12 @@
 package com.awei.frt.core.builder;
 
 import com.awei.frt.model.Config;
+import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.core.JsonParser;
 
@@ -12,6 +14,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 配置加载器
@@ -31,6 +35,17 @@ public class ConfigLoader {
     private static Path backupPath;
     // logs文件夹（绝对路径）
     private static Path logsPath;
+    // 日志消息缓存（用于在LoggerUtil初始化前记录日志）
+    private static final List<String> logBuffer = new ArrayList<>();
+    // 标记LoggerUtil是否已初始化
+    private static volatile boolean loggerInitialized = false;
+    // LoggerUtil实例（初始化后设置）
+    private static LoggerUtil loggerInstance = null;
+
+    // 私有构造函数，防止实例化
+    private ConfigLoader() {
+        throw new UnsupportedOperationException("Utility class");
+    }
 
     // Jackson ObjectMapper（线程安全，复用）
     private static final ObjectMapper objectMapper = new ObjectMapper()
@@ -53,6 +68,84 @@ public class ConfigLoader {
         }
         return config;
     }
+
+    /**
+     * 记录信息级别日志
+     */
+    private static void logInfo(String message) {
+        if (loggerInitialized && loggerInstance != null) {
+            loggerInstance.logInfo(message);
+            return;
+        }
+        String formatted = "[INFO] " + message;
+        logBuffer.add(formatted);
+        // 在LoggerUtil初始化前不输出到控制台，避免重复
+    }
+
+    /**
+     * 记录警告级别日志
+     */
+    private static void logWarn(String message) {
+        if (loggerInitialized && loggerInstance != null) {
+            loggerInstance.logWarn(message);
+            return;
+        }
+        String formatted = "[WARN] " + message;
+        logBuffer.add(formatted);
+        // 在LoggerUtil初始化前不输出到控制台，避免重复
+    }
+
+    /**
+     * 记录错误级别日志
+     */
+    private static void logError(String message) {
+        if (loggerInitialized && loggerInstance != null) {
+            loggerInstance.logError(message);
+            return;
+        }
+        String formatted = "[ERROR] " + message;
+        logBuffer.add(formatted);
+        // 在LoggerUtil初始化前不输出到控制台，避免重复
+    }
+
+    /**
+     * 记录错误级别日志（带异常）
+     */
+    private static void logError(String message, Throwable throwable) {
+        if (loggerInitialized && loggerInstance != null) {
+            loggerInstance.logError(message, throwable);
+            return;
+        }
+        String formatted = "[ERROR] " + message;
+        logBuffer.add(formatted);
+        // 在LoggerUtil初始化前不输出到控制台，避免重复
+        // 异常堆栈不缓冲，将在LoggerUtil初始化后记录
+    }
+
+    /**
+     * 标记LoggerUtil已初始化，将缓冲日志写入LoggerUtil
+     */
+    public static void onLoggerInitialized(LoggerUtil logger) {
+        if (logger == null) return;
+
+        synchronized (logBuffer) {
+            for (String logMessage : logBuffer) {
+                // 解析日志级别和消息
+                if (logMessage.startsWith("[INFO] ")) {
+                    logger.logInfo(logMessage.substring(7));
+                } else if (logMessage.startsWith("[WARN] ")) {
+                    logger.logWarn(logMessage.substring(7));
+                } else if (logMessage.startsWith("[ERROR] ")) {
+                    logger.logError(logMessage.substring(8));
+                } else {
+                    logger.logInfo(logMessage);
+                }
+            }
+            logBuffer.clear();
+            loggerInstance = logger;
+            loggerInitialized = true;
+        }
+    }
     /**
      * 加载配置
      * 按优先级顺序查找配置文件：
@@ -64,19 +157,19 @@ public class ConfigLoader {
         // 1. 尝试从FRT项目根目录外部加载
         Path externalConfig = getExternalConfigPath();
         if (Files.exists(externalConfig)) {
-            System.out.println("📋 从外部加载配置: " + externalConfig);
+            logInfo("📋 从外部加载配置: " + externalConfig);
             return loadFromPath(externalConfig);
         }
 
         // 2. 尝试从resources目录加载
         Path resourceConfig = getResourceConfigPath();
         if (resourceConfig != null && Files.exists(resourceConfig)) {
-            System.out.println("📋 从resources加载配置: " + resourceConfig);
+            logInfo("📋 从resources加载配置: " + resourceConfig);
             return loadFromPath(resourceConfig);
         }
 
         // 3. 使用默认配置
-        System.out.println("📋 使用默认配置");
+        logInfo("📋 使用默认配置");
         config = new Config();
         // 设置静态变量（包含文件夹验证和创建逻辑）
         setStaticPath(config);
@@ -96,7 +189,7 @@ public class ConfigLoader {
             Config config = parseConfig(jsonContent);
             return config;
         } catch (Exception e) {
-            System.err.println("⚠️  加载配置失败: " + e.getMessage());
+            logError("⚠️  加载配置失败: " + e.getMessage(), e);
         }
         return null;
     }
@@ -118,8 +211,7 @@ public class ConfigLoader {
 
             return config;
         } catch (Exception e) {
-            System.err.println("⚠️  解析配置失败: " + e.getMessage());
-            e.printStackTrace();
+            logError("⚠️  解析配置失败: " + e.getMessage(), e);
             return null;
         }
     }
@@ -137,7 +229,7 @@ public class ConfigLoader {
         // 如果获取失败，则回退到当前目录
         if (parentDir == null) {
             parentDir = currentDir;
-            System.out.println("无法获取上级目录，使用当前目录: " + parentDir);
+            logWarn("无法获取上级目录，使用当前目录: " + parentDir);
         }
 
         return parentDir.resolve("config.json");
@@ -173,31 +265,31 @@ public class ConfigLoader {
             actualPath = basePath.resolve(defaultPath).normalize();
             try {
                 Files.createDirectories(actualPath);
-                System.out.println("✅ 使用默认" + folderName + ": " + actualPath);
+                logInfo("✅ 使用默认" + folderName + ": " + actualPath);
             } catch (IOException e) {
-                System.err.println("⚠️  创建" + folderName + "失败: " + e.getMessage());
+                logError("⚠️  创建" + folderName + "失败: " + e.getMessage(), e);
             }
         } else {
             // 判断路径类型并处理
             if (Config.isAbsolutePath(configPath)) {
                 // 绝对路径：直接使用
                 actualPath = configPath.normalize();
-                System.out.println("🔍 检测到绝对路径: " + folderName + " = " + actualPath);
+                logInfo("🔍 检测到绝对路径: " + folderName + " = " + actualPath);
             } else {
                 // 相对路径：基于基准目录解析
                 actualPath = basePath.resolve(configPath).normalize();
-                System.out.println("🔍 检测到相对路径，转换为绝对路径: " + folderName + " = " + actualPath);
+                logInfo("🔍 检测到相对路径，转换为绝对路径: " + folderName + " = " + actualPath);
             }
 
             if (!Files.exists(actualPath)) {
-                System.err.println("⚠️  配置错误: " + folderName + "不存在: " + actualPath);
+                logError("⚠️  配置错误: " + folderName + "不存在: " + actualPath);
                 throw new IllegalArgumentException(folderName + "不存在");
             } else if (!Files.isDirectory(actualPath)) {
                 // 存在但不是文件夹
-                System.err.println("⚠️  配置错误: " + folderName + "不是有效文件夹: " + actualPath);
+                logError("⚠️  配置错误: " + folderName + "不是有效文件夹: " + actualPath);
                 throw new IllegalArgumentException(folderName + "不是有效文件夹");
             } else {
-                System.out.println("✅ " + folderName + "有效: " + actualPath);
+                logInfo("✅ " + folderName + "有效: " + actualPath);
             }
         }
 
@@ -223,15 +315,15 @@ public class ConfigLoader {
         Path defaultLogPath = Path.of("logs");
         String defaultLogLevel = "INFO";
 
-        System.out.println("📋 配置信息:");
-        System.out.println("   基准目录: " + config.getBaseDirectory());
-        System.out.println("   更新目录: " + config.getUpdatePath());
-        System.out.println("   删除目录: " + config.getDeletePath());
-        System.out.println("   目标目录: " + config.getTargetPath());
-        System.out.println("   备份目录: " + config.getBackupPath());
-        System.out.println("   日志目录: " + config.getLogPath());
-        System.out.println("   日志级别: " + config.getLogLevel());
-        System.out.println();
+        logInfo("📋 配置信息:");
+        logInfo("   基准目录: " + config.getBaseDirectory());
+        logInfo("   更新目录: " + config.getUpdatePath());
+        logInfo("   删除目录: " + config.getDeletePath());
+        logInfo("   目标目录: " + config.getTargetPath());
+        logInfo("   备份目录: " + config.getBackupPath());
+        logInfo("   日志目录: " + config.getLogPath());
+        logInfo("   日志级别: " + config.getLogLevel());
+        logInfo("");
 
         // 验证并设置各个文件夹路径，同时转换为相对路径存储
         targetPath = validateAndEnsureDirectory(basePath, config.getTargetPath(),

@@ -5,6 +5,7 @@ import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.core.builder.ConfigLoader;
+import com.awei.frt.util.LoggerUtil;
 
 import java.util.Scanner;
 
@@ -15,8 +16,8 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) {
-        System.out.println(" FRT - 多层级文件夹更新系统启动");
-        System.out.println("=========================================");
+        LoggerUtil logger = null;// 日志工具类
+        Scanner scanner = null;
 
         try {
             // 加载配置
@@ -28,7 +29,15 @@ public class Main {
                 return;
             }
 
-            Scanner scanner = new Scanner(System.in);
+            // 初始化日志系统
+            logger = LoggerUtil.getInstance(config);
+            // 将配置加载期间的缓冲日志写入LoggerUtil
+            ConfigLoader.onLoggerInitialized(logger);
+            logger.logInfo("=========================================");
+            logger.logInfo("FRT - 多层级文件夹更新系统启动");
+            logger.logInfo("=========================================");
+
+            scanner = new Scanner(System.in);
 
             // 创建服务实例
             FileUpdateServiceNew updateService = new FileUpdateServiceNew(config, scanner);
@@ -50,31 +59,43 @@ public class Main {
 
                 switch (choice) {
                     case "1":
-                        System.out.println("\n🔄 执行更新操作（增加、替换）...");
+                        logger.logInfo("\n🔄 执行更新操作（增加、替换）...");
                         updateService.updateExecute();
                         break;
                     case "2":
-                        System.out.println("\n🗑️  执行删除操作...");
+                        logger.logInfo("\n🗑️  执行删除操作...");
                         deleteService.deleteExecute();
                         break;
                     case "3":
-                        System.out.println("\n🔄 执行恢复操作...");
+                        logger.logInfo("\n🔄 执行恢复操作...");
                         restoreService.executeRestore();
                         break;
                     case "4":
-                        System.out.println("\n程序退出");
+                        logger.logInfo("\n程序退出");
                         return;
                     default:
-                        System.out.println("\n❌ 无效选项，请重新选择");
+                        logger.logWarn("\n❌ 无效选项，请重新选择");
                         break;
                 }
 
-                System.out.println(); // 空行分隔
+                logger.logInfo(""); // 空行分隔
             }
 
         } catch (Exception e) {
-            System.err.println("❌ 程序执行失败: " + e.getMessage());
-            e.printStackTrace();
+            if (logger != null) {
+                logger.logError("❌ 程序执行失败: " + e.getMessage(), e);
+            } else {
+                System.err.println("❌ 程序执行失败: " + e.getMessage());
+                e.printStackTrace();
+            }
+        } finally {
+            // 确保资源正确释放
+            if (logger != null) {
+                logger.close();
+            }
+            if (scanner != null) {
+                scanner.close();
+            }
         }
     }
 }

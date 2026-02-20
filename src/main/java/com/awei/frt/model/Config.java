@@ -1,5 +1,8 @@
 package com.awei.frt.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.io.IOException;
 import java.io.Serial;
 import java.io.Serializable;
@@ -11,6 +14,7 @@ import java.nio.file.Paths;
  * 配置模型
  * 存储系统运行所需的基本配置信息
  */
+@JsonIgnoreProperties({"baseDirectory"})
 public class Config implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -72,11 +76,11 @@ public class Config implements Serializable {
         if (absolutePath == null || baseDir == null) {
             return null;
         }
-        
+
         if (!isAbsolutePath(absolutePath)) {
             return absolutePath; // 已经是相对路径
         }
-        
+
         try {
             return baseDir.relativize(absolutePath);
         } catch (Exception e) {
@@ -94,7 +98,7 @@ public class Config implements Serializable {
         if (pathString == null || pathString.trim().isEmpty() || baseDir == null) {
             return null;
         }
-        
+
         try {
             Path path = Paths.get(pathString);
             return toRelativePath(path, baseDir);
@@ -113,11 +117,11 @@ public class Config implements Serializable {
         if (relativePath == null || baseDir == null) {
             return null;
         }
-        
+
         if (isAbsolutePath(relativePath)) {
             return relativePath.normalize();
         }
-        
+
         return baseDir.resolve(relativePath).normalize();
     }
 
@@ -131,7 +135,7 @@ public class Config implements Serializable {
         if (pathString == null || pathString.trim().isEmpty() || baseDir == null) {
             return null;
         }
-        
+
         try {
             Path path = Paths.get(pathString);
             return resolveRelativePath(path, baseDir);
