@@ -149,27 +149,27 @@ public class ConfigLoader {
     /**
      * 加载配置
      * 按优先级顺序查找配置文件：
-     * 1. FRT项目根目录外部的config.json
+     * 1. FRT项目根目录的config.json
      * 2. resources目录下的config.json
      * 3. 使用默认配置
      */
     private static Config loadConfig() {
-        // 1. 尝试从FRT项目根目录外部加载
+        // 1. 尝试从FRT项目根目录加载
         Path externalConfig = getExternalConfigPath();
         if (Files.exists(externalConfig)) {
-            logInfo("📋 从外部加载配置: " + externalConfig);
+            logInfo("[信息] 从外部加载配置: " + externalConfig);
             return loadFromPath(externalConfig);
         }
 
         // 2. 尝试从resources目录加载
         Path resourceConfig = getResourceConfigPath();
         if (resourceConfig != null && Files.exists(resourceConfig)) {
-            logInfo("📋 从resources加载配置: " + resourceConfig);
+            logInfo("[信息] 从resources加载配置: " + resourceConfig);
             return loadFromPath(resourceConfig);
         }
 
         // 3. 使用默认配置
-        logInfo("📋 使用默认配置");
+        logInfo("[信息] 使用默认配置");
         config = new Config();
         // 设置静态变量（包含文件夹验证和创建逻辑）
         setStaticPath(config);
@@ -189,7 +189,7 @@ public class ConfigLoader {
             Config config = parseConfig(jsonContent);
             return config;
         } catch (Exception e) {
-            logError("⚠️  加载配置失败: " + e.getMessage(), e);
+            logError("[警告] 加载配置失败: " + e.getMessage(), e);
         }
         return null;
     }
@@ -211,28 +211,19 @@ public class ConfigLoader {
 
             return config;
         } catch (Exception e) {
-            logError("⚠️  解析配置失败: " + e.getMessage(), e);
+            logError("[警告] 解析配置失败: " + e.getMessage(), e);
             return null;
         }
     }
 
     /**
-     * 获取外部配置路径（与FRT项目同级的目录）
+     * 获取工作目录配置路径（与FRT项目根目录）
      */
     private static Path getExternalConfigPath() {
         // 获取当前工作目录
         Path currentDir = Paths.get(".").normalize().toAbsolutePath();
 
-        // 获取当前项目目录的父目录，即FRT项目目录
-        Path parentDir = currentDir.getParent();
-
-        // 如果获取失败，则回退到当前目录
-        if (parentDir == null) {
-            parentDir = currentDir;
-            logWarn("无法获取上级目录，使用当前目录: " + parentDir);
-        }
-
-        return parentDir.resolve("config.json");
+        return currentDir.resolve("config.json");
     }
 
     /**
@@ -265,31 +256,31 @@ public class ConfigLoader {
             actualPath = basePath.resolve(defaultPath).normalize();
             try {
                 Files.createDirectories(actualPath);
-                logInfo("✅ 使用默认" + folderName + ": " + actualPath);
+                logInfo("[成功] 使用默认" + folderName + ": " + actualPath);
             } catch (IOException e) {
-                logError("⚠️  创建" + folderName + "失败: " + e.getMessage(), e);
+                logError("[警告] 创建" + folderName + "失败: " + e.getMessage(), e);
             }
         } else {
             // 判断路径类型并处理
             if (Config.isAbsolutePath(configPath)) {
                 // 绝对路径：直接使用
                 actualPath = configPath.normalize();
-                logInfo("🔍 检测到绝对路径: " + folderName + " = " + actualPath);
+                logInfo("[搜索] 检测到绝对路径: " + folderName + " = " + actualPath);
             } else {
                 // 相对路径：基于基准目录解析
                 actualPath = basePath.resolve(configPath).normalize();
-                logInfo("🔍 检测到相对路径，转换为绝对路径: " + folderName + " = " + actualPath);
+                logInfo("[搜索] 检测到相对路径，转换为绝对路径: " + folderName + " = " + actualPath);
             }
 
             if (!Files.exists(actualPath)) {
-                logError("⚠️  配置错误: " + folderName + "不存在: " + actualPath);
+                logError("[警告] 配置错误: " + folderName + "不存在: " + actualPath);
                 throw new IllegalArgumentException(folderName + "不存在");
             } else if (!Files.isDirectory(actualPath)) {
                 // 存在但不是文件夹
-                logError("⚠️  配置错误: " + folderName + "不是有效文件夹: " + actualPath);
+                logError("[警告] 配置错误: " + folderName + "不是有效文件夹: " + actualPath);
                 throw new IllegalArgumentException(folderName + "不是有效文件夹");
             } else {
-                logInfo("✅ " + folderName + "有效: " + actualPath);
+                logInfo("[成功] " + folderName + "有效: " + actualPath);
             }
         }
 
@@ -315,7 +306,7 @@ public class ConfigLoader {
         Path defaultLogPath = Path.of("logs");
         String defaultLogLevel = "INFO";
 
-        logInfo("📋 配置信息:");
+        logInfo("[列表] 配置信息:");
         logInfo("   基准目录: " + config.getBaseDirectory());
         logInfo("   更新目录: " + config.getUpdatePath());
         logInfo("   删除目录: " + config.getDeletePath());

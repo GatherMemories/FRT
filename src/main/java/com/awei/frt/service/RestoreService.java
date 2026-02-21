@@ -40,9 +40,9 @@ public class RestoreService {
 
             if (operationRecords == null || operationRecords.isEmpty()) {
                 System.out.println("\n=========================================");
-                System.out.println("🔄 恢复操作");
+                System.out.println("[执行] 恢复操作");
                 System.out.println("=========================================");
-                System.out.println("❌ 没有找到可用的备份记录");
+                System.out.println("[失败] 没有找到可用的备份记录");
                 System.out.println("请先执行更新操作以创建备份");
                 return;
             }
@@ -53,11 +53,11 @@ public class RestoreService {
             // 循环菜单，允许用户选择多个备份进行恢复
             while (true) {
                 System.out.println("\n=========================================");
-                System.out.println("🔄 恢复操作");
+                System.out.println("[执行] 恢复操作");
                 System.out.println("=========================================");
 
                 // 2. 显示可用备份列表（按时间倒序）
-                System.out.println("\n📋 可用的备份记录 (按时间倒序):");
+                System.out.println("\n[列表] 可用的备份记录 (按时间倒序):");
                 System.out.println("-----------------------------------------");
 
                 for (int i = 0; i < fileNames.size(); i++) {
@@ -97,7 +97,7 @@ public class RestoreService {
 
                                 // 确保范围有效
                                 if (start < 0 || end >= fileNames.size() || start > end) {
-                                    System.out.println("❌ 无效的范围");
+                                    System.out.println("[失败] 无效的范围");
                                     continue;
                                 }
 
@@ -106,21 +106,21 @@ public class RestoreService {
                                     deleteIndexes.add(i);
                                 }
                             } else {
-                                System.out.println("❌ 无效的格式");
+                                System.out.println("[失败] 无效的格式");
                                 continue;
                             }
                         } else {
                             // 单个删除
                             int deleteIndex = Integer.parseInt(deleteChoice) - 1;
                             if (deleteIndex < 0 || deleteIndex >= fileNames.size()) {
-                                System.out.println("❌ 无效的选项");
+                                System.out.println("[失败] 无效的选项");
                                 continue;
                             }
                             deleteIndexes.add(deleteIndex);
                         }
 
                         // 显示要删除的备份列表
-                        System.out.println("\n📄 要删除的备份记录 (" + deleteIndexes.size() + "个):");
+                        System.out.println("\n[FILE] 要删除的备份记录 (" + deleteIndexes.size() + "个):");
                         System.out.println("-----------------------------------------");
                         for (int i = 0; i < deleteIndexes.size(); i++) {
                             int index = deleteIndexes.get(i);
@@ -138,12 +138,12 @@ public class RestoreService {
                         String confirmDelete = scanner.nextLine().trim().toLowerCase();
 
                         if (!confirmDelete.equals("y") && !confirmDelete.equals("yes")) {
-                            System.out.println("ℹ️  已取消删除操作");
+                            System.out.println("[信息] 已取消删除操作");
                             continue;
                         }
 
                         // 执行删除（从后往前删除，避免索引变化）
-                        System.out.println("\n🗑️  开始删除备份记录...");
+                        System.out.println("\n[删除] 开始删除备份记录...");
                         int successCount = 0;
                         int failCount = 0;
                         for (int i = deleteIndexes.size() - 1; i >= 0; i--) {
@@ -159,10 +159,10 @@ public class RestoreService {
                             fileNames.remove(index);
                         }
 
-                        System.out.println("✅ 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");
+                        System.out.println("[成功] 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");
 
                     } catch (NumberFormatException e) {
-                        System.out.println("❌ 无效的输入，请输入数字或范围格式(如 1-5)");
+                        System.out.println("[失败] 无效的输入，请输入数字或范围格式(如 1-5)");
                     }
                     continue;
                 }
@@ -170,7 +170,7 @@ public class RestoreService {
                 try {
                     int index = Integer.parseInt(choice) - 1;
                     if (index < 0 || index >= fileNames.size()) {
-                        System.out.println("❌ 无效的选项");
+                        System.out.println("[失败] 无效的选项");
                         continue;
                     }
 
@@ -179,7 +179,7 @@ public class RestoreService {
                     ProcessingResult selectedResult = operationRecords.get(selectedFileName);
 
                     // 5. 显示详细信息
-                    System.out.println("\n📄 备份详细信息:");
+                    System.out.println("\n[FILE] 备份详细信息:");
                     System.out.println("-----------------------------------------");
                     System.out.println("文件名: " + selectedFileName);
                     System.out.println("时间: " + selectedResult.getResultTime()
@@ -191,12 +191,12 @@ public class RestoreService {
                     System.out.println("-----------------------------------------");
 
                     // 显示操作列表
-                    System.out.println("\n📋 操作详情:");
+                    System.out.println("\n[列表] 操作详情:");
                     System.out.println("-----------------------------------------");
                     List<com.awei.frt.model.OperationRecord> records = selectedResult.getOperationRecords();
                     for (int i = 0; i < records.size(); i++) {
                         com.awei.frt.model.OperationRecord record = records.get(i);
-                        String status = record.isSuccess() ? "✅" : "❌";
+                        String status = record.isSuccess() ? "[成功]" : "[失败]";
                         String opType = record.getOperationType();
                         String opTypeDisplay = switch (opType) {
                             case OperationContext.OPERATION_ADD -> "新增";
@@ -219,17 +219,17 @@ public class RestoreService {
                     String confirm = scanner.nextLine().trim().toLowerCase();
 
                     if (!confirm.equals("y") && !confirm.equals("yes")) {
-                        System.out.println("ℹ️  已取消恢复操作");
+                        System.out.println("[信息] 已取消恢复操作");
                         continue;
                     }
 
                     // 7. 执行恢复
-                    System.out.println("\n🔄 开始执行恢复操作...");
+                    System.out.println("\n[执行] 开始执行恢复操作...");
                     RestoreResult restoreResult = BackupFileLoader.restoreFromResult(selectedResult, scanner);
 
                     // 8. 显示恢复结果
                     System.out.println("\n=========================================");
-                    System.out.println("📊 恢复结果统计");
+                    System.out.println("[STATS] 恢复结果统计");
                     System.out.println("=========================================");
                     System.out.println("恢复时间: " + restoreResult.getRestoreTime()
                         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -246,11 +246,11 @@ public class RestoreService {
 
                     System.out.println("-----------------------------------------");
                     if (restoreResult.isFullSuccess()) {
-                        System.out.println("✅ 系统已成功恢复到操作前的状态");
+                        System.out.println("[成功] 系统已成功恢复到操作前的状态");
                     } else if (restoreResult.getRollbackCount() > 0) {
-                        System.out.println("⚠️  系统已回滚，但可能处于部分恢复状态");
+                        System.out.println("[警告] 系统已回滚，但可能处于部分恢复状态");
                     } else {
-                        System.out.println("❌ 系统恢复失败，可能处于不一致状态");
+                        System.out.println("[失败] 系统恢复失败，可能处于不一致状态");
                     }
 
                     // 按任意键继续
@@ -258,12 +258,12 @@ public class RestoreService {
                     scanner.nextLine();
 
                 } catch (NumberFormatException e) {
-                    System.out.println("❌ 无效的输入，请输入数字");
+                    System.out.println("[失败] 无效的输入，请输入数字");
                 }
             }
 
         } catch (Exception e) {
-            System.err.println("❌ 恢复操作失败: " + e.getMessage());
+            System.err.println("[失败] 恢复操作失败: " + e.getMessage());
             e.printStackTrace();
         }
     }

@@ -28,7 +28,7 @@ public class Config implements Serializable {
     private String logLevel;         // 日志级别（默认：INFO）
 
     public Config() {
-        this.baseDirectory = Path.of(".").normalize().toAbsolutePath().getParent();
+        this.baseDirectory = Path.of(".").normalize().toAbsolutePath();
         this.updatePath = Path.of("update");
         this.targetPath = Path.of("THtest");
         this.deletePath = Path.of("delete");

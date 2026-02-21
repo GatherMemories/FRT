@@ -20,7 +20,7 @@ public class ConfigLoaderTest {
         assertNotNull(config, "Config should not be null");
 
         if (config != null) {
-            System.out.println("✅ Config loaded successfully!");
+            System.out.println("[成功] Config loaded successfully!");
             System.out.println("  - Target Path: " + config.getTargetPath());
             System.out.println("  - Update Path: " + config.getUpdatePath());
             System.out.println("  - Delete Path: " + config.getDeletePath());

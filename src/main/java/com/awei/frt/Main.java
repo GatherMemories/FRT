@@ -24,7 +24,7 @@ public class Main {
             Config config = ConfigLoader.getConfig();
             if (config == null) {
                 // 配置加载失败，退出程序
-                System.err.println("❌ 配置加载失败，请检查配置文件");
+                System.err.println("[失败] 配置加载失败，请检查配置文件");
                 System.exit(1);
                 return;
             }
@@ -48,7 +48,7 @@ public class Main {
             // 显示菜单
             while (true) {
                 System.out.println("=========================================");
-                System.out.println("📋 请选择操作:");
+                System.out.println("[列表] 请选择操作:");
                 System.out.println("1. 更新文件");
                 System.out.println("2. 删除文件");
                 System.out.println("3. 执行恢复操作");
@@ -59,33 +59,33 @@ public class Main {
 
                 switch (choice) {
                     case "1":
-                        logger.logInfo("\n🔄 执行更新操作（增加、替换）...");
+                        logger.logInfo("[执行] 执行更新操作（增加、替换）...");
                         updateService.updateExecute();
                         break;
                     case "2":
-                        logger.logInfo("\n🗑️  执行删除操作...");
+                        logger.logInfo("[删除] 执行删除操作...");
                         deleteService.deleteExecute();
                         break;
                     case "3":
-                        logger.logInfo("\n🔄 执行恢复操作...");
+                        logger.logInfo("[执行] 执行恢复操作...");
                         restoreService.executeRestore();
                         break;
                     case "4":
-                        logger.logInfo("\n程序退出");
+                        logger.logInfo("程序退出");
                         return;
                     default:
-                        logger.logWarn("\n❌ 无效选项，请重新选择");
+                        logger.logWarn("[失败] 无效选项，请重新选择");
                         break;
                 }
 
-                logger.logInfo(""); // 空行分隔
+                System.out.println(""); // 空行分隔
             }
 
         } catch (Exception e) {
             if (logger != null) {
-                logger.logError("❌ 程序执行失败: " + e.getMessage(), e);
+                logger.logError("[失败] 程序执行失败: " + e.getMessage(), e);
             } else {
-                System.err.println("❌ 程序执行失败: " + e.getMessage());
+                System.err.println("[失败] 程序执行失败: " + e.getMessage());
                 e.printStackTrace();
             }
         } finally {

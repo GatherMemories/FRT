@@ -41,7 +41,7 @@ public class FileTreeBuilder {
         if (node.isDirectory()) {
             int newDepth = depth + 1;
             List<FileNode> FolderNodes = new ArrayList<>();
-            System.out.println(indent + "📁 " + node.getName() + "/");
+            System.out.println(indent + "[DIR] " + node.getName() + "/");
             FolderNode folderNode = (FolderNode) node;
             for (FileNode child : folderNode.getChildren()) {
                 if (child.isDirectory()){
@@ -54,7 +54,7 @@ public class FileTreeBuilder {
                 printTree(FolderNode, newDepth);
             }
         } else {
-            System.out.println(indent + "📄 " + node.getName());
+            System.out.println(indent + "[FILE] " + node.getName());
         }
 
     }

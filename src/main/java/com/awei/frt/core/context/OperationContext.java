@@ -96,7 +96,7 @@ public class OperationContext {
 
             Files.copy(targetPath, backupFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (Exception e) {
-            System.err.println("❌ 备份失败: " + targetPath + " - " + e.getMessage());
+            System.err.println("[失败] 备份失败: " + targetPath + " - " + e.getMessage());
         }
     }
 
@@ -109,10 +109,10 @@ public class OperationContext {
      */
     public boolean confirm(String operation, Path sourcePath, Path targetPath) {
         if (targetPath != null) {
-            System.out.printf("⚠️  确认 %s: %s -> %s ? (y/n): ",
+            System.out.printf("[警告] 确认 %s: %s -> %s ? (y/n): ",
                 operation, sourcePath, targetPath);
         } else {
-            System.out.printf("⚠️  确认 %s: %s ? (y/n): ",
+            System.out.printf("[警告] 确认 %s: %s ? (y/n): ",
                 operation, sourcePath);
         }
 
@@ -126,13 +126,13 @@ public class OperationContext {
      */
     public void printStatistics() {
         System.out.println("-----------------------------------------");
-        System.out.println("📊 处理统计:");
-        System.out.println("   ✅ 成功处理: " + getSuccessCount() + " 个文件");
+        System.out.println("[STATS] 处理统计:");
+        System.out.println("   [成功] 成功处理: " + getSuccessCount() + " 个文件");
         if (getSkipCount() > 0) {
-            System.out.println("   ⏭️  跳过文件: " + getSkipCount() + " 个文件");
+            System.out.println("   [跳过] 跳过文件: " + getSkipCount() + " 个文件");
         }
         if (getErrorCount() > 0) {
-            System.out.println("   ❌ 处理失败: " + getErrorCount() + " 个文件");
+            System.out.println("   [失败] 处理失败: " + getErrorCount() + " 个文件");
         }
         System.out.println("-----------------------------------------");
     }

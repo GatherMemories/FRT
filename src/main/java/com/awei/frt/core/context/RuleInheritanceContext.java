@@ -59,9 +59,9 @@ public class RuleInheritanceContext {
                     rule.setPath(ruleFile); // 设置规则文件路径
                     return rule;
                 } catch (java.io.IOException e) {
-                    System.err.println("⚠️  读取规则文件失败: " + ruleFile + " - " + e.getMessage());
+                    System.err.println("[警告]  读取规则文件失败: " + ruleFile + " - " + e.getMessage());
                 } catch (Exception e) {
-                    System.err.println("⚠️  解析规则失败: " + ruleFile + " - " + e.getMessage());
+                    System.err.println("[警告]  解析规则失败: " + ruleFile + " - " + e.getMessage());
                 }
             }
         }
@@ -84,19 +84,19 @@ public class RuleInheritanceContext {
         MatchRule localRule = loadLocalRule(currentNode.getPath());
         if (localRule != null) {
             setRuleChain(localRule);
-            System.out.println("✓ 节点 " + relativePath + " (使用本地规则: "+ localRule.getStrategyType() + ")");
+            System.out.println("[→] 节点 " + relativePath + " (使用本地规则: "+ localRule.getStrategyType() + ")");
             return localRule;
         }
 
         // 继承最近的父节点规则
         if (ruleChain != null && ruleChain.isInheritToSubfolders()) {
             MatchRule inheritedRule = ruleChain;
-            System.out.println("→ 节点 " + relativePath + " (继承规则: "+ inheritedRule.getStrategyType() + ")");
+            System.out.println("[→] 节点 " + relativePath + " (继承规则: "+ inheritedRule.getStrategyType() + ")");
             return inheritedRule;
         }
 
         // 没有规则
-        System.out.println("○ 节点 " + relativePath + " (无规则: 跳过)");
+        System.out.println("[○] 节点 " + relativePath + " (无规则: 跳过)");
         return null;
     }
 

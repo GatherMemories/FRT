@@ -65,13 +65,13 @@ public class PathTest {
             }
             
             System.out.println("  标准化路径: " + resolvedPath);
-            System.out.println("  实际存在: " + (Files.exists(resolvedPath) ? "✓" : "✗"));
+            System.out.println("  实际存在: " + (Files.exists(resolvedPath) ? "[是]" : "[否]"));
             
             // 检查父目录
             Path parent = resolvedPath.getParent();
             if (parent != null) {
                 System.out.println("  父目录: " + parent);
-                System.out.println("  父目录存在: " + (Files.exists(parent) ? "✓" : "✗"));
+                System.out.println("  父目录存在: " + (Files.exists(parent) ? "[是]" : "[否]"));
                 
                 if (Files.exists(parent)) {
                     try {
@@ -115,7 +115,7 @@ public class PathTest {
                 }
                 
                 if (Files.exists(path)) {
-                    System.out.println("  ✓ " + pathStr + " -> " + path);
+                    System.out.println("  [是] " + pathStr + " -> " + path);
                     
                     if (Files.isDirectory(path)) {
                         try {
@@ -126,7 +126,7 @@ public class PathTest {
                         }
                     }
                 } else {
-                    System.out.println("  ✗ " + pathStr + " -> " + path);
+                    System.out.println("  [否] " + pathStr + " -> " + path);
                 }
                 
             } catch (Exception e) {

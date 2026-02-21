@@ -1,0 +1,33 @@
+
+
+[2026-02-22 00:01:52] [INFO] 日志系统初始化完成，日志文件路径: C:\Users\5454564546\Desktop\FRT\FRT\testDic\logs\2026-02-22.log
+[2026-02-22 00:01:52] [INFO] [信息] 从resources加载配置: src\main\resources\config.json
+[2026-02-22 00:01:52] [INFO] [列表] 配置信息:
+[2026-02-22 00:01:52] [INFO]    基准目录: C:\Users\5454564546\Desktop\FRT\FRT
+[2026-02-22 00:01:52] [INFO]    更新目录: .\testDic\update
+[2026-02-22 00:01:52] [INFO]    删除目录: .\testDic\delete
+[2026-02-22 00:01:52] [INFO]    目标目录: .\testDic\THtest
+[2026-02-22 00:01:52] [INFO]    备份目录: .\testDic\backup
+[2026-02-22 00:01:52] [INFO]    日志目录: .\testDic\logs
+[2026-02-22 00:01:52] [INFO]    日志级别: INFO
+[2026-02-22 00:01:52] [INFO] 
+[2026-02-22 00:01:52] [INFO] [搜索] 检测到相对路径，转换为绝对路径: 目标目录 = C:\Users\5454564546\Desktop\FRT\FRT\testDic\THtest
+[2026-02-22 00:01:52] [INFO] [成功] 目标目录有效: C:\Users\5454564546\Desktop\FRT\FRT\testDic\THtest
+[2026-02-22 00:01:52] [INFO] [搜索] 检测到相对路径，转换为绝对路径: 更新目录 = C:\Users\5454564546\Desktop\FRT\FRT\testDic\update
+[2026-02-22 00:01:52] [INFO] [成功] 更新目录有效: C:\Users\5454564546\Desktop\FRT\FRT\testDic\update
+[2026-02-22 00:01:52] [INFO] [搜索] 检测到相对路径，转换为绝对路径: 删除目录 = C:\Users\5454564546\Desktop\FRT\FRT\testDic\delete
+[2026-02-22 00:01:52] [INFO] [成功] 删除目录有效: C:\Users\5454564546\Desktop\FRT\FRT\testDic\delete
+[2026-02-22 00:01:52] [INFO] [搜索] 检测到相对路径，转换为绝对路径: 备份目录 = C:\Users\5454564546\Desktop\FRT\FRT\testDic\backup
+[2026-02-22 00:01:52] [INFO] [成功] 备份目录有效: C:\Users\5454564546\Desktop\FRT\FRT\testDic\backup
+[2026-02-22 00:01:52] [INFO] [搜索] 检测到相对路径，转换为绝对路径: 日志目录 = C:\Users\5454564546\Desktop\FRT\FRT\testDic\logs
+[2026-02-22 00:01:52] [INFO] [成功] 日志目录有效: C:\Users\5454564546\Desktop\FRT\FRT\testDic\logs
+[2026-02-22 00:01:52] [INFO] =========================================
+[2026-02-22 00:01:52] [INFO] FRT - 多层级文件夹更新系统启动
+[2026-02-22 00:01:52] [INFO] =========================================
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 退出
+请输入选项 (1-4): 
