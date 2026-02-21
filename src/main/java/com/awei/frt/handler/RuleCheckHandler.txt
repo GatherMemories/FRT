@@ -19,11 +19,11 @@ public class RuleCheckHandler extends AbstractFileHandler {
         Path ruleFile = rulePath.resolve("replace.json");
 
         if (!Files.exists(ruleFile)) {
-            System.out.println("⚠️  警告: 规则文件不存在 - " + ruleFile);
+            System.out.println("[警告]  警告: 规则文件不存在 - " + ruleFile);
             return false; // 停止处理
         }
 
-        System.out.println("✓ 规则文件存在 - " + ruleFile);
+        System.out.println("[是] 规则文件存在 - " + ruleFile);
         return true; // 继续处理
     }
 }
