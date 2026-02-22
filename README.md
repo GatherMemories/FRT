@@ -2,39 +2,116 @@
 
 ## 系统概述
 
-这是一个基于Java实现的多层级文件夹更新系统，支持用户自定义匹配规则的JSON配置文件。系统能够处理多层级文件夹结构，并实现规则继承机制，使子文件夹在没有自己的规则时继承父文件夹的规则。
+这是一个基于Java实现的多层级文件夹更新系统，专为处理复杂的文件更新场景设计。系统采用灵活的规则配置机制，支持多层级文件夹结构的规则继承，特别适用于Minecraft模组管理等需要精细化文件操作的应用场景。
 
 ## 核心特性
 
-- **多层级规则继承**：子文件夹可继承父文件夹规则，优先使用本地规则
-- **灵活的配置**：支持replace.json、add.json、delete.json三种配置文件
-- **多种操作模式**：支持替换、新增、删除三种文件操作
-- **备份与恢复**：自动备份和恢复功能
-- **用户交互**：操作确认机制
+- **智能规则继承**：子文件夹自动继承父文件夹规则，本地规则优先
+- **多策略支持**：支持多种文件处理策略，包括Minecraft模组识别、同名文件处理等
+- **操作类型完备**：支持替换、新增、删除三种文件操作模式
+- **安全备份机制**：自动备份与恢复功能，确保操作安全
+- **用户交互确认**：关键操作前进行用户确认，避免误操作
 
-## 架构设计
+## 系统架构
 
 ### 设计模式应用
 
-1. **组合模式 (Composite Pattern)**
-   - `FileNode`：定义文件系统节点的抽象基类
-   - `FileLeaf`：代表实际文件的叶子节点
-   - `FolderNode`：包含子节点的复合节点
+系统采用多种设计模式构建，确保架构的灵活性和可扩展性：
 
-2. **策略模式 (Strategy Pattern)**
-   - `OperationStrategy`：定义操作策略接口
-   - `ReplaceStrategy`：文件替换策略
-   - `AddStrategy`：文件新增策略
-   - `DeleteStrategy`：文件删除策略
+1. **组合模式**：`FileNode`抽象基类统一管理文件和文件夹节点
+2. **策略模式**：`OperationStrategy`接口定义统一的操作策略规范
+3. **责任链模式**：`RuleInheritanceContext`实现多层级的规则继承
+4. **工厂模式**：`StrategyFactory`统一创建策略对象
 
-3. **责任链模式 (Chain of Responsibility Pattern)**
-   - `RuleInheritanceContext`：实现规则继承机制
-   - 子节点优先使用本地规则，否则继承父节点规则
+### 当前实现状态
 
-4. **工厂模式 (Factory Pattern)**
-   - `StrategyFactory`：创建不同类型的策略对象
+#### 已实现的策略类
+- **`McModStrategy`**：Minecraft模组文件处理策略
+  - 自动识别.jar文件中的模组信息
+  - 支持模组ID、版本号等元数据匹配
+  - 智能处理Forge、Fabric等不同平台的模组
 
-### 项目结构
+- **`FileSameNameStrategy`**：同名文件处理策略
+  - 基于文件名进行文件匹配和操作
+  - 支持通配符模式的文件筛选
+
+#### 待实现的策略类
+- `ZipFileContentStrategy`：ZIP文件内容处理策略（规划中）
+- `ZipFileNameStrategy`：ZIP文件名处理策略（规划中）
+
+## 配置文件参数说明
+
+### 1. config.json - 系统全局配置
+
+| 参数名 | 作用说明 | 是否必填 | 数据类型 | 默认值 | 示例 |
+|--------|----------|------|----------|---------|------|
+| `updatePath` | 更新文件目录 | 否    | String | `"update"` | `"./testDic/update"` |
+| `targetPath` | 目标处理目录 | 否    | String | `"THtest"` | `"./testDic/THtest"` |
+| `deletePath` | 删除文件目录 | 否    | String | `"delete"` | `"./testDic/delete"` |
+| `backupPath` | 备份目录 | 否    | String | `"backup"` | `"./testDic/backup"` |
+| `logLevel` | 日志级别 | 否    | String | `"INFO"` | `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"` |
+
+### 2. 规则配置文件（replace.json / add.json / delete.json / matching-rules.json）
+
+| 参数名 | 作用说明 | 是否必填  | 数据类型 | 默认值 | 示例 |
+|--------|----------|-------|----------|---------|------|
+| `strategyType` | **策略类型** | **是** | String | 无 | `"McMod"`, `"FileSameName"` |
+| `patterns` | **匹配文件模式** | 否     | List\<String\> | 空列表 | `["*.jar"]`, `["*.txt", "*.doc"]` |
+| `excludePatterns` | 排除文件模式 | 否     | List\<String\> | 空列表 | `["*backup*", "*Test*"]` |
+| `inheritToSubfolders` | 是否应用到子文件夹 | 否     | Boolean | `false` | `true`, `false` |
+| `replacements` | **预留替换项**（⚠️ **当前未使用**） | 否     | List\<String\> | 空列表 | `[]`（请勿依赖此参数） |
+
+### 3. 重要说明
+
+#### config.json 特点：
+- 所有路径参数支持相对路径和绝对路径
+- 相对路径会自动基于 `baseDirectory` 解析为绝对路径
+- 所有参数都有默认值，配置文件可省略不写，实际使用**目标文件夹路径**必填
+
+#### 规则配置文件特点：
+- **必填参数**：`strategyType`（策略类型）
+- **策略类型说明**：
+  - `"McMod"`：Minecraft模组文件处理策略（只检测jar文件，patterns、excludePatterns 参数无效）
+  - `"FileSameName"`：同名文件处理策略
+- **⚠️ 重要提醒**：`replacements` 参数是预留字段，**当前版本所有策略类均未使用此参数**，仅作为未来扩展预留
+
+#### 规则文件命名规范（任选其一作用都是相同的）：
+- `replace.json` - 文件替换操作规则
+- `add.json` - 文件新增操作规则  
+- `delete.json` - 文件删除操作规则
+- `matching-rules.json` - 通用匹配规则（新版）
+
+### 4. 配置示例
+
+#### config.json 示例：
+```json
+{
+   "updatePath": "./update", 
+   "targetPath": "./target",
+   "backupPath": "./backup",
+   "deletePath": "./delete",
+   "logLevel": "INFO"
+}
+```
+
+#### matching-rules.json 示例：
+```json
+{
+  "strategyType": "McMod",
+  "inheritToSubfolders": true
+}
+```
+
+### 规则继承机制
+
+系统采用智能的规则继承策略：
+
+1. **本地优先**：每个文件夹优先使用自己的规则配置文件
+2. **自动继承**：当文件夹没有本地规则时，自动继承父文件夹的规则
+3. **多层支持**：支持任意层级的规则继承链
+4. **策略隔离**：不同策略类型的规则独立继承
+
+## 项目结构
 
 ```
 src/main/java/com/awei/frt/
@@ -42,15 +119,14 @@ src/main/java/com/awei/frt/
 │   ├── context/                           # 上下文管理
 │   │   ├── OperationContext.java          # 操作上下文
 │   │   └── RuleInheritanceContext.java    # 规则继承上下文
-│   ├── node/                              # 文件节点（组合模式）
+│   ├── node/                              # 文件节点
 │   │   ├── FileNode.java                  # 文件节点抽象基类
 │   │   ├── FolderNode.java                # 文件夹节点
-│   │   └── FileLeaf.java                  # 文件节点（叶子）
-│   ├── strategy/                          # 操作策略（策略模式）
-│   │   ├── OperationStrategy.java         # 操作策略接口
-│   │   ├── AddStrategy.java               # 新增策略
-│   │   ├── ReplaceStrategy.java           # 替换策略
-│   │   └── DeleteStrategy.java            # 删除策略
+│   │   └── FileLeaf.java                  # 文件叶子节点
+│   ├── strategy/                          # 策略实现层
+│   │   ├── OperationStrategy.java         # 策略接口
+│   │   ├── McModStrategy.java             # Minecraft模组策略
+│   │   └── FileSameNameStrategy.java      # 同名文件策略
 │   └── builder/                           # 构建器
 │       └── FileTreeBuilder.java           # 文件树构建器
 ├── service/                               # 业务服务层
@@ -58,115 +134,66 @@ src/main/java/com/awei/frt/
 │   └── RestoreService.java                # 恢复服务
 ├── model/                                 # 数据模型层
 │   ├── Config.java                        # 配置模型
-│   ├── ReplaceRule.java                   # 替换规则模型
+│   ├── MatchRule.java                     # 匹配规则模型
 │   ├── OperationRecord.java               # 操作记录模型
 │   └── ProcessingResult.java              # 处理结果模型
-├── utils/                                 # 工具类层
-│   ├── ConfigLoader.java                  # 配置加载器
-│   └── FileUtils.java                     # 文件工具类
-├── factory/                               # 工厂层
-│   └── StrategyFactory.java               # 策略工厂
-└── exception/                             # 异常层
-    ├── FRTException.java                  # 基础异常类
-    ├── RuleNotFoundException.java         # 规则未找到异常
-    └── FileOperationException.java        # 文件操作异常
+└── utils/                                 # 工具类层
+    ├── ConfigLoader.java                  # 配置加载器
+    └── FileUtils.java                     # 文件工具类
 ```
 
-## 规则继承机制
+## 使用指南
 
-系统实现了灵活的规则继承机制：
+### 快速开始
 
-1. **本地规则优先**：每个文件夹优先使用自己的规则配置文件
-2. **继承机制**：当文件夹没有自己的规则时，自动继承父文件夹的规则
-3. **多层继承**：支持任意层级的规则继承
-4. **配置类型**：支持replace.json、add.json、delete.json三种配置类型
+1. **准备配置文件**：在目标目录创建相应的规则配置文件
+2. **启动系统**：运行以下命令启动文件处理流程
 
-### 规则文件格式
-
-**replace.json** - 用于文件内容替换：
-```json
-{
-  "patterns": ["*.jar", "*.class"],
-  "excludePatterns": ["*backup*", "*Test*"],
-  "backup": true,
-  "confirmBeforeReplace": false,
-  "replacements": [
-    {
-      "oldValue": "old_text",
-      "newValue": "new_text"
-    }
-  ]
-}
-```
-
-**add.json** - 用于文件新增：
-```json
-{
-  "patterns": ["*.new", "*.add"],
-  "excludePatterns": ["*.tmp"],
-  "backup": false,
-  "confirmBeforeReplace": true
-}
-```
-
-**delete.json** - 用于文件删除：
-```json
-{
-  "patterns": ["*.old", "*.del"],
-  "excludePatterns": ["*.keep"],
-  "backup": true,
-  "confirmBeforeReplace": true
-}
-```
-
-## 使用方法
-
-### 1. 启动系统
 ```bash
 mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 ```
 
-### 2. 目录结构示例
+### 目录结构示例
+
 ```
-FRT项目根目录/
-├── config.json              # 全局配置文件
+项目根目录/
+├── config.json              # 全局配置（可选）
 ├── update/                  # 更新文件目录
-│   ├── replace.json         # 根级替换规则
-│   ├── file1.jar            # 需要处理的文件
+│   ├── replace.json         # 根级替换规则（使用mcmod策略）
+│   ├── mod1.jar             # Minecraft模组文件
 │   └── subfolder/
-│       ├── add.json         # 子目录新增规则
-│       ├── file2.class      # 需要处理的文件
-│       └── subsubfolder/    # 无规则，继承父目录规则
-│           └── file3.class  # 需要处理的文件
-├── THtest/                  # 目标目录
-├── old/                     # 备份目录
-└── logs/                    # 日志目录
+│       ├── add.json         # 子目录新增规则（使用filesame策略）
+│       ├── file2.new        # 新增文件
+│       └── subsubfolder/    # 无本地规则，继承父目录规则
+│           └── file3.class   # 继承处理
+├── target/                  # 目标处理目录
+├── backup/                  # 自动备份目录
+└── logs/                    # 操作日志目录
 ```
 
-### 3. 配置文件
-系统按以下优先级加载配置：
-1. FRT项目根目录外部的config.json
-2. resources目录下的config.json
-3. 使用默认配置
+## 扩展性设计
 
-## 扩展性与维护性
+### 策略扩展
+系统采用策略模式设计，新增策略类只需：
+1. 实现`OperationStrategy`接口
+2. 在`StrategyFactory`中注册新策略
+3. 更新配置文件中的`strategyType`选项
 
-### 扩展性
-- **策略模式**：易于添加新的文件操作类型
-- **组合模式**：易于扩展新的节点类型
-- **工厂模式**：易于扩展新的策略创建方式
+### 规则扩展
+规则模型采用灵活的JSON配置，支持：
+- 新增规则参数（如未来的`replacements`参数扩展）
+- 自定义策略配置
+- 动态规则加载
 
-### 维护性
-- **解耦设计**：各组件职责明确，相互独立
-- **统一接口**：统一的节点和策略接口便于维护
-- **模块化结构**：清晰的分层架构便于维护
+## 测试与验证
 
-## 测试验证
-
-系统包含完整的测试用例验证功能：
-- `TestNewFramework.java`：验证多层级规则继承
-- 各组件单元测试
+系统包含完整的测试用例：
+- `TestNewFramework.java`：验证多层级规则继承机制
+- 各策略类的单元测试
+- 集成测试验证端到端功能
 
 ## 总结
 
-该系统通过多种设计模式的组合应用，实现了灵活、可扩展、易维护的多层级文件夹更新功能。规则继承机制确保了配置的灵活性，同时保持了系统的简洁性。整体架构清晰，便于后续功能扩展和维护。
+FRT系统通过精心设计的架构和灵活的规则配置机制，为复杂的文件更新场景提供了强大的解决方案。系统当前专注于Minecraft模组管理和通用文件操作，同时为未来的功能扩展预留了充分的空间。
+
+**特别提醒**：`replacements`参数目前仅作为预留字段，在实际使用中请避免依赖此参数实现业务逻辑。
