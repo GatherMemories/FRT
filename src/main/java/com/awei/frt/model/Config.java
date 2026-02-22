@@ -24,7 +24,7 @@ public class Config implements Serializable {
     private Path targetPath;         // 目标目录（相对路径，默认：THtest）
     private Path deletePath;         // 删除文件目录（相对路径，默认：delete）
     private Path backupPath;         // 备份目录（相对路径，默认：backup）
-    private Path logPath;            // 日志目录（相对路径，默认：logs）
+    private transient Path logPath;            // 日志目录（相对路径，默认：logs）
     private String logLevel;         // 日志级别（默认：INFO）
 
     public Config() {

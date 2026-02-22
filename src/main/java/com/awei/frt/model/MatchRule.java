@@ -1,5 +1,6 @@
 package com.awei.frt.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -14,13 +15,14 @@ import java.util.regex.Pattern;
  * 匹配规则模型
  * 定义文件操作的规则配置
  */
+@JsonIgnoreProperties({"path"})
 public class MatchRule {
     private String strategyType;                // 策略类型
     private List<String> replacements;          // 替换项：定义需要在文件中替换的旧值和新值（如需要给策略传值）
     private List<String> patterns;              // 匹配列表：定义哪些文件需要被处理（支持通配符）
     private List<String> excludePatterns;       // 排除列表：定义哪些文件需要被排除（支持通配符）
     private boolean inheritToSubfolders;        // 是否应用到子文件夹（子文件夹无规则才会生效，默认false）
-    private Path path;                         // 文件位置
+    private transient Path path;                         // 文件位置
 
     public MatchRule() {
         this.replacements = new ArrayList<>();
