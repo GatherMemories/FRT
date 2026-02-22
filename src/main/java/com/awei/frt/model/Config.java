@@ -14,7 +14,7 @@ import java.nio.file.Paths;
  * 配置模型
  * 存储系统运行所需的基本配置信息
  */
-@JsonIgnoreProperties({"baseDirectory"})
+@JsonIgnoreProperties({"baseDirectory", "logPath"})
 public class Config implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;

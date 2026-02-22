@@ -65,10 +65,11 @@ JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
         <!-- BasicModInfoParser: Minecraft Forge 模组信息解析库，用于解析 Forge 模组的 mods.toml 配置文件 -->
         <dependency>
             <groupId>com.awei</groupId>
-            <artifactId>basicmodinfoparser</artifactId>
+            <artifactId>BasicModInfoParser</artifactId>
             <version>2.0.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/src/main/java/com/awei/frt/core/lib/basicmodinfoparser-2.0.0.jar</systemPath>
+            <!--     临时外部引用jar库，默认项目打包不会包含它，需要手动添加到Maven项目中       -->
+<!--            <scope>system</scope>-->
+<!--            <systemPath>${project.basedir}/src/main/resources/lib/BasicModInfoParser-2.0.0.jar</systemPath>-->
         </dependency>
     </dependencies>
 
@@ -88,7 +89,7 @@ JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.0</version>
+                <version>3.5.1</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -96,6 +97,12 @@ JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <!-- 关键：包含系统范围的依赖（否则本地 JAR 不会被打包） -->
+                            <artifactSet>
+                                <includes>
+                                    <include>*:*</include> <!-- 包含所有依赖（包括 system 范围） -->
+                                </includes>
+                            </artifactSet>
                             <transformers>
                                 <!-- 设置主类，使 JAR 文件可以直接运行 -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">

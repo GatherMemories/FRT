@@ -99,7 +99,7 @@ public class FileUtil {
                 return false;
             }
             // 添加备份文件（新增不需要备份）
-            BackupFileLoader.addBackupFile(targetPath);
+//            BackupFileLoader.addBackupFile(targetPath);
 
             Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
             record.setSuccess(true);

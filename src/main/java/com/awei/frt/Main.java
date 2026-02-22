@@ -20,8 +20,12 @@ public class Main {
         Scanner scanner = null;
 
         try {
+            // 初始化日志系统
+            logger = LoggerUtil.getInstance(null);
+
             // 加载配置
             Config config = ConfigLoader.getConfig();
+
             if (config == null) {
                 // 配置加载失败，退出程序
                 System.err.println("[失败] 配置加载失败，请检查配置文件");
@@ -29,10 +33,6 @@ public class Main {
                 return;
             }
 
-            // 初始化日志系统
-            logger = LoggerUtil.getInstance(config);
-            // 将配置加载期间的缓冲日志写入LoggerUtil
-            ConfigLoader.onLoggerInitialized(logger);
             logger.logInfo("=========================================");
             logger.logInfo("FRT - 多层级文件夹更新系统启动");
             logger.logInfo("=========================================");

@@ -54,7 +54,7 @@ public class FileTreeBuilder {
                 printTree(FolderNode, newDepth);
             }
         } else {
-            System.out.println(indent + "[FILE] " + node.getName());
+            System.out.println(indent + "      " + node.getName());
         }
 
     }

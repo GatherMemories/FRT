@@ -1,5 +1,6 @@
 package com.awei.frt.util;
 
+import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.model.Config;
 
 import java.io.*;
@@ -52,6 +53,9 @@ public class LoggerUtil {
      * 获取LoggerUtil实例
      */
     public static LoggerUtil getInstance(Config config) {
+        if (config == null) {
+            config = new Config();
+        }
         if (instance == null) {
             lock.lock();
             try {
@@ -64,6 +68,7 @@ public class LoggerUtil {
         }
         return instance;
     }
+
 
     /**
      * 初始化日志系统

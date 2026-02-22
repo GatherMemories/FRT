@@ -14,8 +14,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 配置加载器
@@ -35,12 +33,6 @@ public class ConfigLoader {
     private static Path backupPath;
     // logs文件夹（绝对路径）
     private static Path logsPath;
-    // 日志消息缓存（用于在LoggerUtil初始化前记录日志）
-    private static final List<String> logBuffer = new ArrayList<>();
-    // 标记LoggerUtil是否已初始化
-    private static volatile boolean loggerInitialized = false;
-    // LoggerUtil实例（初始化后设置）
-    private static LoggerUtil loggerInstance = null;
 
     // 私有构造函数，防止实例化
     private ConfigLoader() {
@@ -73,79 +65,35 @@ public class ConfigLoader {
      * 记录信息级别日志
      */
     private static void logInfo(String message) {
-        if (loggerInitialized && loggerInstance != null) {
-            loggerInstance.logInfo(message);
-            return;
-        }
-        String formatted = "[INFO] " + message;
-        logBuffer.add(formatted);
-        // 在LoggerUtil初始化前不输出到控制台，避免重复
+        LoggerUtil instance = LoggerUtil.getInstance(null);
+        instance.logInfo(message);
     }
 
     /**
      * 记录警告级别日志
      */
     private static void logWarn(String message) {
-        if (loggerInitialized && loggerInstance != null) {
-            loggerInstance.logWarn(message);
-            return;
-        }
-        String formatted = "[WARN] " + message;
-        logBuffer.add(formatted);
-        // 在LoggerUtil初始化前不输出到控制台，避免重复
+        LoggerUtil instance = LoggerUtil.getInstance(null);
+        instance.logWarn(message);
     }
 
     /**
      * 记录错误级别日志
      */
     private static void logError(String message) {
-        if (loggerInitialized && loggerInstance != null) {
-            loggerInstance.logError(message);
-            return;
-        }
-        String formatted = "[ERROR] " + message;
-        logBuffer.add(formatted);
-        // 在LoggerUtil初始化前不输出到控制台，避免重复
+        LoggerUtil instance = LoggerUtil.getInstance(null);
+        instance.logError(message);
     }
 
     /**
      * 记录错误级别日志（带异常）
      */
     private static void logError(String message, Throwable throwable) {
-        if (loggerInitialized && loggerInstance != null) {
-            loggerInstance.logError(message, throwable);
-            return;
-        }
-        String formatted = "[ERROR] " + message;
-        logBuffer.add(formatted);
-        // 在LoggerUtil初始化前不输出到控制台，避免重复
-        // 异常堆栈不缓冲，将在LoggerUtil初始化后记录
+        LoggerUtil instance = LoggerUtil.getInstance(null);
+        instance.logError(message, throwable);
     }
 
-    /**
-     * 标记LoggerUtil已初始化，将缓冲日志写入LoggerUtil
-     */
-    public static void onLoggerInitialized(LoggerUtil logger) {
-        if (logger == null) return;
 
-        synchronized (logBuffer) {
-            for (String logMessage : logBuffer) {
-                // 解析日志级别和消息
-                if (logMessage.startsWith("[INFO] ")) {
-                    logger.logInfo(logMessage.substring(7));
-                } else if (logMessage.startsWith("[WARN] ")) {
-                    logger.logWarn(logMessage.substring(7));
-                } else if (logMessage.startsWith("[ERROR] ")) {
-                    logger.logError(logMessage.substring(8));
-                } else {
-                    logger.logInfo(logMessage);
-                }
-            }
-            logBuffer.clear();
-            loggerInstance = logger;
-            loggerInitialized = true;
-        }
-    }
     /**
      * 加载配置
      * 按优先级顺序查找配置文件：
@@ -199,7 +147,7 @@ public class ConfigLoader {
      */
     private static Config parseConfig(String json) {
         try {
-            Config config = objectMapper.readValue(json, Config.class);
+           Config config = objectMapper.readValue(json, Config.class);
 
             // 配置检查
             if (config == null) {
