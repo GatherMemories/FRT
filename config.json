@@ -1,0 +1,9 @@
+{
+  "baseDirectory": "C:/Users/5454564546/Desktop/FRT321",
+  "updatePath": "./testDic/update",
+  "targetPath": "./testDic/THtest",
+  "deletePath": "./testDic/delete",
+  "backupPath": "./testDic/backup",
+  "logPath": "./testDic/logs",
+  "logLevel": "INFO"
+}

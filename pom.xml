@@ -6,7 +6,7 @@
 
     <groupId>com.awei</groupId>
     <artifactId>FRT</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -83,6 +83,7 @@ JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 <configuration>
                     <source>17</source>
                     <target>17</target>
+                    <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
             <!-- Maven Shade 插件: 打包项目及其所有依赖到一个可执行的 JAR 文件中 -->

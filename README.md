@@ -159,12 +159,12 @@ mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 项目根目录/
 ├── config.json              # 全局配置（可选）
 ├── update/                  # 更新文件目录
-│   ├── replace.json         # 根级替换规则（使用mcmod策略）
+│   ├── matching-rules.json         # 根级替换规则（使用mcmod策略）
 │   ├── mod1.jar             # Minecraft模组文件
 │   └── subfolder/
-│       ├── add.json         # 子目录新增规则（使用filesame策略）
+│       ├── matching-rules.json         # 子目录新增规则（使用filesame策略）
 │       ├── file2.new        # 新增文件
-│       └── subsubfolder/    # 无本地规则，继承父目录规则
+│       └── subsubfolder/    # 无本地规则，继承父目录规则（需要父目录规则参数 inheritToSubfolders：true）
 │           └── file3.class   # 继承处理
 ├── target/                  # 目标处理目录
 ├── backup/                  # 自动备份目录

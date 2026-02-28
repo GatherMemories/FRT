@@ -1,375 +1,240 @@
 package com.awei.frt.util;
 
-import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.model.Config;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.concurrent.locks.ReentrantLock;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
 
 /**
  * 日志工具类
- * 用于记录控制台所有输出和异常信息，并按日期组织日志文件
+ * 使用SLF4J和Logback实现日志功能
  */
 public class LoggerUtil {
 
-    /** 单例实例 */
     private static LoggerUtil instance;
 
-    /** 线程安全锁，确保多线程环境下的日志写入安全 */
-    private static final ReentrantLock lock = new ReentrantLock();
-
-    /** 系统配置信息，包含日志路径等参数 */
+    private final Logger logger;
+    private final Logger fileOnlyLogger;
+    private final Logger stdoutLogger;
+    private final Logger stderrLogger;
     private final Config config;
-
-    /** 原始的标准输出流 */
     private final PrintStream originalOut;
-
-    /** 原始的标准错误输出流 */
     private final PrintStream originalErr;
+    private static boolean initialized = false;
 
-    /** 双重输出流（控制台 + 日志文件）的标准输出 */
-    private PrintStream teeOut;
+    private volatile boolean captureSystemOutput = true;
 
-    /** 双重输出流（控制台 + 日志文件）的标准错误输出 */
-    private PrintStream teeErr;
-
-    /** 当前日志文件的完整路径 */
-    private String currentLogFilePath;
+    private static final Pattern LOG_PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} \\[.*\\] (INFO|WARN|ERROR|DEBUG|TRACE)");
 
     private LoggerUtil(Config config) {
         this.config = config;
         this.originalOut = System.out;
         this.originalErr = System.err;
-        initializeLogger();
+        this.logger = LoggerFactory.getLogger(LoggerUtil.class);
+        this.fileOnlyLogger = LoggerFactory.getLogger("FILE_ONLY");
+        this.stdoutLogger = LoggerFactory.getLogger("System.out");
+        this.stderrLogger = LoggerFactory.getLogger("System.err");
     }
 
-    /**
-     * 获取LoggerUtil实例
-     */
     public static LoggerUtil getInstance(Config config) {
         if (config == null) {
             config = new Config();
         }
         if (instance == null) {
-            lock.lock();
-            try {
+            synchronized (LoggerUtil.class) {
                 if (instance == null) {
                     instance = new LoggerUtil(config);
                 }
-            } finally {
-                lock.unlock();
             }
+        }
+        if (!initialized) {
+            instance.initializeLogger();
+            initialized = true;
         }
         return instance;
     }
 
-
-    /**
-     * 初始化日志系统
-     */
     private void initializeLogger() {
-        try {
-            // 创建日志目录
-            Path logDir = config.getLogPath();
-            if (!logDir.isAbsolute()) {
-                logDir = config.getBaseDirectory().resolve(logDir);
-            }
+        Charset charset = StandardCharsets.UTF_8;
+        System.setOut(new PrintStream(new LoggingOutputStream(stdoutLogger, LoggingOutputStream.Level.INFO, originalOut, charset), true, charset));
+        System.setErr(new PrintStream(new LoggingOutputStream(stderrLogger, LoggingOutputStream.Level.ERROR, originalErr, charset), true, charset));
 
-            if (!Files.exists(logDir)) {
-                Files.createDirectories(logDir);
-            }
-
-            // 设置当前日志文件路径
-            currentLogFilePath = getCurrentLogFilePath();
-
-            // 创建TeeOutputStream，同时输出到控制台和日志文件
-            TeeOutputStream teeOutStream = new TeeOutputStream(originalOut, getLogOutputStream());
-            TeeOutputStream teeErrStream = new TeeOutputStream(originalErr, getLogOutputStream());
-
-            teeOut = new PrintStream(teeOutStream, true);
-            teeErr = new PrintStream(teeErrStream, true);
-
-            // 重定向System.out和System.err
-            System.setOut(teeOut);
-            System.setErr(teeErr);
-            System.out.println("\n");
-            logInfo("日志系统初始化完成，日志文件路径: " + currentLogFilePath);
-
-        } catch (Exception e) {
-            // 如果日志初始化失败，回退到原始输出流
-            System.err.println("日志系统初始化失败: " + e.getMessage());
-            teeOut = originalOut;
-            teeErr = originalErr;
-        }
+        logger.info("日志系统初始化完成");
     }
 
     /**
-     * 获取当前日志文件路径
+     * 开启 System.out/System.err 记录到日志
      */
-    private String getCurrentLogFilePath() {
-        SimpleDateFormat yearFormat = new SimpleDateFormat("yyyy");
-        SimpleDateFormat monthFormat = new SimpleDateFormat("MM");
-        SimpleDateFormat dayFormat = new SimpleDateFormat("dd");
-
-        Date now = new Date();
-        String year = yearFormat.format(now);
-        String month = monthFormat.format(now);
-        String day = dayFormat.format(now);
-
-        Path logDir = config.getLogPath();
-        if (!logDir.isAbsolute()) {
-            logDir = config.getBaseDirectory().resolve(logDir);
-        }
-
-        logDir = logDir.resolve(year + "-" + month + "-" + day + ".log");
-
-        return logDir.toString();
+    public void enableSystemOutputCapture() {
+        this.captureSystemOutput = true;
     }
 
     /**
-     * 获取日志文件输出流
+     * 关闭 System.out/System.err 记录到日志
      */
-    private OutputStream getLogOutputStream() {
-        try {
-            Path logFile = Paths.get(currentLogFilePath);
-            return Files.newOutputStream(logFile,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND,
-                StandardOpenOption.WRITE);
-        } catch (IOException e) {
-            System.err.println("无法创建日志文件输出流: " + e.getMessage());
-            return new OutputStream() {
-                @Override
-                public void write(int b) throws IOException {
-                    // 空实现，忽略写入
-                }
-            };
-        }
+    public void disableSystemOutputCapture() {
+        this.captureSystemOutput = false;
     }
 
     /**
-     * 记录信息级别日志
+     * 设置 System.out/System.err 是否记录到日志
+     * @param capture true: 记录到日志, false: 不记录到日志
+     */
+    public void setSystemOutputCapture(boolean capture) {
+        this.captureSystemOutput = capture;
+    }
+
+    /**
+     * 获取 System.out/System.err 是否记录到日志的状态
+     * @return true: 正在记录, false: 未记录
+     */
+    public boolean isSystemOutputCaptureEnabled() {
+        return this.captureSystemOutput;
+    }
+
+    /**
+     * 记录信息级别日志（控制台+文件）
      */
     public void logInfo(String message) {
-        log("INFO", message, null);
+        logger.info(message);
     }
 
     /**
-     * 记录警告级别日志
+     * 记录信息级别日志（仅文件）
+     */
+    public void logInfoFileOnly(String message) {
+        fileOnlyLogger.info(message);
+    }
+
+    /**
+     * 记录警告级别日志（控制台+文件）
      */
     public void logWarn(String message) {
-        log("WARN", message, null);
+        logger.warn(message);
     }
 
     /**
-     * 记录错误级别日志
+     * 记录警告级别日志（仅文件）
+     */
+    public void logWarnFileOnly(String message) {
+        fileOnlyLogger.warn(message);
+    }
+
+    /**
+     * 记录错误级别日志（控制台+文件）
      */
     public void logError(String message) {
-        log("ERROR", message, null);
+        logger.error(message);
     }
 
     /**
-     * 记录错误级别日志（带异常）
+     * 记录错误级别日志（仅文件）
+     */
+    public void logErrorFileOnly(String message) {
+        fileOnlyLogger.error(message);
+    }
+
+    /**
+     * 记录错误级别日志（带异常，控制台+文件）
      */
     public void logError(String message, Throwable throwable) {
-        log("ERROR", message, throwable);
+        logger.error(message, throwable);
     }
 
     /**
-     * 记录调试级别日志
+     * 记录错误级别日志（带异常，仅文件）
+     */
+    public void logErrorFileOnly(String message, Throwable throwable) {
+        fileOnlyLogger.error(message, throwable);
+    }
+
+    /**
+     * 记录调试级别日志（控制台+文件）
      */
     public void logDebug(String message) {
-        if ("DEBUG".equals(config.getLogLevel())) {
-            log("DEBUG", message, null);
-        }
+        logger.debug(message);
     }
 
     /**
-     * 记录日志的通用方法
+     * 记录调试级别日志（仅文件）
      */
-    private void log(String level, String message, Throwable throwable) {
-        lock.lock();
-        try {
-            // 检查是否需要切换日志文件（日期变化）
-            String newLogFilePath = getCurrentLogFilePath();
-            if (!newLogFilePath.equals(currentLogFilePath)) {
-                currentLogFilePath = newLogFilePath;
-                // 重新设置输出流
-                resetOutputStreams();
-            }
-
-            // 格式化日志消息
-            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            String timestamp = dateFormat.format(new Date());
-            String logMessage = String.format("[%s] [%s] %s", timestamp, level, message);
-
-            // 写入日志
-            PrintStream targetStream = level.equals("ERROR") ? teeErr : teeOut;
-            targetStream.println(logMessage);
-
-            // 如果有异常，记录异常堆栈
-            if (throwable != null) {
-                throwable.printStackTrace(targetStream);
-            }
-
-        } catch (Exception e) {
-            // 如果日志写入失败，回退到原始输出
-            originalErr.println("日志记录失败: " + e.getMessage());
-            if (throwable != null) {
-                originalErr.println("原始异常: " + message);
-                throwable.printStackTrace(originalErr);
-            }
-        } finally {
-            lock.unlock();
-        }
+    public void logDebugFileOnly(String message) {
+        fileOnlyLogger.debug(message);
     }
 
-    /**
-     * 重置输出流（当日志文件路径变化时）
-     */
-    private void resetOutputStreams() {
-        try {
-            // 关闭旧的输出流
-            if (teeOut != null && teeOut != originalOut) {
-                teeOut.close();
-            }
-            if (teeErr != null && teeErr != originalErr) {
-                teeErr.close();
-            }
-
-            // 创建新的输出流
-            TeeOutputStream teeOutStream = new TeeOutputStream(originalOut, getLogOutputStream());
-            TeeOutputStream teeErrStream = new TeeOutputStream(originalErr, getLogOutputStream());
-
-            teeOut = new PrintStream(teeOutStream, true);
-            teeErr = new PrintStream(teeErrStream, true);
-
-            // 重新设置System.out和System.err
-            System.setOut(teeOut);
-            System.setErr(teeErr);
-
-        } catch (Exception e) {
-            System.err.println("重置日志输出流失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 关闭日志系统
-     */
     public void close() {
-        lock.lock();
-        try {
-            // 恢复原始输出流
-            System.setOut(originalOut);
-            System.setErr(originalErr);
-
-            // 关闭输出流
-            if (teeOut != null && teeOut != originalOut) {
-                teeOut.close();
-            }
-            if (teeErr != null && teeErr != originalErr) {
-                teeErr.close();
-            }
-
-            logInfo("日志系统已关闭");
-
-        } finally {
-            lock.unlock();
-        }
+        System.setOut(originalOut);
+        System.setErr(originalErr);
+        logger.info("日志系统已关闭");
+        initialized = false;
     }
 
-    /**
-     * 自定义输出流，同时输出到两个目标
-     */
-    private static class TeeOutputStream extends OutputStream {
-        private final OutputStream out1;
-        private final OutputStream out2;
+    private static class LoggingOutputStream extends OutputStream {
+        private final Logger logger;
+        private final Level level;
+        private final PrintStream originalStream;
+        private final Charset charset;
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
-        public TeeOutputStream(OutputStream out1, OutputStream out2) {
-            this.out1 = out1;
-            this.out2 = out2;
+        enum Level {
+            INFO, ERROR
+        }
+
+        LoggingOutputStream(Logger logger, Level level, PrintStream originalStream, Charset charset) {
+            this.logger = logger;
+            this.level = level;
+            this.originalStream = originalStream;
+            this.charset = charset;
         }
 
         @Override
-        public void write(int b) throws IOException {
-            try {
-                out1.write(b);
-            } catch (IOException e) {
-                // 如果第一个流写入失败，尝试第二个流
-                try {
-                    out2.write(b);
-                } catch (IOException ignored) {
-                    // 忽略异常
+        public void write(int b) {
+            originalStream.write(b);
+            buffer.write(b);
+            if (b == '\n') {
+                flushBuffer();
+            }
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) {
+            originalStream.write(b, off, len);
+            buffer.write(b, off, len);
+            for (int i = off; i < off + len; i++) {
+                if (b[i] == '\n') {
+                    flushBuffer();
+                    break;
                 }
-                throw e;
-            }
-
-            try {
-                out2.write(b);
-            } catch (IOException ignored) {
-                // 忽略第二个流的异常，保证至少一个流能正常工作
             }
         }
 
         @Override
-        public void write(byte[] b) throws IOException {
-            write(b, 0, b.length);
+        public void flush() {
+            originalStream.flush();
+            if (buffer.size() > 0) {
+                flushBuffer();
+            }
         }
 
-        @Override
-        public void write(byte[] b, int off, int len) throws IOException {
-            try {
-                out1.write(b, off, len);
-            } catch (IOException e) {
-                // 如果第一个流写入失败，尝试第二个流
-                try {
-                    out2.write(b, off, len);
-                } catch (IOException ignored) {
-                    // 忽略异常
+        private void flushBuffer() {
+            if (buffer.size() > 0) {
+                String message = buffer.toString(charset).trim();
+                if (!message.isEmpty() && !LOG_PATTERN.matcher(message).find()) {
+                    if (instance != null && instance.captureSystemOutput) {
+                        if (level == Level.INFO) {
+                            logger.info(message);
+                        } else {
+                            logger.error(message);
+                        }
+                    }
                 }
-                throw e;
-            }
-
-            try {
-                out2.write(b, off, len);
-            } catch (IOException ignored) {
-                // 忽略第二个流的异常
-            }
-        }
-
-        @Override
-        public void flush() throws IOException {
-            try {
-                out1.flush();
-            } catch (IOException ignored) {
-                // 忽略异常
-            }
-
-            try {
-                out2.flush();
-            } catch (IOException ignored) {
-                // 忽略异常
-            }
-        }
-
-        @Override
-        public void close() throws IOException {
-            try {
-                out1.close();
-            } catch (IOException ignored) {
-                // 忽略异常
-            }
-
-            try {
-                out2.close();
-            } catch (IOException ignored) {
-                // 忽略异常
+                buffer.reset();
             }
         }
     }
