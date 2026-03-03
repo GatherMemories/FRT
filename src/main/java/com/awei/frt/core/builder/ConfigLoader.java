@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.core.JsonParser;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -97,23 +99,22 @@ public class ConfigLoader {
     /**
      * 加载配置
      * 按优先级顺序查找配置文件：
-     * 1. FRT项目根目录的config.json
-     * 2. resources目录下的config.json
+     * 1. FRT项目根目录的config.json（外部配置，优先级最高）
+     * 2. classpath 中的 config.json（打包在 JAR 内的默认配置）
      * 3. 使用默认配置
      */
     private static Config loadConfig() {
-        // 1. 尝试从FRT项目根目录加载
+        // 1. 尝试从FRT项目根目录加载（外部配置，优先级最高）
         Path externalConfig = getExternalConfigPath();
         if (Files.exists(externalConfig)) {
             logInfo("[信息] 从外部加载配置: " + externalConfig);
             return loadFromPath(externalConfig);
         }
 
-        // 2. 尝试从resources目录加载
-        Path resourceConfig = getResourceConfigPath();
-        if (resourceConfig != null && Files.exists(resourceConfig)) {
-            logInfo("[信息] 从resources加载配置: " + resourceConfig);
-            return loadFromPath(resourceConfig);
+        // 2. 尝试从 classpath 加载（适用于打包后的 JAR）
+        Config resourceConfig = loadResourceConfig();
+        if (resourceConfig != null) {
+            return resourceConfig;
         }
 
         // 3. 使用默认配置
@@ -175,16 +176,24 @@ public class ConfigLoader {
     }
 
     /**
-     * 获取资源目录配置路径
+     * 从 classpath 加载资源配置
+     * 适用于打包成 JAR 后的资源读取
      */
-    private static Path getResourceConfigPath() {
-        try {
-            // 尝试从classpath获取资源路径,Path.of()平台兼容性好
-            return Path.of("src","main","resources","config.json");
+    private static Config loadResourceConfig() {
+        try (InputStream is = ConfigLoader.class.getClassLoader().getResourceAsStream("config.json")) {
+            if (is != null) {
+                String jsonContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                // 去除UTF-8 BOM（如果有）
+                if (jsonContent.startsWith("\uFEFF")) {
+                    jsonContent = jsonContent.substring(1);
+                }
+                logInfo("[信息] 从 classpath 加载配置: config.json");
+                return parseConfig(jsonContent);
+            }
         } catch (Exception e) {
-            // 如果无法获取资源路径，返回null
-            return null;
+            logError("[警告] 从 classpath 加载配置失败: " + e.getMessage(), e);
         }
+        return null;
     }
 
     /**
