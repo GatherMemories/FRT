@@ -1,6 +1,6 @@
 //1. 移除Gson依赖，改用jackson，json转化
-2. 我的世界模组元数据获取 BasicModInfoParser-2.0.0.jar，还有些问题：
-比如引用内容 {xx.xx} ，会导致，解析失败，需要改进
+//2. 我的世界模组元数据获取（已自研 ModMetadataParser 替代 BasicModInfoParser-2.0.0.jar：
+//   支持 NeoForge/Forge/Fabric/Quilt/旧版mcmod.info，版本占位符自动兜底 MANIFEST→文件名）
 3. 去除 “策略工厂” 的 StrategyType，枚举，让每个策略类自己储存 StrategyType属性 或者直接根据类名区分
 //4. 基础文件夹创建优化
 5. 添加文件过滤器（动态代理），工厂new优化(返回嵌套代理对象)

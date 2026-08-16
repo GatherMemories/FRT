@@ -47,27 +47,11 @@
             <version>5.9.3</version>
             <scope>test</scope>
         </dependency>
-        <!-- Gson: BasicModInfoParser-2.0.0.jar 的运行时依赖（解析 Minecraft mod 元数据需要），请勿移除 -->
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>2.10.1</version>
-        </dependency>
-        <!-- TomlJ: TOML 文件解析库，用于解析 Forge 模组的 mods.toml 配置文件 -->
+        <!-- TomlJ: TOML 解析库，用于自研解析 Forge/NeoForge 模组的 mods.toml 配置文件（ModMetadataParser） -->
         <dependency>
             <groupId>org.tomlj</groupId>
             <artifactId>tomlj</artifactId>
             <version>1.1.0</version>
-        </dependency>
-
-        <!-- BasicModInfoParser: Minecraft Forge 模组信息解析库，用于解析 Forge 模组的 mods.toml 配置文件 -->
-        <dependency>
-            <groupId>com.awei</groupId>
-            <artifactId>BasicModInfoParser</artifactId>
-            <version>2.0.0</version>
-            <!--     临时外部引用jar库，默认项目打包不会包含它，需要手动添加到Maven项目中       -->
-<!--            <scope>system</scope>-->
-<!--            <systemPath>${project.basedir}/src/main/resources/lib/BasicModInfoParser-2.0.0.jar</systemPath>-->
         </dependency>
     </dependencies>
 

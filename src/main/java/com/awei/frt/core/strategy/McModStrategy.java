@@ -1,23 +1,22 @@
 package com.awei.frt.core.strategy;
 
 import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.mod.ModInfo;
+import com.awei.frt.core.mod.ModMetadataParser;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileSignUtil;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
-import me.andreasmelone.basicmodinfoparser.BasicModInfo;
-import me.andreasmelone.basicmodinfoparser.Platform;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.jar.JarFile;
 import java.util.stream.Stream;
 import java.util.zip.ZipException;
-import java.util.zip.ZipFile;
 
 /**
  * @Author: mou_ren
@@ -106,29 +105,22 @@ public class McModStrategy implements OperationStrategy{
             fileStream
                     .filter(file -> file.toString().endsWith(".jar"))
                     .forEach(file -> {
-                try (ZipFile jarFile = new ZipFile(file.toFile())){
-                    // 检测模组平台（Forge、Fabric 等）
-                    Platform[] platforms = Platform.findModPlatform(file.toFile());
-                    if (platforms.length == 0) {
-                        System.out.println("找不到支持的Mod加载平台: " + file.toFile().getName());
+                try {
+                    // 自研解析器：自动检测平台（NeoForge/Forge/Fabric/Quilt/旧版Forge），
+                    // 版本占位符自动兜底（MANIFEST.MF -> 文件名）
+                    List<ModInfo> modInfos = ModMetadataParser.parseJar(file);
+                    if (modInfos.isEmpty()) {
+                        System.out.println("未找到支持的模组元数据（已跳过）: " + file.getFileName());
                         return;
                     }
-                    for (Platform platform : platforms) {
-                        // Get the mod info content and parse it
-                        // 获取模组信息内容并解析
-                        String modInfoContent = platform.getInfoFileContent(jarFile);
-                        for(BasicModInfo modInfo : platform.parse(modInfoContent)) {
-                            // Output the parsed mod information
-                            //输出解析后的模组信息
-                            modInfoMap.put(modInfo.getId(), new ModInfo(modInfo, file));
-                        }
+                    for (ModInfo modInfo : modInfos) {
+                        modInfoMap.put(modInfo.getId(), modInfo);
                     }
                 }
                 catch (Throwable e) {
-                    // 兜底：单个 jar 解析失败（含外部库的 Error，如 NoClassDefFoundError）只跳过该 jar，
-                    // 不影响整个更新流程
+                    // 兜底：单个 jar 解析失败只跳过该 jar，不影响整个更新流程
                     if(!(e instanceof ZipException)){
-                        System.err.println("读取 mod 文件失败（已跳过）: " + file.toFile().getName() + " - " + e);
+                        System.err.println("读取 mod 文件失败（已跳过）: " + file.getFileName() + " - " + e);
                     }
                 }
             });
@@ -139,39 +131,4 @@ public class McModStrategy implements OperationStrategy{
         return modInfoMap;
     }
 
-
-    class ModInfo {
-        private BasicModInfo basicModInfo;
-        private Path path;
-
-        public ModInfo(BasicModInfo basicModInfo, Path path) {
-            this.basicModInfo = basicModInfo;
-            this.path = path;
-        }
-
-        public BasicModInfo getBasicModInfo() {
-            return basicModInfo;
-        }
-
-        public Path getPath() {
-            return path;
-        }
-
-        public String getId() {
-            return basicModInfo.getId();
-        }
-
-        public String getName() {
-            return basicModInfo.getName();
-        }
-
-        public String getVersion() {
-            return basicModInfo.getVersion();
-        }
-
-        public String getDescription() {
-            return basicModInfo.getDescription();
-        }
-
-    }
 }

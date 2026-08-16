@@ -27,8 +27,10 @@
 
 #### 已实现的策略类
 - **`McModStrategy`**：Minecraft模组文件处理策略
-  - 自动识别.jar文件中的模组信息
+  - 自动识别.jar文件中的模组信息（自研 `ModMetadataParser` 解析）
   - 支持模组ID、版本号等元数据匹配
+  - 兼容 NeoForge / Forge / Fabric / Quilt / 旧版Forge(mcmod.info) 平台
+  - 版本占位符（如 `${file.jarVersion}`）自动兜底：MANIFEST.MF → 文件名
   - 智能处理Forge、Fabric等不同平台的模组
 
 - **`FileSameNameStrategy`**：同名文件处理策略
@@ -129,6 +131,9 @@ src/main/java/com/awei/frt/
 │   │   ├── OperationStrategy.java         # 策略接口
 │   │   ├── McModStrategy.java             # Minecraft模组策略
 │   │   └── FileSameNameStrategy.java      # 同名文件策略
+│   ├── mod/                               # 模组元数据（自研解析，替代第三方库）
+│   │   ├── ModInfo.java                   # 模组元数据模型
+│   │   └── ModMetadataParser.java         # 模组元数据解析器
 │   └── builder/                           # 构建器
 │       └── FileTreeBuilder.java           # 文件树构建器
 ├── service/                               # 业务服务层
