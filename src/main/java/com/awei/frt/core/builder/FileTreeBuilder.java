@@ -36,13 +36,13 @@ public class FileTreeBuilder {
      * 打印文件树结构（用于调试）
      * 使用栈实现的迭代方式，避免递归栈溢出
      *
-     * 输出格式示例：
-     * 📁 root/
-     * ├── 📁 folder1/
-     * │   ├── 📄 file1.txt
-     * │   └── 📄 file2.txt
-     * └── 📁 folder2/
-     *     └── 📄 file3.txt
+     * 输出格式示例（图标使用纯 ASCII 兼容符号，避免 Windows GBK 控制台 emoji 乱码）：
+     * [+] root/
+     * ├── [+] folder1/
+     * │   ├── [-] file1.txt
+     * │   └── [-] file2.txt
+     * └── [+] folder2/
+     *     └── [-] file3.txt
      *
      * @param node 根节点
      * @param depth 初始深度（用于缩进显示）
@@ -94,9 +94,9 @@ public class FileTreeBuilder {
      */
     private static void printRootNode(FileNode node) {
         if (node.isDirectory()) {
-            System.out.println("📁 " + node.getName() + "/");
+            System.out.println("[+] " + node.getName() + "/");
         } else {
-            System.out.println("📄 " + node.getName());
+            System.out.println("[-] " + node.getName());
         }
     }
 
@@ -115,7 +115,7 @@ public class FileTreeBuilder {
         }
 
         String connector = isLast ? "└── " : "├── ";
-        String icon = node.isDirectory() ? "📁 " : "📄 ";
+        String icon = node.isDirectory() ? "[+] " : "[-] "; // ASCII 兼容图标（emoji 在 GBK 控制台乱码）
         String suffix = node.isDirectory() ? "/" : "";
 
         System.out.println(prefix + connector + icon + node.getName() + suffix);

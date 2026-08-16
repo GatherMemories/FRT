@@ -139,10 +139,10 @@ public class RuleConfigWizard {
             if (node.isDirectory()) {
                 int index = ++folderCounter;
                 folderIndex.put(index, node.getPath());
-                System.out.println("[" + index + "] 📁 " + node.getName() + "/");
+                System.out.println("[" + index + "] [+] " + node.getName() + "/");
                 printChildren((FolderNode) node, "", folderIndex);
             } else {
-                System.out.println("📄 " + node.getName());
+                System.out.println("[-] " + node.getName());
             }
             return;
         }
@@ -150,10 +150,10 @@ public class RuleConfigWizard {
         if (node.isDirectory()) {
             int index = ++folderCounter;
             folderIndex.put(index, node.getPath());
-            System.out.println(prefix + connector + "[" + index + "] 📁 " + node.getName() + "/");
+            System.out.println(prefix + connector + "[" + index + "] [+] " + node.getName() + "/");
             printChildren((FolderNode) node, prefix + (isLast ? "    " : "│   "), folderIndex);
         } else {
-            System.out.println(prefix + connector + "📄 " + node.getName());
+            System.out.println(prefix + connector + "[-] " + node.getName());
         }
     }
 
