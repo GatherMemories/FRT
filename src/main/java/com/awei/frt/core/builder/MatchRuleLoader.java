@@ -2,6 +2,7 @@ package com.awei.frt.core.builder;
 
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -45,8 +46,7 @@ public class MatchRuleLoader {
             return null;
         } catch (Exception e) {
             // JSON 解析失败
-            System.err.println("解析规则失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("解析规则失败: " + e.getMessage(), e);
             return null;
         }
     }

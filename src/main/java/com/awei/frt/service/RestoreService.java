@@ -5,6 +5,7 @@ import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.util.LoggerUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -263,8 +264,7 @@ public class RestoreService {
             }
 
         } catch (Exception e) {
-            System.err.println("[失败] 恢复操作失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("恢复操作失败", e);
         }
     }
 

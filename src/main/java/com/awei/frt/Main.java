@@ -98,8 +98,7 @@ public class Main {
             if (logger != null) {
                 logger.logError("[失败] 程序执行失败: " + e, e);
             } else {
-                System.err.println("[失败] 程序执行失败: " + e);
-                e.printStackTrace();
+                LoggerUtil.logException("[失败] 程序执行失败", e);
             }
             System.err.println("[提示] 请查看日志 logs/frt.log 了解详细错误信息");
         } finally {
@@ -157,8 +156,7 @@ public class Main {
                 System.out.println("[警告] 恢复未完全成功，会话记录已保留，可再次尝试");
             }
         } catch (Exception e) {
-            System.err.println("[失败] 会话恢复处理异常: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("会话恢复处理异常", e);
         }
     }
 }

@@ -168,6 +168,46 @@ public class LoggerUtil {
         fileOnlyLogger.debug(message);
     }
 
+    // ==================== 静态便捷方法（统一异常收口用） ====================
+
+    /**
+     * 统一记录异常（控制台+文件，含完整堆栈）
+     * 替代散落的 e.printStackTrace() / System.err.println
+     * @param message 上下文描述（可为空）
+     * @param throwable 异常对象
+     */
+    public static void logException(String message, Throwable throwable) {
+        if (throwable == null) {
+            return;
+        }
+        LoggerUtil util = getInstance(null);
+        if (message == null || message.isBlank()) {
+            util.logger.error(throwable.toString(), throwable);
+        } else {
+            util.logger.error(message, throwable);
+        }
+    }
+
+    /**
+     * 统一记录异常（控制台+文件，含完整堆栈）
+     * @param throwable 异常对象
+     */
+    public static void logException(Throwable throwable) {
+        logException(null, throwable);
+    }
+
+    /**
+     * 统一记录错误消息（控制台+文件）
+     * 替代散落的 System.err.println
+     * @param message 错误消息
+     */
+    public static void logErrorMsg(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        getInstance(null).logger.error(message);
+    }
+
     public void close() {
         System.setOut(originalOut);
         System.setErr(originalErr);

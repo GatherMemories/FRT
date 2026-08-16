@@ -6,6 +6,7 @@ import com.awei.frt.model.Config;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -57,8 +58,7 @@ public class BackupFileLoader {
                 try {
                     Files.createDirectories(backupPath);
                 } catch (IOException e) {
-                    e.printStackTrace();
-                    System.err.println("创建备份目录失败: " + e.getMessage());
+                    LoggerUtil.logException("创建备份目录失败", e);
                     return backupFiles;
                 }
             }
@@ -89,7 +89,7 @@ public class BackupFileLoader {
                             backupFiles.put(fileMd5, filePath);
                         });
             } catch (IOException e) {
-                e.printStackTrace();
+                LoggerUtil.logException("加载备份文件列表失败", e);
                 return null;
             }
         }
@@ -124,7 +124,7 @@ public class BackupFileLoader {
             backupFiles.put(fileMd5, backupFilePath);
             return true;
         } catch (IOException e) {
-            e.printStackTrace();
+            LoggerUtil.logException("备份文件失败", e);
             return false;
         }
     }
@@ -173,7 +173,7 @@ public class BackupFileLoader {
             }
             return false;
         } catch (IOException e) {
-            e.printStackTrace();
+            LoggerUtil.logException("删除备份文件失败", e);
             return false;
         }
     }
@@ -254,21 +254,18 @@ public class BackupFileLoader {
                         Files.deleteIfExists(tempFilePath);
                     }
                 } catch (IOException deleteEx) {
-                    System.err.println("删除临时文件失败: " + deleteEx.getMessage());
+                    LoggerUtil.logException("删除临时文件失败", deleteEx);
                 }
-                System.err.println("保存操作记录失败: " + e.getMessage());
-                e.printStackTrace();
+                LoggerUtil.logException("保存操作记录失败", e);
                 return false;
             }
 
 
         } catch (IOException e) {
-            System.err.println("保存操作记录失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("保存操作记录失败", e);
             return false;
         } catch (Exception e) {
-            System.err.println("保存操作记录失败: 未知错误 - " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("保存操作记录失败: 未知错误", e);
             return false;
         }
     }
@@ -409,12 +406,10 @@ public class BackupFileLoader {
             return objectMapper.readValue(recordFilePath.toFile(), ProcessingResult.class);
 
         } catch (IOException e) {
-            System.err.println("加载操作记录失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("加载操作记录失败", e);
             return null;
         } catch (Exception e) {
-            System.err.println("加载操作记录失败: 未知错误 - " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("加载操作记录失败: 未知错误", e);
             return null;
         }
     }
@@ -489,12 +484,10 @@ public class BackupFileLoader {
             return results;
 
         } catch (IOException e) {
-            System.err.println("加载操作记录集失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("加载操作记录集失败", e);
             return results;
         } catch (Exception e) {
-            System.err.println("加载操作记录集失败: 未知错误 - " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("加载操作记录集失败: 未知错误", e);
             return results;
         }
     }
@@ -571,8 +564,7 @@ public class BackupFileLoader {
             System.out.println("[STATS] 失败: " + restoreResult.getFailureCount());
 
         } catch (Exception e) {
-            System.err.println("恢复操作失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("恢复操作失败", e);
             restoreResult.incrementFailure(e.getMessage());
         }
 
@@ -602,8 +594,7 @@ public class BackupFileLoader {
                     return false;
             }
         } catch (Exception e) {
-            System.err.println("恢复单个记录失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("恢复单个记录失败", e);
             restoreResult.incrementFailure("恢复失败: " + e.getMessage());
             return false;
         }
@@ -639,8 +630,7 @@ public class BackupFileLoader {
             return true;
 
         } catch (Exception e) {
-            System.err.println("ADD 操作恢复失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("ADD 操作恢复失败", e);
             restoreResult.incrementFailure("删除文件失败: " + e.getMessage());
             return false;
         }
@@ -692,8 +682,7 @@ public class BackupFileLoader {
             return true;
 
         } catch (Exception e) {
-            System.err.println("REPLACE 操作恢复失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("REPLACE 操作恢复失败", e);
             restoreResult.incrementFailure("恢复文件失败: " + e.getMessage());
             return false;
         }
@@ -751,8 +740,7 @@ public class BackupFileLoader {
             return true;
 
         } catch (Exception e) {
-            System.err.println("DELETE 操作恢复失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("DELETE 操作恢复失败", e);
             restoreResult.incrementFailure("恢复文件失败: " + e.getMessage());
             return false;
         }
@@ -820,8 +808,7 @@ public class BackupFileLoader {
                 }
 
             } catch (Exception e) {
-                System.err.println("回滚操作失败: " + e.getMessage());
-                e.printStackTrace();
+                LoggerUtil.logException("回滚操作失败", e);
             }
         }
 
@@ -917,8 +904,7 @@ public class BackupFileLoader {
             return false;
 
         } catch (Exception e) {
-            System.err.println("删除备份记录失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("删除备份记录失败", e);
             return false;
         }
     }

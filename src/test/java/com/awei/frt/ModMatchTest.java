@@ -2,6 +2,7 @@ package com.awei.frt;
 
 import com.awei.frt.core.mod.ModInfo;
 import com.awei.frt.core.mod.ModMetadataParser;
+import com.awei.frt.util.LoggerUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,8 +43,7 @@ public class ModMatchTest {
                         System.out.println("Jar Path: " + modInfo.getPath());
                     }
                 } catch (IOException e) {
-                    System.err.println("Failed to read mod file: " + modFile.getName());
-                    e.printStackTrace();
+                    LoggerUtil.logException("Failed to read mod file: " + modFile.getName(), e);
                 }
             }
         } else {

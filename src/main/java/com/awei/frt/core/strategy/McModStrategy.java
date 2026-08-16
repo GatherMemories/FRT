@@ -7,6 +7,7 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileSignUtil;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
+import com.awei.frt.util.LoggerUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -125,8 +126,7 @@ public class McModStrategy implements OperationStrategy{
                 }
             });
         } catch (IOException e) {
-            System.err.println("读取文件夹失败：" + entryPath);
-            e.printStackTrace();
+            LoggerUtil.logException("读取文件夹失败: " + entryPath, e);
         }
         return modInfoMap;
     }

@@ -7,6 +7,7 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -94,8 +95,7 @@ public class RuleConfigWizard {
             writeRuleFile(rule, targetDir);
 
         } catch (Exception e) {
-            System.err.println("[失败] 向导执行出错: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("向导执行出错", e);
         }
     }
 
@@ -287,8 +287,7 @@ public class RuleConfigWizard {
                 System.out.println("[警告] 规则文件解析校验失败，请检查内容");
             }
         } catch (Exception e) {
-            System.err.println("[失败] 生成规则文件失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("生成规则文件失败", e);
         }
     }
 

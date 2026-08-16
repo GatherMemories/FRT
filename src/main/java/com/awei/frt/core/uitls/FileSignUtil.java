@@ -13,6 +13,8 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+import com.awei.frt.util.LoggerUtil;
+
 /**
  * 文件特征码工具类 - 获取文件唯一MD5/SHA256指纹
  * 你的builder包文件操作的完美配套工具
@@ -66,7 +68,7 @@ public class FileSignUtil {
             // 将哈希字节数组转成16进制字符串（核心转换）
             return bytesToHex(digest.digest());
         } catch (NoSuchAlgorithmException | IOException e) {
-            e.printStackTrace();
+            LoggerUtil.logException("计算文件特征码失败: " + path, e);
             return null;
         }
     }

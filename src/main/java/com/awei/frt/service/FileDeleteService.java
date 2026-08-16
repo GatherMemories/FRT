@@ -8,6 +8,7 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -133,8 +134,7 @@ public class FileDeleteService {
 
             return context.getProcessingResult();
         } catch (Exception e) {
-            System.err.println("[失败] 文件删除操作失败: " + e.getMessage());
-            e.printStackTrace();
+            LoggerUtil.logException("文件删除操作失败", e);
 
             ProcessingResult result = new ProcessingResult();
             result.setErrorCount(1);
