@@ -1,0 +1,17 @@
+# 统一换行符策略：文本文件按平台自动转换，二进制文件保持原样
+* text=auto
+
+# 源代码统一 LF
+*.java text eol=lf
+*.xml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.properties text eol=lf
+
+# 明确为二进制的文件
+*.jar binary
+*.class binary
+*.png binary
+*.jpg binary
+*.ico binary
