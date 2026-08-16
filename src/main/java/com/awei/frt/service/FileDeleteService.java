@@ -10,6 +10,8 @@ import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
 
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Scanner;
 
 /**
@@ -36,7 +38,7 @@ public class FileDeleteService {
 
             // 构建操作上下文
             Path basePath = config.getBaseDirectory();
-            OperationContext context = new OperationContext(config, scanner);
+            OperationContext context = new OperationContext(config);
 
             // 构建删除目录的文件树
             Path deletePath = basePath.resolve(config.getDeletePath()).normalize();
@@ -142,7 +144,7 @@ public class FileDeleteService {
     }
 
     /**
-     * 检查文件树是否有文件要删除
+     * 检查文件树是否有文件要删除（栈迭代，避免深目录递归栈溢出）
      * @param node 文件节点
      * @return 是否有文件
      */
@@ -150,16 +152,16 @@ public class FileDeleteService {
         if (node == null) {
             return false;
         }
-        if (!node.isDirectory()) {
-            return true;
-        }
-        if (node.getChildCount() == 0) {
-            return false;
-        }
-        if (node instanceof FolderNode folderNode) {
-            for (FileNode child : folderNode.getChildren()) {
-                if (hasFilesToDelete(child)) {
-                    return true;
+        Deque<FileNode> stack = new ArrayDeque<>();
+        stack.push(node);
+        while (!stack.isEmpty()) {
+            FileNode current = stack.pop();
+            if (!current.isDirectory()) {
+                return true;
+            }
+            if (current instanceof FolderNode folderNode) {
+                for (FileNode child : folderNode.getChildren()) {
+                    stack.push(child);
                 }
             }
         }
@@ -168,7 +170,7 @@ public class FileDeleteService {
 
 
     /**
-     * 统计文件数量
+     * 统计文件数量（栈迭代，避免深目录递归栈溢出）
      * @param node 文件节点
      * @return 文件数量
      */
@@ -176,13 +178,17 @@ public class FileDeleteService {
         if (node == null) {
             return 0;
         }
-        if (!node.isDirectory()) {
-            return 1;
-        }
         int count = 0;
-        if (node instanceof FolderNode folderNode) {
-            for (FileNode child : folderNode.getChildren()) {
-                count += countFiles(child);
+        Deque<FileNode> stack = new ArrayDeque<>();
+        stack.push(node);
+        while (!stack.isEmpty()) {
+            FileNode current = stack.pop();
+            if (!current.isDirectory()) {
+                count++;
+            } else if (current instanceof FolderNode folderNode) {
+                for (FileNode child : folderNode.getChildren()) {
+                    stack.push(child);
+                }
             }
         }
         return count;

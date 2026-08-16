@@ -46,7 +46,8 @@ public class BackupFileLoader {
 
     // 获取备份文件列表
     public static Map<String, Path> getBackupFiles() {
-        if (operationRecordFiles == null || backupFiles.isEmpty()) {
+        // 判空条件：检查 backupFiles 本身（原实现误检查了 operationRecordFiles）
+        if (backupFiles == null || backupFiles.isEmpty()) {
             Config config = ConfigLoader.getConfig();
             if (config == null) {
                 return null;
@@ -61,7 +62,11 @@ public class BackupFileLoader {
                     return backupFiles;
                 }
             }
-            backupFiles = loadBackupFiles(backupPath);
+            // 加载失败（返回 null）时保留原值，避免 backupFiles 被置 null 导致后续 NPE
+            Map<String, Path> loaded = loadBackupFiles(backupPath);
+            if (loaded != null) {
+                backupFiles = loaded;
+            }
         }
         return backupFiles;
     }

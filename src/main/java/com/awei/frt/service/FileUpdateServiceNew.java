@@ -38,7 +38,7 @@ public class FileUpdateServiceNew {
             // 构建操作上下文
             Path basePath = config.getBaseDirectory();
 
-            OperationContext context = new OperationContext(config, scanner);
+            OperationContext context = new OperationContext(config);
 
             // 构建更新目录的文件树
             Path updatePath = basePath.resolve(config.getUpdatePath()).normalize();
