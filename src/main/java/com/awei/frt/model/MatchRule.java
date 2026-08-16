@@ -1,14 +1,12 @@
 package com.awei.frt.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -18,23 +16,23 @@ import java.util.regex.Pattern;
 @JsonIgnoreProperties({"path"})
 public class MatchRule {
     private String strategyType;                // 策略类型
-    private List<String> replacements;          // 替换项：定义需要在文件中替换的旧值和新值（如需要给策略传值）
+    private Map<String, String> replacements;   // 策略扩展参数（键值对）：供各策略读取自定义配置，如 {"onlyIfVersionChanged": "true"}
     private List<String> patterns;              // 匹配列表：定义哪些文件需要被处理（支持通配符）
     private List<String> excludePatterns;       // 排除列表：定义哪些文件需要被排除（支持通配符）
     private boolean inheritToSubfolders;        // 是否应用到子文件夹（子文件夹无规则才会生效，默认false）
     private transient Path path;                         // 文件位置
 
     public MatchRule() {
-        this.replacements = new ArrayList<>();
+        this.replacements = new LinkedHashMap<>();
         this.patterns = new ArrayList<>();
         this.excludePatterns = new ArrayList<>();
         this.inheritToSubfolders = false;
         this.path = null;
     }
 
-    public MatchRule(String strategyType, List<String> replacements, List<String> patterns, List<String> excludePatterns, boolean inheritToSubfolders, Path path) {
+    public MatchRule(String strategyType, Map<String, String> replacements, List<String> patterns, List<String> excludePatterns, boolean inheritToSubfolders, Path path) {
         this.strategyType = strategyType;
-        this.replacements = replacements;
+        this.replacements = replacements != null ? replacements : new LinkedHashMap<>();
         this.patterns = patterns;
         this.excludePatterns = excludePatterns;
         this.inheritToSubfolders = inheritToSubfolders;
@@ -52,12 +50,12 @@ public class MatchRule {
         this.strategyType = strategyType;
     }
 
-    public List<String> getReplacements() {
+    public Map<String, String> getReplacements() {
         return replacements;
     }
 
-    public void setReplacements(List<String> replacements) {
-        this.replacements = replacements;
+    public void setReplacements(Map<String, String> replacements) {
+        this.replacements = replacements != null ? replacements : new LinkedHashMap<>();
     }
 
     public List<String> getPatterns() {

@@ -28,9 +28,7 @@
             <version>2.13.0</version> <!-- 或与你使用的jackson-core版本一致 -->
         </dependency>
 
-        <!-- SLF4J API: Java 简单日志门面，提供统一的Gson gson = new Gson();
-JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
-日志接口 -->
+        <!-- SLF4J API: Java 简单日志门面，提供统一的日志接口 -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -49,7 +47,7 @@ JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
             <version>5.9.3</version>
             <scope>test</scope>
         </dependency>
-        <!-- Gson: Google 的 JSON 解析库，用于解析 Minecraft 模组的 JSON 配置文件 -->
+        <!-- Gson: BasicModInfoParser-2.0.0.jar 的运行时依赖（解析 Minecraft mod 元数据需要），请勿移除 -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>

@@ -77,8 +77,6 @@ public class FileUtil {
             record.setOperationType(OperationContext.OPERATION_ADD);
             record.setSourcePath(sourcePath);
             record.setTargetPath(targetPath);
-            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
-            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
 
             if (sourcePath == null || !Files.isRegularFile(sourcePath)) {
                 record.setSuccess(false);
@@ -92,11 +90,20 @@ public class FileUtil {
                 return false;
             }
 
+            // 参数校验通过后再计算文件特征码（避免空参数NPE）
+            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
+            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
+
             // 判断目标路径文件是否存在，如果存在取消操作（因为不是新增操作）
             if (Files.isRegularFile(targetPath)) {
                 record.setSuccess(false);
                 record.setErrorMessage("目标文件已存在--新增操作失败");
                 return false;
+            }
+            // 确保目标父目录存在（update 中的子目录结构在目标侧可能不存在）
+            Path parentDir = targetPath.getParent();
+            if (parentDir != null && !Files.exists(parentDir)) {
+                Files.createDirectories(parentDir);
             }
             // 添加备份文件（新增不需要备份）
 //            BackupFileLoader.addBackupFile(targetPath);
@@ -126,8 +133,6 @@ public class FileUtil {
             record.setOperationType(OperationContext.OPERATION_REPLACE);
             record.setSourcePath(sourcePath);
             record.setTargetPath(targetPath);
-            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
-            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
 
             if (sourcePath == null || !Files.isRegularFile(sourcePath)) {
                 record.setSuccess(false);
@@ -140,6 +145,11 @@ public class FileUtil {
                 record.setErrorMessage("目标路径不存在");
                 return false;
             }
+
+            // 参数校验通过后再计算文件特征码（避免空参数NPE）
+            record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
+            record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
+
             // 替换备份文件
             BackupFileLoader.addBackupFile(targetPath);
 
@@ -166,15 +176,17 @@ public class FileUtil {
             record.setOperationType(OperationContext.OPERATION_DELETE);
             record.setSourcePath(filePath);
             record.setTargetPath(filePath);
-            record.setSourceFileSign(FileSignUtil.getFileMd5(filePath));
-            record.setTargetFileSign(FileSignUtil.getFileMd5(filePath));
-
 
             if (filePath == null || !Files.isRegularFile(filePath)) {
                 record.setSuccess(false);
                 record.setErrorMessage("文件不存在、或不是文件");
                 return false;
             }
+
+            // 参数校验通过后再计算文件特征码（避免空参数NPE）
+            record.setSourceFileSign(FileSignUtil.getFileMd5(filePath));
+            record.setTargetFileSign(FileSignUtil.getFileMd5(filePath));
+
             // 添加备份文件
             BackupFileLoader.addBackupFile(filePath);
 

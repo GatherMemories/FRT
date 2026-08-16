@@ -44,7 +44,7 @@ public class RuleInheritanceContext {
     /**
      * 加载当前节点的本地规则
      * 按优先级顺序查找：replace.json -> add.json -> delete.json
-     * 使用 Gson 解析为 MatchRule 对象
+     * 使用 Jackson 解析为 MatchRule 对象
      */
     private MatchRule loadLocalRule(Path nodePath) {
         // 按优先级顺序查找规则文件

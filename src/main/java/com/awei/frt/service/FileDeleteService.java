@@ -90,6 +90,8 @@ public class FileDeleteService {
                 System.out.println("[执行] 正在备份操作文件...");
                 boolean backupSuccess = BackupFileLoader.saveOperationRecord(context.getProcessingResult());
                 if (backupSuccess) {
+                    // 正式保存成功，清除实时会话记录
+                    BackupFileLoader.clearSessionRecord();
                     System.out.println("[成功] 备份操作文件成功！");
 
                     // 判断有处理失败的文件时，是否执行恢复操作

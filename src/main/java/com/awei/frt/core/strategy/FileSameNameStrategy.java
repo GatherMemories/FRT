@@ -36,13 +36,17 @@ public class FileSameNameStrategy implements OperationStrategy {
         List<String> patterns = context.getRuleInheritanceContext().getRuleChain().getPatterns();
         List<String> excludePatterns = context.getRuleInheritanceContext().getRuleChain().getExcludePatterns();
 
+        // 策略扩展参数：caseSensitive=false 时文件名匹配忽略大小写（默认 true 区分大小写）
+        boolean caseSensitive = !"false".equalsIgnoreCase(context.getRuleParam("caseSensitive"));
+
         // 检查文件是否匹配patterns（白名单）
-        if (!matches(fileName, patterns)) {
+        if (!matches(fileName, patterns, caseSensitive)) {
             System.out.println("忽略文件：" + fileName);
             return;
         }
-        // 检查文件是否被排除（黑名单）
-        if (matches(fileName, excludePatterns)) {
+        // 检查文件是否被排除（黑名单）：空排除列表表示不排除任何文件
+        // （注意：matches 对空列表返回 true 是"白名单匹配所有"语义，不能直接用于黑名单）
+        if (excludePatterns != null && !excludePatterns.isEmpty() && matches(fileName, excludePatterns, caseSensitive)) {
             System.out.println("忽略文件：" + fileName);
             return;
         }
@@ -65,7 +69,7 @@ public class FileSameNameStrategy implements OperationStrategy {
         // 如果目标层没有该文件，则新增
         if (addType && !targetFileExists) {
             boolean b = FileUtil.addFile(node.getPath(), targetFilePath, operationRecord);
-            context.getProcessingResult().addOperationRecord(operationRecord);
+            context.recordOperation(operationRecord);
             System.out.println("+ " + fileName + " " + (b ? "成功" : "失败"));
             return;
         }
@@ -73,7 +77,7 @@ public class FileSameNameStrategy implements OperationStrategy {
         // 如果目标层有同名文件，则替换
         if (replaceType && targetFileExists) {
             boolean b = FileUtil.replaceFile(node.getPath(), targetFilePath, operationRecord);
-            context.getProcessingResult().addOperationRecord(operationRecord);
+            context.recordOperation(operationRecord);
             System.out.println("= " + fileName + " " + (b ? "成功" : "失败"));
             return;
         }
@@ -81,7 +85,7 @@ public class FileSameNameStrategy implements OperationStrategy {
         // 删除操作
         if (deleteType) {
             boolean b = FileUtil.deleteFile(targetFilePath, operationRecord);
-            context.getProcessingResult().addOperationRecord(operationRecord);
+            context.recordOperation(operationRecord);
             System.out.println("- " + fileName + " " + (b ? "成功" : "失败"));
             return;
         }
@@ -91,12 +95,14 @@ public class FileSameNameStrategy implements OperationStrategy {
      * 检查文件名是否匹配模式（白名单）
      * @param fileName 文件名
      * @param patterns 匹配模式列表
+     * @param caseSensitive 是否区分大小写
      * @return 是否匹配
      */
-    private boolean matches(String fileName, List<String> patterns) {
+    private boolean matches(String fileName, List<String> patterns, boolean caseSensitive) {
         if (patterns == null || patterns.isEmpty()) {
             return true;
         }
+        String name = caseSensitive ? fileName : fileName.toLowerCase(java.util.Locale.ROOT);
         return patterns.stream().anyMatch(pattern -> {
             if (pattern.isEmpty()) {
                 return true;
@@ -104,14 +110,15 @@ public class FileSameNameStrategy implements OperationStrategy {
             if (pattern.equals("*")) {
                 return true;
             }
-            if (pattern.equals(fileName)) {
+            String p = caseSensitive ? pattern : pattern.toLowerCase(java.util.Locale.ROOT);
+            if (p.equals(name)) {
                 return true;
             }
             // 简单的 glob 模式匹配
-            String regex = pattern.replace(".", "\\.")
+            String regex = p.replace(".", "\\.")
                     .replace("*", ".*")
                     .replace("?", ".");
-            return fileName.matches(regex);
+            return name.matches(regex);
         });
     }
 

@@ -59,7 +59,7 @@
 | `patterns` | **匹配文件模式** | 否     | List\<String\> | 空列表 | `["*.jar"]`, `["*.txt", "*.doc"]` |
 | `excludePatterns` | 排除文件模式 | 否     | List\<String\> | 空列表 | `["*backup*", "*Test*"]` |
 | `inheritToSubfolders` | 是否应用到子文件夹 | 否     | Boolean | `false` | `true`, `false` |
-| `replacements` | **预留替换项**（⚠️ **当前未使用**） | 否     | List\<String\> | 空列表 | `[]`（请勿依赖此参数） |
+| `replacements` | **策略扩展参数**（键值对，供策略读取自定义配置） | 否     | Map\<String, String\> | 空 Map | `{"onlyIfVersionChanged": "true"}` |
 
 ### 3. 重要说明
 
@@ -73,7 +73,9 @@
 - **策略类型说明**：
   - `"McMod"`：Minecraft模组文件处理策略（只检测jar文件，patterns、excludePatterns 参数无效）
   - `"FileSameName"`：同名文件处理策略
-- **⚠️ 重要提醒**：`replacements` 参数是预留字段，**当前版本所有策略类均未使用此参数**，仅作为未来扩展预留
+- **⚠️ 重要提醒**：`replacements` 是**策略扩展参数**（键值对），只对支持它的策略生效，未配置或策略不支持时无任何副作用。当前已支持：
+  - `McMod` 策略：`{"onlyIfVersionChanged": "true"}` — 目标已存在**相同版本**的模组时跳过替换
+  - `FileSameName` 策略：`{"caseSensitive": "false"}` — 文件名/通配符匹配忽略大小写（默认区分）
 
 #### 规则文件命名规范（任选其一作用都是相同的）：
 - `replace.json` - 文件替换操作规则
@@ -146,12 +148,23 @@ src/main/java/com/awei/frt/
 
 ### 快速开始
 
-1. **准备配置文件**：在目标目录创建相应的规则配置文件
+1. **准备配置文件**：在目标目录创建相应的规则配置文件（或使用交互式向导生成，见下）
 2. **启动系统**：运行以下命令启动文件处理流程
 
 ```bash
 mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 ```
+
+### 交互式生成规则配置文件
+
+主菜单选择 **4. 生成/编辑匹配规则配置文件**，向导会：
+
+1. 选择规则作用目录（更新目录 / 删除目录）
+2. 显示目录文件结构图，输入**文件夹编号**选择要在哪一层生成规则
+3. 逐个输入参数，每个参数均提示**数据类型、必填性、默认值、可选值**
+4. 生成前**预览 JSON 内容**，确认后写入 `matching-rules.json`，并自动校验格式
+
+向导会提示：已存在规则文件的层、McMod 策略下不生效的参数（`patterns`/`excludePatterns`）、策略扩展参数示例等。
 
 ### 目录结构示例
 
@@ -181,7 +194,7 @@ mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 
 ### 规则扩展
 规则模型采用灵活的JSON配置，支持：
-- 新增规则参数（如未来的`replacements`参数扩展）
+- 新增规则参数（通过 `replacements` 键值对给策略传参）
 - 自定义策略配置
 - 动态规则加载
 
@@ -196,4 +209,4 @@ mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 
 FRT系统通过精心设计的架构和灵活的规则配置机制，为复杂的文件更新场景提供了强大的解决方案。系统当前专注于Minecraft模组管理和通用文件操作，同时为未来的功能扩展预留了充分的空间。
 
-**特别提醒**：`replacements`参数目前仅作为预留字段，在实际使用中请避免依赖此参数实现业务逻辑。
+**特别提醒**：`replacements`参数是策略扩展参数（键值对），仅对支持它的策略生效；新增策略时可通过 `OperationContext.getRuleParam(key)` 读取，实现自定义配置。

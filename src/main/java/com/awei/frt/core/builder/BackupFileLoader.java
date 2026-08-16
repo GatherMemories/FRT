@@ -30,6 +30,8 @@ public class BackupFileLoader {
     private static Map<String, Path> backupFiles = new HashMap<>();
     // 加载的操作记录集文件列表
     private static Map<String, ProcessingResult> operationRecordFiles = new HashMap<>();
+    // 未完成会话的临时记录文件名（操作过程中实时写入，异常中断后用于恢复）
+    private static final String SESSION_RECORD_FILE = "session-current.json";
 
     // 获取操作记录集文件列表
     public static Map<String, ProcessingResult> getOperationRecordFiles() {
@@ -102,14 +104,17 @@ public class BackupFileLoader {
             }
             // 检查文件是否已存在于备份文件列表中（存在更改为新路径）
             String fileMd5 = FileSignUtil.getFileMd5(filePath);
-            Path backupFilePath = ConfigLoader.getBackupPath().resolve(filePath.getFileName()).normalize();
+            Path backupFilePath = getBackupFilePath(filePath);
             if (backupFiles.containsKey(fileMd5)) {
                 backupFiles.put(fileMd5, backupFilePath);
                 return true;
             }
 
-            // 备份文件
-            Config config = ConfigLoader.getConfig();
+            // 备份文件（按相对路径镜像存储，避免不同目录下同名文件互相覆盖）
+            Path parentDir = backupFilePath.getParent();
+            if (parentDir != null && !Files.exists(parentDir)) {
+                Files.createDirectories(parentDir);
+            }
             Files.copy(filePath, backupFilePath, StandardCopyOption.REPLACE_EXISTING);
             backupFiles.put(fileMd5, backupFilePath);
             return true;
@@ -117,6 +122,33 @@ public class BackupFileLoader {
             e.printStackTrace();
             return false;
         }
+    }
+
+    /**
+     * 计算备份文件路径：以基准目录为根镜像原始文件的相对路径，
+     * 避免不同目录下同名文件互相覆盖；无法相对化时退回文件名方案
+     * @param filePath 原始文件路径
+     * @return 备份文件路径
+     */
+    private static Path getBackupFilePath(Path filePath) {
+        Path backupPath = ConfigLoader.getBackupPath();
+        Config config = ConfigLoader.getConfig();
+        if (config == null || filePath == null) {
+            return backupPath.resolve(filePath != null ? filePath.getFileName() : Path.of("unknown")).normalize();
+        }
+
+        Path basePath = config.getBaseDirectory();
+        Path relative;
+        try {
+            relative = basePath.relativize(filePath);
+        } catch (Exception e) {
+            // 无法相对化（如不同盘符），退回文件名
+            relative = Path.of(filePath.getFileName().toString());
+        }
+
+        // 防止路径穿越：丢弃 .. 片段
+        String rel = relative.toString().replace("..", "_");
+        return backupPath.resolve(rel).normalize();
     }
 
     /**
@@ -237,6 +269,82 @@ public class BackupFileLoader {
     }
 
     /**
+     * 实时保存当前会话的操作记录（每次操作后调用）
+     * 写入临时文件 session-current.json，供异常中断后恢复
+     * @param record 当前处理结果
+     * @return 是否成功
+     */
+    public static boolean saveSessionRecord(ProcessingResult record) {
+        if (record == null) {
+            return false;
+        }
+        try {
+            Path backupPath = ConfigLoader.getBackupPath();
+            if (backupPath == null) {
+                return false;
+            }
+            Path recordPath = backupPath.resolve("record").normalize();
+            if (!Files.exists(recordPath)) {
+                Files.createDirectories(recordPath);
+            }
+            Path sessionFile = recordPath.resolve(SESSION_RECORD_FILE).normalize();
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.registerModule(new JavaTimeModule());
+            objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            objectMapper.writeValue(sessionFile.toFile(), record);
+            return true;
+        } catch (Exception e) {
+            System.err.println("实时保存操作记录失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 是否存在未完成的操作会话（上次操作异常中断遗留）
+     * @return 是否存在
+     */
+    public static boolean hasSessionRecord() {
+        Path sessionFile = getSessionRecordPath();
+        return sessionFile != null && Files.exists(sessionFile);
+    }
+
+    /**
+     * 加载未完成的操作会话记录
+     * @return 操作记录对象，不存在或加载失败返回null
+     */
+    public static ProcessingResult loadSessionRecord() {
+        if (!hasSessionRecord()) {
+            return null;
+        }
+        return loadOperationRecord(SESSION_RECORD_FILE);
+    }
+
+    /**
+     * 清除会话记录（操作正常完成并正式保存记录后调用）
+     */
+    public static void clearSessionRecord() {
+        Path sessionFile = getSessionRecordPath();
+        if (sessionFile != null) {
+            try {
+                Files.deleteIfExists(sessionFile);
+            } catch (IOException e) {
+                System.err.println("清除会话记录失败: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 获取会话记录文件路径
+     */
+    private static Path getSessionRecordPath() {
+        Path backupPath = ConfigLoader.getBackupPath();
+        if (backupPath == null) {
+            return null;
+        }
+        return backupPath.resolve("record").resolve(SESSION_RECORD_FILE).normalize();
+    }
+
+    /**
      * 生成友好的备份文件名（backup-20260131-143045.json格式）
      * @param resultTime 处理结果时间
      * @return 格式化的文件名（不含扩展名）
@@ -342,6 +450,7 @@ public class BackupFileLoader {
                         .filter(Files::isRegularFile)
                         .filter(path -> path.toString().endsWith(".json"))
                         .filter(path -> !path.toString().endsWith(".json.tmp")) // 排除临时文件
+                        .filter(path -> !path.getFileName().toString().equals(SESSION_RECORD_FILE)) // 排除会话临时文件
                         .toList();
 
                 // 6. 加载每个文件
@@ -541,18 +650,19 @@ public class BackupFileLoader {
     private static boolean restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult) {
         try {
             Path targetPath = record.getTargetPath();
-            String sourceFileSign = record.getSourceFileSign();
+            // 替换前目标文件的签名（即备份文件索引 key），用于查找被替换前的原文件
+            String targetFileSign = record.getTargetFileSign();
 
-            if (targetPath == null || sourceFileSign == null) {
-                System.err.println("REPLACE 操作恢复失败: 目标路径或源文件签名为空");
-                restoreResult.incrementFailure("目标路径或源文件签名为空");
+            if (targetPath == null || targetFileSign == null) {
+                System.err.println("REPLACE 操作恢复失败: 目标路径或文件签名为空");
+                restoreResult.incrementFailure("目标路径或文件签名为空");
                 return false;
             }
 
-            // 通过 MD5 查找备份文件
-            Path backupFile = findBackupFileBySignature(sourceFileSign);
+            // 通过替换前目标文件签名查找备份文件
+            Path backupFile = findBackupFileBySignature(targetFileSign);
             if (backupFile == null) {
-                System.err.println("REPLACE 操作恢复失败: 未找到备份文件 (MD5: " + sourceFileSign + ")");
+                System.err.println("REPLACE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
                 restoreResult.incrementFailure("未找到备份文件");
                 return false;
             }
@@ -675,7 +785,7 @@ public class BackupFileLoader {
                 String operationType = record.getOperationType();
                 Path targetPath = record.getTargetPath();
 
-                if (operationType.equals("ADD")) {
+                if (OperationContext.OPERATION_ADD.equals(operationType)) {
                     // 回滚 ADD 操作：重新添加文件
                     Path sourcePath = record.getSourcePath();
                     if (sourcePath != null && Files.exists(sourcePath)) {
@@ -687,7 +797,7 @@ public class BackupFileLoader {
                         System.out.println("[成功] 已回滚 ADD 操作: " + targetPath);
                         restoreResult.incrementRollback();
                     }
-                } else if (operationType.equals("REPLACE")) {
+                } else if (OperationContext.OPERATION_REPLACE.equals(operationType)) {
                     // 回滚 REPLACE 操作：重新执行替换
                     Path sourcePath = record.getSourcePath();
                     if (sourcePath != null && Files.exists(sourcePath)) {
@@ -695,7 +805,7 @@ public class BackupFileLoader {
                         System.out.println("[成功] 已回滚 REPLACE 操作: " + targetPath);
                         restoreResult.incrementRollback();
                     }
-                } else if (operationType.equals("DELETE")) {
+                } else if (OperationContext.OPERATION_DELETE.equals(operationType)) {
                     // 回滚 DELETE 操作：重新删除文件
                     if (Files.exists(targetPath)) {
                         Files.delete(targetPath);

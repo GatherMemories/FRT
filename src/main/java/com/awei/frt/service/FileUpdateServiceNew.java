@@ -65,6 +65,8 @@ public class FileUpdateServiceNew {
                 System.out.println("[执行] 正在备份操作文件...");
                 boolean backupSuccess = BackupFileLoader.saveOperationRecord(context.getProcessingResult());
                 if (backupSuccess) {
+                    // 正式保存成功，清除实时会话记录
+                    BackupFileLoader.clearSessionRecord();
                     System.out.println("[成功] 备份操作文件成功！");
 
                     if (processingResult.getErrorCount() > 0) {

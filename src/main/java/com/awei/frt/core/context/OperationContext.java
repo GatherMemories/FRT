@@ -1,6 +1,8 @@
 package com.awei.frt.core.context;
 
+import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.model.Config;
+import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 
 import java.nio.file.Files;
@@ -8,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 /**
@@ -176,6 +179,30 @@ public class OperationContext {
      */
     public int getErrorCount() {
         return this.processingResult.getErrorCount();
+    }
+
+    /**
+     * 记录一次操作并实时落盘（异常中断后可恢复）
+     * @param record 操作记录
+     */
+    public void recordOperation(OperationRecord record) {
+        processingResult.addOperationRecord(record);
+        // 每次操作后实时写入会话记录，防止异常中断导致记录丢失
+        BackupFileLoader.saveSessionRecord(processingResult);
+    }
+
+    /**
+     * 获取当前生效规则中的策略扩展参数（replacements 键值对）
+     * @param key 参数名
+     * @return 参数值，未配置返回 null
+     */
+    public String getRuleParam(String key) {
+        RuleInheritanceContext ric = getRuleInheritanceContext();
+        if (ric == null || ric.getRuleChain() == null) {
+            return null;
+        }
+        Map<String, String> replacements = ric.getRuleChain().getReplacements();
+        return replacements == null ? null : replacements.get(key);
     }
 
     /**

@@ -11,7 +11,7 @@ public class ConfigLoaderTest {
 
     @Test
     public void testConfigLoadingWithPathDeserialization() {
-        System.out.println("Testing ConfigLoader with Gson Path deserialization fix...");
+        System.out.println("Testing ConfigLoader with Jackson Path deserialization fix...");
 
         // 加载配置
         Config config = ConfigLoader.getConfig();
