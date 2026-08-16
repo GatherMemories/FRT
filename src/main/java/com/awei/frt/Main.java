@@ -32,14 +32,14 @@ public class Main {
 
             if (config == null) {
                 // 配置加载失败，退出程序
-                System.err.println("[失败] 配置加载失败，请检查配置文件");
+                LoggerUtil.logError("[失败] 配置加载失败，请检查配置文件");
                 System.exit(1);
                 return;
             }
 
-            logger.logInfo("=========================================");
-            logger.logInfo("FRT - 多层级文件夹更新系统启动");
-            logger.logInfo("=========================================");
+            LoggerUtil.logInfo("=========================================");
+            LoggerUtil.logInfo("FRT - 多层级文件夹更新系统启动");
+            LoggerUtil.logInfo("=========================================");
 
             scanner = new Scanner(System.in);
 
@@ -67,26 +67,26 @@ public class Main {
 
                 switch (choice) {
                     case "1":
-                        logger.logInfo("[执行] 执行更新操作（增加、替换）...");
+                        LoggerUtil.logInfo("[执行] 执行更新操作（增加、替换）...");
                         updateService.updateExecute();
                         break;
                     case "2":
-                        logger.logInfo("[删除] 执行删除操作...");
+                        LoggerUtil.logInfo("[删除] 执行删除操作...");
                         deleteService.deleteExecute();
                         break;
                     case "3":
-                        logger.logInfo("[执行] 执行恢复操作...");
+                        LoggerUtil.logInfo("[执行] 执行恢复操作...");
                         restoreService.executeRestore();
                         break;
                     case "4":
-                        logger.logInfo("[向导] 生成/编辑匹配规则配置文件...");
+                        LoggerUtil.logInfo("[向导] 生成/编辑匹配规则配置文件...");
                         new RuleConfigWizard(config, scanner).start();
                         break;
                     case "5":
-                        logger.logInfo("程序退出");
+                        LoggerUtil.logInfo("程序退出");
                         return;
                     default:
-                        logger.logWarn("[失败] 无效选项，请重新选择");
+                        LoggerUtil.logWarn("[失败] 无效选项，请重新选择");
                         break;
                 }
 
@@ -95,11 +95,8 @@ public class Main {
 
         } catch (Throwable e) {
             // 捕获 Exception 和 Error（如 NoClassDefFoundError），确保任何崩溃都有日志与提示
-            if (logger != null) {
-                logger.logError("[失败] 程序执行失败: " + e, e);
-            } else {
-                LoggerUtil.logException("[失败] 程序执行失败", e);
-            }
+            // （LoggerUtil.logException 内部会自动初始化日志系统，logger 为 null 也能记录）
+            LoggerUtil.logException("[失败] 程序执行失败", e);
             System.err.println("[提示] 请查看日志 logs/frt.log 了解详细错误信息");
         } finally {
             // 确保资源正确释放
@@ -124,36 +121,35 @@ public class Main {
             }
 
             System.out.println("\n=========================================");
-            System.out.println("[警告] 检测到未完成的操作会话（可能是上次异常中断导致）");
+            LoggerUtil.logWarn("[警告] 检测到未完成的操作会话（可能是上次异常中断导致）");
             System.out.println("=========================================");
             System.out.print("是否立即恢复该会话，将系统恢复到操作前的状态？(y/n): ");
 
             String choice = scanner.nextLine().trim().toLowerCase();
             if (!choice.equals("y") && !choice.equals("yes")) {
-                System.out.println("[信息] 已跳过，会话记录将保留（可稍后处理）");
+                LoggerUtil.logInfo("[信息] 已跳过，会话记录将保留（可稍后处理）");
                 return;
             }
 
             ProcessingResult sessionResult = BackupFileLoader.loadSessionRecord();
             if (sessionResult == null) {
-                System.out.println("[失败] 会话记录加载失败");
+                LoggerUtil.logError("[失败] 会话记录加载失败");
                 return;
             }
 
-            System.out.println("\n[执行] 开始执行恢复操作...");
+            LoggerUtil.logInfo("[执行] 开始执行恢复操作...");
             RestoreResult restoreResult = BackupFileLoader.restoreFromResult(sessionResult, scanner);
 
-            System.out.println("\n[STATS] 恢复结果统计:");
-            System.out.println("   成功恢复: " + restoreResult.getSuccessCount());
-            System.out.println("   恢复失败: " + restoreResult.getFailureCount());
-            System.out.println("   回滚操作: " + restoreResult.getRollbackCount());
+            LoggerUtil.logInfo("[STATS] 恢复结果统计: 成功 " + restoreResult.getSuccessCount()
+                    + ", 失败 " + restoreResult.getFailureCount()
+                    + ", 回滚 " + restoreResult.getRollbackCount());
 
             if (restoreResult.isFullSuccess()) {
-                System.out.println("[成功] 系统已成功恢复到操作前的状态");
+                LoggerUtil.logInfo("[成功] 系统已成功恢复到操作前的状态");
                 // 恢复成功，清除会话记录
                 BackupFileLoader.clearSessionRecord();
             } else {
-                System.out.println("[警告] 恢复未完全成功，会话记录已保留，可再次尝试");
+                LoggerUtil.logWarn("[警告] 恢复未完全成功，会话记录已保留，可再次尝试");
             }
         } catch (Exception e) {
             LoggerUtil.logException("会话恢复处理异常", e);

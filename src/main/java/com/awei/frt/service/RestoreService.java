@@ -43,8 +43,7 @@ public class RestoreService {
                 System.out.println("\n=========================================");
                 System.out.println("[执行] 恢复操作");
                 System.out.println("=========================================");
-                System.out.println("[失败] 没有找到可用的备份记录");
-                System.out.println("请先执行更新操作以创建备份");
+                LoggerUtil.logWarn("[失败] 没有找到可用的备份记录，请先执行更新操作以创建备份");
                 return;
             }
 
@@ -76,7 +75,7 @@ public class RestoreService {
                 String choice = scanner.nextLine().trim();
 
                 if (choice.equals("0")) {
-                    System.out.println("ℹ️  已返回主菜单");
+                    System.out.println("[返回] 已返回主菜单");
                     return;
                 }
 
@@ -139,12 +138,12 @@ public class RestoreService {
                         String confirmDelete = scanner.nextLine().trim().toLowerCase();
 
                         if (!confirmDelete.equals("y") && !confirmDelete.equals("yes")) {
-                            System.out.println("[信息] 已取消删除操作");
+                            LoggerUtil.logInfo("[信息] 已取消删除操作");
                             continue;
                         }
 
                         // 执行删除（从后往前删除，避免索引变化）
-                        System.out.println("\n[删除] 开始删除备份记录...");
+                        LoggerUtil.logInfo("[删除] 开始删除备份记录...");
                         int successCount = 0;
                         int failCount = 0;
                         for (int i = deleteIndexes.size() - 1; i >= 0; i--) {
@@ -160,7 +159,7 @@ public class RestoreService {
                             fileNames.remove(index);
                         }
 
-                        System.out.println("[成功] 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");
+                        LoggerUtil.logInfo("[成功] 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");
 
                     } catch (NumberFormatException e) {
                         System.out.println("[失败] 无效的输入，请输入数字或范围格式(如 1-5)");
@@ -220,23 +219,23 @@ public class RestoreService {
                     String confirm = scanner.nextLine().trim().toLowerCase();
 
                     if (!confirm.equals("y") && !confirm.equals("yes")) {
-                        System.out.println("[信息] 已取消恢复操作");
+                        LoggerUtil.logInfo("[信息] 已取消恢复操作");
                         continue;
                     }
 
                     // 7. 执行恢复
-                    System.out.println("\n[执行] 开始执行恢复操作...");
+                    LoggerUtil.logInfo("[执行] 开始执行恢复操作...");
                     RestoreResult restoreResult = BackupFileLoader.restoreFromResult(selectedResult, scanner);
 
                     // 8. 显示恢复结果
                     System.out.println("\n=========================================");
                     System.out.println("[STATS] 恢复结果统计");
                     System.out.println("=========================================");
-                    System.out.println("恢复时间: " + restoreResult.getRestoreTime()
-                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-                    System.out.println("成功恢复: " + restoreResult.getSuccessCount());
-                    System.out.println("恢复失败: " + restoreResult.getFailureCount());
-                    System.out.println("回滚操作: " + restoreResult.getRollbackCount());
+                    LoggerUtil.logInfo("[STATS] 恢复时间: " + restoreResult.getRestoreTime()
+                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                            + ", 成功 " + restoreResult.getSuccessCount()
+                            + ", 失败 " + restoreResult.getFailureCount()
+                            + ", 回滚 " + restoreResult.getRollbackCount());
 
                     if (restoreResult.getFailureCount() > 0) {
                         System.out.println("\n失败信息:");
@@ -247,11 +246,11 @@ public class RestoreService {
 
                     System.out.println("-----------------------------------------");
                     if (restoreResult.isFullSuccess()) {
-                        System.out.println("[成功] 系统已成功恢复到操作前的状态");
+                        LoggerUtil.logInfo("[成功] 系统已成功恢复到操作前的状态");
                     } else if (restoreResult.getRollbackCount() > 0) {
-                        System.out.println("[警告] 系统已回滚，但可能处于部分恢复状态");
+                        LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
                     } else {
-                        System.out.println("[失败] 系统恢复失败，可能处于不一致状态");
+                        LoggerUtil.logError("[失败] 系统恢复失败，可能处于不一致状态");
                     }
 
                     // 按任意键继续

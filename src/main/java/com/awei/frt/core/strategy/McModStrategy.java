@@ -70,20 +70,20 @@ public class McModStrategy implements OperationStrategy{
 
                 boolean b = FileUtil.addFile(sourceFilePath, targetFilePath, operationRecord);
                 context.recordOperation(operationRecord);
-                System.out.println("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
+                LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
                 continue;
             }
             // 如果目标层有该mod，则替换（目标层不存在该mod时跳过，避免NPE）
             if (replaceType && targetModInfo != null && currentModInfo.getId().equals(targetModInfo.getId())) {
                 // 参数 onlyIfVersionChanged=true：目标已是相同版本则跳过替换
                 if (onlyIfVersionChanged && currentModInfo.getVersion().equals(targetModInfo.getVersion())) {
-                    System.out.println("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
+                    LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
                     continue;
                 }
 
                 boolean b = FileUtil.replaceFile(sourceFilePath, targetFilePath, operationRecord);
                 context.recordOperation(operationRecord);
-                System.out.println("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
+                LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
                         "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
                 continue;
             }
@@ -92,7 +92,7 @@ public class McModStrategy implements OperationStrategy{
                 Path deleteFilePath = targetModInfo.getPath();
                 boolean b = FileUtil.deleteFile(deleteFilePath, operationRecord);
                 context.recordOperation(operationRecord);
-                System.out.println("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
+                LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
                 continue;
             }
         }
@@ -111,7 +111,7 @@ public class McModStrategy implements OperationStrategy{
                     // 版本占位符自动兜底（MANIFEST.MF -> 文件名）
                     List<ModInfo> modInfos = ModMetadataParser.parseJar(file);
                     if (modInfos.isEmpty()) {
-                        System.out.println("未找到支持的模组元数据（已跳过）: " + file.getFileName());
+                        LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file.getFileName());
                         return;
                     }
                     for (ModInfo modInfo : modInfos) {
@@ -121,7 +121,7 @@ public class McModStrategy implements OperationStrategy{
                 catch (Throwable e) {
                     // 兜底：单个 jar 解析失败只跳过该 jar，不影响整个更新流程
                     if(!(e instanceof ZipException)){
-                        System.err.println("读取 mod 文件失败（已跳过）: " + file.getFileName() + " - " + e);
+                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file.getFileName() + " - " + e);
                     }
                 }
             });

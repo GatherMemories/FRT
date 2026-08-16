@@ -4,6 +4,7 @@ import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
+import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,13 +42,13 @@ public class FileSameNameStrategy implements OperationStrategy {
 
         // 检查文件是否匹配patterns（白名单）
         if (!matches(fileName, patterns, caseSensitive)) {
-            System.out.println("忽略文件：" + fileName);
+            LoggerUtil.logInfo("忽略文件：" + fileName);
             return;
         }
         // 检查文件是否被排除（黑名单）：空排除列表表示不排除任何文件
         // （注意：matches 对空列表返回 true 是"白名单匹配所有"语义，不能直接用于黑名单）
         if (excludePatterns != null && !excludePatterns.isEmpty() && matches(fileName, excludePatterns, caseSensitive)) {
-            System.out.println("忽略文件：" + fileName);
+            LoggerUtil.logInfo("忽略文件：" + fileName);
             return;
         }
 
@@ -70,7 +71,7 @@ public class FileSameNameStrategy implements OperationStrategy {
         if (addType && !targetFileExists) {
             boolean b = FileUtil.addFile(node.getPath(), targetFilePath, operationRecord);
             context.recordOperation(operationRecord);
-            System.out.println("+ " + fileName + " " + (b ? "成功" : "失败"));
+            LoggerUtil.logInfo("+ " + fileName + " " + (b ? "成功" : "失败"));
             return;
         }
 
@@ -78,7 +79,7 @@ public class FileSameNameStrategy implements OperationStrategy {
         if (replaceType && targetFileExists) {
             boolean b = FileUtil.replaceFile(node.getPath(), targetFilePath, operationRecord);
             context.recordOperation(operationRecord);
-            System.out.println("= " + fileName + " " + (b ? "成功" : "失败"));
+            LoggerUtil.logInfo("= " + fileName + " " + (b ? "成功" : "失败"));
             return;
         }
 
@@ -86,7 +87,7 @@ public class FileSameNameStrategy implements OperationStrategy {
         if (deleteType) {
             boolean b = FileUtil.deleteFile(targetFilePath, operationRecord);
             context.recordOperation(operationRecord);
-            System.out.println("- " + fileName + " " + (b ? "成功" : "失败"));
+            LoggerUtil.logInfo("- " + fileName + " " + (b ? "成功" : "失败"));
             return;
         }
     }

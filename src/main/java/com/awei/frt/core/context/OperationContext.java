@@ -8,6 +8,8 @@ import com.awei.frt.model.ProcessingResult;
 import java.nio.file.Path;
 import java.util.Map;
 
+import com.awei.frt.util.LoggerUtil;
+
 /**
  * 操作上下文
  * 管理操作的状态和执行结果
@@ -67,14 +69,9 @@ public class OperationContext {
      */
     public void printStatistics() {
         System.out.println("-----------------------------------------");
-        System.out.println("[STATS] 处理统计:");
-        System.out.println("   [成功] 成功处理: " + getSuccessCount() + " 个文件");
-        if (getSkipCount() > 0) {
-            System.out.println("   [跳过] 跳过文件: " + getSkipCount() + " 个文件");
-        }
-        if (getErrorCount() > 0) {
-            System.out.println("   [失败] 处理失败: " + getErrorCount() + " 个文件");
-        }
+        LoggerUtil.logInfo("[STATS] 处理统计: 成功 " + getSuccessCount() + " 个文件"
+                + (getSkipCount() > 0 ? ", 跳过 " + getSkipCount() + " 个文件" : "")
+                + (getErrorCount() > 0 ? ", 失败 " + getErrorCount() + " 个文件" : ""));
         System.out.println("-----------------------------------------");
     }
 

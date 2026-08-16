@@ -65,32 +65,28 @@ public class ConfigLoader {
      * 记录信息级别日志
      */
     private static void logInfo(String message) {
-        LoggerUtil instance = LoggerUtil.getInstance(null);
-        instance.logInfo(message);
+        LoggerUtil.logInfo(message);
     }
 
     /**
      * 记录警告级别日志
      */
     private static void logWarn(String message) {
-        LoggerUtil instance = LoggerUtil.getInstance(null);
-        instance.logWarn(message);
+        LoggerUtil.logWarn(message);
     }
 
     /**
      * 记录错误级别日志
      */
     private static void logError(String message) {
-        LoggerUtil instance = LoggerUtil.getInstance(null);
-        instance.logError(message);
+        LoggerUtil.logError(message);
     }
 
     /**
      * 记录错误级别日志（带异常）
      */
     private static void logError(String message, Throwable throwable) {
-        LoggerUtil instance = LoggerUtil.getInstance(null);
-        instance.logError(message, throwable);
+        LoggerUtil.logException(message, throwable);
     }
 
 

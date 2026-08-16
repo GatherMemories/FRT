@@ -99,13 +99,6 @@ public class LoggerUtil {
     }
 
     /**
-     * 记录信息级别日志（控制台+文件）
-     */
-    public void logInfo(String message) {
-        logger.info(message);
-    }
-
-    /**
      * 记录信息级别日志（仅文件）
      */
     public void logInfoFileOnly(String message) {
@@ -113,24 +106,10 @@ public class LoggerUtil {
     }
 
     /**
-     * 记录警告级别日志（控制台+文件）
-     */
-    public void logWarn(String message) {
-        logger.warn(message);
-    }
-
-    /**
      * 记录警告级别日志（仅文件）
      */
     public void logWarnFileOnly(String message) {
         fileOnlyLogger.warn(message);
-    }
-
-    /**
-     * 记录错误级别日志（控制台+文件）
-     */
-    public void logError(String message) {
-        logger.error(message);
     }
 
     /**
@@ -202,6 +181,37 @@ public class LoggerUtil {
      * @param message 错误消息
      */
     public static void logErrorMsg(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        getInstance(null).logger.error(message);
+    }
+
+    /**
+     * 统一记录信息级别日志（控制台+文件）
+     * 业务关键事件（操作开始/完成/统计等）请使用本方法替代 System.out.println
+     */
+    public static void logInfo(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        getInstance(null).logger.info(message);
+    }
+
+    /**
+     * 统一记录警告级别日志（控制台+文件）
+     */
+    public static void logWarn(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        getInstance(null).logger.warn(message);
+    }
+
+    /**
+     * 统一记录错误级别日志（控制台+文件）
+     */
+    public static void logError(String message) {
         if (message == null || message.isBlank()) {
             return;
         }

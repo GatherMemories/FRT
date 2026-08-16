@@ -534,11 +534,11 @@ public class BackupFileLoader {
 
                 // 只恢复成功的操作
                 if (!record.isSuccess()) {
-                    System.out.println("[跳过] 跳过失败的操作: " + record.getOperationType() + " - " + record.getTargetPath());
+                    LoggerUtil.logInfo("[跳过] 跳过失败的操作: " + record.getOperationType() + " - " + record.getTargetPath());
                     continue;
                 }
 
-                System.out.println("[执行] 恢复操作: " + record.getOperationType() + " - " + record.getTargetPath());
+                LoggerUtil.logInfo("[执行] 恢复操作: " + record.getOperationType() + " - " + record.getTargetPath());
 
                 // 恢复单个记录
                 boolean success = restoreSingleRecord(record, restoreResult);
@@ -547,21 +547,20 @@ public class BackupFileLoader {
                     restoredRecords.add(record);
                 } else {
                     // 恢复失败，询问用户是否回滚
-                    System.err.println("[失败] 恢复失败: " + record.getTargetPath());
+                    LoggerUtil.logError("[失败] 恢复失败: " + record.getTargetPath());
                     System.out.println("\n恢复过程中遇到失败，是否要回滚已恢复的操作？(y/n)");
 
                     String choice = scanner.nextLine().trim().toLowerCase();
                     if (choice.equals("y") || choice.equals("yes")) {
-                        System.out.println("[执行] 开始回滚已恢复的操作...");
+                        LoggerUtil.logInfo("[执行] 开始回滚已恢复的操作...");
                         rollbackRestoredOperations(restoredRecords, restoreResult);
                     }
                     return restoreResult;
                 }
             }
 
-            System.out.println("\n[成功] 文件恢复完成！");
-            System.out.println("[STATS] 成功: " + restoreResult.getSuccessCount());
-            System.out.println("[STATS] 失败: " + restoreResult.getFailureCount());
+            LoggerUtil.logInfo("[成功] 文件恢复完成！");
+            LoggerUtil.logInfo("[STATS] 成功: " + restoreResult.getSuccessCount() + ", 失败: " + restoreResult.getFailureCount());
 
         } catch (Exception e) {
             LoggerUtil.logException("恢复操作失败", e);
@@ -618,14 +617,14 @@ public class BackupFileLoader {
 
             // 检查文件是否存在
             if (!Files.exists(targetPath)) {
-                System.out.println("[信息] 文件不存在，无需删除: " + targetPath);
+                LoggerUtil.logInfo("[信息] 文件不存在，无需删除: " + targetPath);
                 restoreResult.incrementSuccess();
                 return true;
             }
 
             // 删除文件
             Files.delete(targetPath);
-            System.out.println("[成功] 已删除文件: " + targetPath);
+            LoggerUtil.logInfo("[成功] 已删除文件: " + targetPath);
             restoreResult.incrementSuccess();
             return true;
 
@@ -677,7 +676,7 @@ public class BackupFileLoader {
 
             // 恢复文件（复制备份文件到目标位置）
             Files.copy(backupFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            System.out.println("[成功] 已恢复文件: " + targetPath);
+            LoggerUtil.logInfo("[成功] 已恢复文件: " + targetPath);
             restoreResult.incrementSuccess();
             return true;
 
@@ -707,7 +706,7 @@ public class BackupFileLoader {
 
             // 检查文件是否已存在
             if (Files.exists(targetPath)) {
-                System.out.println("[信息] 文件已存在，无需恢复: " + targetPath);
+                LoggerUtil.logInfo("[信息] 文件已存在，无需恢复: " + targetPath);
                 restoreResult.incrementSuccess();
                 return true;
             }
@@ -735,7 +734,7 @@ public class BackupFileLoader {
 
             // 恢复文件（复制备份文件到目标位置）
             Files.copy(backupFile, targetPath);
-            System.out.println("[成功] 已恢复文件: " + targetPath);
+            LoggerUtil.logInfo("[成功] 已恢复文件: " + targetPath);
             restoreResult.incrementSuccess();
             return true;
 
@@ -766,11 +765,11 @@ public class BackupFileLoader {
      */
     private static void rollbackRestoredOperations(List<OperationRecord> restoredRecords, RestoreResult restoreResult) {
         if (restoredRecords == null || restoredRecords.isEmpty()) {
-            System.out.println("[信息] 没有需要回滚的操作");
+            LoggerUtil.logInfo("[信息] 没有需要回滚的操作");
             return;
         }
 
-        System.out.println("[执行] 开始回滚 " + restoredRecords.size() + " 个已恢复的操作...");
+        LoggerUtil.logInfo("[执行] 开始回滚 " + restoredRecords.size() + " 个已恢复的操作...");
 
         // 对已恢复的操作按正序回滚（即重新执行原来的操作）
         for (OperationRecord record : restoredRecords) {
@@ -787,7 +786,7 @@ public class BackupFileLoader {
                             Files.createDirectories(parentDir);
                         }
                         Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                        System.out.println("[成功] 已回滚 ADD 操作: " + targetPath);
+                        LoggerUtil.logInfo("[成功] 已回滚 ADD 操作: " + targetPath);
                         restoreResult.incrementRollback();
                     }
                 } else if (OperationContext.OPERATION_REPLACE.equals(operationType)) {
@@ -795,14 +794,14 @@ public class BackupFileLoader {
                     Path sourcePath = record.getSourcePath();
                     if (sourcePath != null && Files.exists(sourcePath)) {
                         Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                        System.out.println("[成功] 已回滚 REPLACE 操作: " + targetPath);
+                        LoggerUtil.logInfo("[成功] 已回滚 REPLACE 操作: " + targetPath);
                         restoreResult.incrementRollback();
                     }
                 } else if (OperationContext.OPERATION_DELETE.equals(operationType)) {
                     // 回滚 DELETE 操作：重新删除文件
                     if (Files.exists(targetPath)) {
                         Files.delete(targetPath);
-                        System.out.println("[成功] 已回滚 DELETE 操作: " + targetPath);
+                        LoggerUtil.logInfo("[成功] 已回滚 DELETE 操作: " + targetPath);
                         restoreResult.incrementRollback();
                     }
                 }
@@ -812,7 +811,7 @@ public class BackupFileLoader {
             }
         }
 
-        System.out.println("[成功] 回滚完成！");
+        LoggerUtil.logInfo("[成功] 回滚完成！");
     }
 
 
@@ -882,7 +881,7 @@ public class BackupFileLoader {
                     if (backupFilePath != null && Files.exists(backupFilePath)) {
                         boolean deleted = deleteBackupFile(backupFilePath);
                         if (deleted) {
-                            System.out.println("[成功] 已删除未使用的备份文件: " + backupFilePath.getFileName());
+                            LoggerUtil.logInfo("[成功] 已删除未使用的备份文件: " + backupFilePath.getFileName());
                         }
                     }
                 }
@@ -894,7 +893,7 @@ public class BackupFileLoader {
                 Path recordPath = backupPath.resolve("record").resolve(fileName).normalize();
                 if (Files.exists(recordPath)) {
                     Files.delete(recordPath);
-                    System.out.println("[成功] 已删除备份记录文件: " + fileName);
+                    LoggerUtil.logInfo("[成功] 已删除备份记录文件: " + fileName);
                     return true;
                 }
             }

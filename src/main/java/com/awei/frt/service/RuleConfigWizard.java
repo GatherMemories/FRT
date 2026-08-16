@@ -282,7 +282,7 @@ public class RuleConfigWizard {
             // 自校验：用解析器反读，确保格式正确
             String readBack = Files.readString(ruleFile);
             if (MatchRuleLoader.fromJson(readBack) != null) {
-                System.out.println("[校验] 规则文件解析校验通过 ✓");
+                System.out.println("[校验] 规则文件解析校验通过 [OK]");
             } else {
                 System.out.println("[警告] 规则文件解析校验失败，请检查内容");
             }
