@@ -25,14 +25,12 @@ public class ConfigLoaderTest {
             System.out.println("  - Update Path: " + config.getUpdatePath());
             System.out.println("  - Delete Path: " + config.getDeletePath());
             System.out.println("  - Backup Path: " + config.getBackupPath());
-            System.out.println("  - Log Path: " + config.getLogPath());
 
             // 验证路径字段是否正确反序列化为Path对象
             assertTrue(config.getTargetPath() instanceof Path, "Target path should be a Path instance");
             assertTrue(config.getUpdatePath() instanceof Path, "Update path should be a Path instance");
             assertTrue(config.getDeletePath() instanceof Path, "Delete path should be a Path instance");
             assertTrue(config.getBackupPath() instanceof Path, "Backup path should be a Path instance");
-            assertTrue(config.getLogPath() instanceof Path, "Log path should be a Path instance");
 
             // 验证配置的其他属性
             assertEquals("INFO", config.getLogLevel(), "Log level should be INFO by default");

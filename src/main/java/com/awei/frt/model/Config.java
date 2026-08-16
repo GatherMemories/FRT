@@ -14,7 +14,7 @@ import java.nio.file.Paths;
  * 配置模型
  * 存储系统运行所需的基本配置信息
  */
-@JsonIgnoreProperties({"baseDirectory", "logPath"})
+@JsonIgnoreProperties({"baseDirectory"})
 public class Config implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -24,7 +24,6 @@ public class Config implements Serializable {
     private Path targetPath;         // 目标目录（相对路径，默认：THtest）
     private Path deletePath;         // 删除文件目录（相对路径，默认：delete）
     private Path backupPath;         // 备份目录（相对路径，默认：backup）
-    private transient Path logPath;            // 日志目录（相对路径，默认：logs）
     private String logLevel;         // 日志级别（默认：INFO）
 
     public Config() {
@@ -33,7 +32,6 @@ public class Config implements Serializable {
         this.targetPath = Path.of("THtest");
         this.deletePath = Path.of("delete");
         this.backupPath = Path.of("backup");
-        this.logPath = Path.of("logs");
         this.logLevel = "INFO";
     }
 
@@ -185,14 +183,6 @@ public class Config implements Serializable {
         this.backupPath = backupPath;
     }
 
-    public Path getLogPath() {
-        return logPath;
-    }
-
-    public void setLogPath(Path logPath) {
-        this.logPath = logPath;
-    }
-
     public String getLogLevel() {
         return logLevel;
     }
@@ -208,7 +198,6 @@ public class Config implements Serializable {
                 ", updatePath=" + updatePath +
                 ", targetPath=" + targetPath +
                 ", backupPath=" + backupPath +
-                ", logPath=" + logPath +
                 ", logLevel='" + logLevel + '\'' +
                 '}';
     }

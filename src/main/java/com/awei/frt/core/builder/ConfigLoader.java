@@ -33,8 +33,6 @@ public class ConfigLoader {
     private static Path deletePath;
     // 备份文件夹（绝对路径）
     private static Path backupPath;
-    // logs文件夹（绝对路径）
-    private static Path logsPath;
 
     // 私有构造函数，防止实例化
     private ConfigLoader() {
@@ -260,7 +258,6 @@ public class ConfigLoader {
         Path defaultUpdatePath = Path.of("update");
         Path defaultDeletePath = Path.of("delete");
         Path defaultBackupPath = Path.of("backup");
-        Path defaultLogPath = Path.of("logs");
         String defaultLogLevel = "INFO";
 
         logInfo("[列表] 配置信息:");
@@ -269,7 +266,6 @@ public class ConfigLoader {
         logInfo("   删除目录: " + config.getDeletePath());
         logInfo("   目标目录: " + config.getTargetPath());
         logInfo("   备份目录: " + config.getBackupPath());
-        logInfo("   日志目录: " + config.getLogPath());
         logInfo("   日志级别: " + config.getLogLevel());
         logInfo("");
 
@@ -282,8 +278,6 @@ public class ConfigLoader {
                                                defaultDeletePath, "删除目录");
         backupPath = validateAndEnsureDirectory(basePath, config.getBackupPath(),
                                                defaultBackupPath, "备份目录");
-        logsPath = validateAndEnsureDirectory(basePath, config.getLogPath(),
-                                             defaultLogPath, "日志目录");
 
         config.setLogLevel(config.getLogLevel().isEmpty() ? defaultLogLevel : config.getLogLevel());
 
@@ -292,7 +286,6 @@ public class ConfigLoader {
         config.setUpdatePath(Config.toRelativePath(updatePath, basePath));
         config.setDeletePath(Config.toRelativePath(deletePath, basePath));
         config.setBackupPath(Config.toRelativePath(backupPath, basePath));
-        config.setLogPath(Config.toRelativePath(logsPath, basePath));
 
     }
 
@@ -315,11 +308,6 @@ public class ConfigLoader {
     // 获取备份文件夹（绝对路径）
     public static Path getBackupPath() {
         return backupPath;
-    }
-
-    // 获取logs文件夹（绝对路径）
-    public static Path getLogsPath() {
-        return logsPath;
     }
 
 }

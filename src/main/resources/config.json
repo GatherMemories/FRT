@@ -3,6 +3,5 @@
   "targetPath": "./testDic/THtest",
   "deletePath": "./testDic/delete",
   "backupPath": "./testDic/backup",
-  "logPath": "./testDic/logs",
   "logLevel": "INFO"
 }
