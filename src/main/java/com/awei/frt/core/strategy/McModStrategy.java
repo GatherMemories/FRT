@@ -50,8 +50,11 @@ public class McModStrategy implements OperationStrategy{
         Map<String, ModInfo> targetModInfoMap = getModInfo(entryTargetPath);
 
         // 处理逻辑（仅记录操作，不进行 增、删、改，之后统一操作，方便 “补偿式事务”）
-        // 策略扩展参数：onlyIfVersionChanged=true 时，目标已有同版本模组则跳过替换
+        // 策略扩展参数：
+        //   onlyIfVersionChanged=true 时，目标已有同版本模组则跳过替换（版本字符串比较）
+        //   onlyIfContentSame=true 时，目标文件与源文件内容（MD5）相同则跳过替换（更准确，可识别同版本重打包的内容变化）
         boolean onlyIfVersionChanged = Boolean.parseBoolean(context.getRuleParam("onlyIfVersionChanged"));
+        boolean onlyIfContentSame = Boolean.parseBoolean(context.getRuleParam("onlyIfContentSame"));
         for (String modId : currentModInfoMap.keySet()) {
             ModInfo currentModInfo = currentModInfoMap.get(modId);
             ModInfo targetModInfo = targetModInfoMap.get(modId);
@@ -75,6 +78,11 @@ public class McModStrategy implements OperationStrategy{
             }
             // 如果目标层有该mod，则替换（目标层不存在该mod时跳过，避免NPE）
             if (replaceType && targetModInfo != null && currentModInfo.getId().equals(targetModInfo.getId())) {
+                // 参数 onlyIfContentSame=true：源与目标文件 MD5 相同则跳过替换（内容一致无需更新）
+                if (onlyIfContentSame && isFileContentSame(sourceFilePath, targetFilePath)) {
+                    LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 内容相同(MD5)，跳过替换");
+                    continue;
+                }
                 // 参数 onlyIfVersionChanged=true：目标已是相同版本则跳过替换
                 if (onlyIfVersionChanged && currentModInfo.getVersion().equals(targetModInfo.getVersion())) {
                     LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
@@ -96,6 +104,16 @@ public class McModStrategy implements OperationStrategy{
                 continue;
             }
         }
+    }
+
+    /**
+     * 判断源与目标文件内容是否完全相同（MD5 比较）
+     * 任一文件不存在或计算失败时返回 false（保守：不确定就执行替换）
+     */
+    private boolean isFileContentSame(Path sourcePath, Path targetPath) {
+        String sourceMd5 = FileSignUtil.getFileMd5(sourcePath);
+        String targetMd5 = FileSignUtil.getFileMd5(targetPath);
+        return sourceMd5 != null && sourceMd5.equals(targetMd5);
     }
 
 
