@@ -184,6 +184,16 @@ src/main/java/com/awei/frt/
 mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 ```
 
+### 图形界面（Swing，基础版）
+
+支持图形界面启动（功能与控制台一致，交互确认改为对话框）：
+
+```bash
+java -jar FRT-0.1.0-SNAPSHOT.jar --ui
+```
+
+主窗口提供 更新文件 / 删除文件 / 恢复备份 / 规则向导 / 清理备份 五个按钮与实时日志区。
+
 ### 备份清理
 
 主菜单选择 **5. 清理孤立备份文件**：扫描 `backup/` 下未被任何操作记录引用的备份文件（记录被删但备份残留、手工放入、异常中断残留），列表展示并确认后删除，避免备份目录无限膨胀。
