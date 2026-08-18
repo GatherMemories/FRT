@@ -5,6 +5,8 @@ import com.awei.frt.core.builder.MatchRuleLoader;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.model.MatchRule;
 
+import com.awei.frt.util.LoggerUtil;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -59,9 +61,9 @@ public class RuleInheritanceContext {
                     rule.setPath(ruleFile); // 设置规则文件路径
                     return rule;
                 } catch (java.io.IOException e) {
-                    System.err.println("[警告]  读取规则文件失败: " + ruleFile + " - " + e.getMessage());
+                    LoggerUtil.logWarn("[警告] 读取规则文件失败: " + ruleFile + " - " + e.getMessage());
                 } catch (Exception e) {
-                    System.err.println("[警告]  解析规则失败: " + ruleFile + " - " + e.getMessage());
+                    LoggerUtil.logWarn("[警告] 解析规则失败: " + ruleFile + " - " + e.getMessage());
                 }
             }
         }

@@ -79,8 +79,12 @@ public class BackupFileLoader {
         if (Files.exists(backupPath)) {
             // 清空旧数据，避免重复加载
             backupFiles.clear();
+            // 备份记录/会话文件所在的 record 子目录：这些是操作记录 JSON，不是被备份的文件，
+            // 不应算进备份文件索引（否则会污染 MD5 索引并可能被误删/误恢复）
+            Path recordDir = backupPath.resolve("record").normalize();
             try (Stream<Path> paths = Files.walk(backupPath)) {
                 paths.filter(Files::isRegularFile) // 只保留文件
+                        .filter(filePath -> !filePath.startsWith(recordDir)) // 排除记录目录
                         .forEach(filePath -> {
                             if (backupFiles == null) {
                                 backupFiles = new HashMap<>();
@@ -492,6 +496,58 @@ public class BackupFileLoader {
         }
     }
 
+
+    /**
+     * 完成一次操作会话（服务层共用流程，消除 FileUpdateServiceNew/FileDeleteService 的重复代码）：
+     * 1. 正式保存操作记录到 backup/record/
+     * 2. 保存成功后清除实时会话记录（session-current.json）
+     * 3. 若本次操作存在失败项，询问用户是否执行恢复操作
+     *
+     * @param processingResult 处理结果
+     * @param scanner          用户输入
+     * @return 正式备份是否保存成功
+     */
+    public static boolean finishOperationSession(ProcessingResult processingResult, Scanner scanner) {
+        if (processingResult == null || processingResult.getSuccessCount() <= 0) {
+            return false;
+        }
+        LoggerUtil.logInfo("[执行] 正在备份操作文件...");
+        boolean backupSuccess = saveOperationRecord(processingResult);
+        if (backupSuccess) {
+            // 正式保存成功，清除实时会话记录
+            clearSessionRecord();
+            LoggerUtil.logInfo("[成功] 备份操作文件成功！");
+
+            if (processingResult.getErrorCount() > 0) {
+                LoggerUtil.logWarn("[警告] 检测到 " + processingResult.getErrorCount() + " 个文件处理失败");
+                System.out.println("是否要执行恢复操作，将系统恢复到操作前的状态？(y/n)");
+
+                String choice = scanner.nextLine().trim().toLowerCase();
+                if (choice.equals("y") || choice.equals("yes")) {
+                    LoggerUtil.logInfo("[执行] 开始执行恢复操作...");
+                    RestoreResult restoreResult = restoreFromResult(processingResult, scanner);
+
+                    // 打印恢复结果
+                    LoggerUtil.logInfo("[STATS] 恢复结果统计: 成功 " + restoreResult.getSuccessCount()
+                            + ", 失败 " + restoreResult.getFailureCount()
+                            + ", 回滚 " + restoreResult.getRollbackCount());
+
+                    if (restoreResult.isFullSuccess()) {
+                        LoggerUtil.logInfo("[成功] 系统已成功恢复到操作前的状态");
+                    } else if (restoreResult.getRollbackCount() > 0) {
+                        LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
+                    } else {
+                        LoggerUtil.logError("[失败] 系统恢复失败，可能处于不一致状态");
+                    }
+                } else {
+                    LoggerUtil.logInfo("[信息] 用户取消恢复操作");
+                }
+            }
+        } else {
+            LoggerUtil.logError("[失败] 备份操作文件失败！");
+        }
+        return backupSuccess;
+    }
 
     /**
      * 根据 ProcessingResult 对象，进行文件恢复操作

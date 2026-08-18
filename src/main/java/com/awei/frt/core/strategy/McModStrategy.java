@@ -12,7 +12,9 @@ import com.awei.frt.util.LoggerUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -24,6 +26,16 @@ import java.util.zip.ZipException;
  * 三个钩子都会按序执行（各自内部按 modId 遍历分派）。
  */
 public class McModStrategy extends AbstractOperationStrategy {
+
+    // 模组元数据解析 LRU 缓存（key=jar路径|mtime|size；大 mods 目录重复解析耗时，文件变化自动失效）
+    private static final int MOD_INFO_CACHE_MAX = 512;
+    private static final Map<String, List<ModInfo>> MOD_INFO_CACHE = Collections.synchronizedMap(
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, List<ModInfo>> eldest) {
+                    return size() > MOD_INFO_CACHE_MAX;
+                }
+            });
 
     @Override
     public String getStrategyType() {
@@ -166,9 +178,15 @@ public class McModStrategy extends AbstractOperationStrategy {
                     .filter(file -> file.toString().endsWith(".jar"))
                     .forEach(file -> {
                 try {
-                    // 自研解析器：自动检测平台（NeoForge/Forge/Fabric/Quilt/旧版Forge），
-                    // 版本占位符自动兜底（MANIFEST.MF -> 文件名）
-                    List<ModInfo> modInfos = ModMetadataParser.parseJar(file);
+                    // 解析缓存：jar 未变化（mtime+size 相同）时复用上次解析结果，避免大 mods 目录反复解压
+                    String cacheKey = file.toString() + "|" + Files.getLastModifiedTime(file).toMillis() + "|" + Files.size(file);
+                    List<ModInfo> modInfos = MOD_INFO_CACHE.get(cacheKey);
+                    if (modInfos == null) {
+                        // 自研解析器：自动检测平台（NeoForge/Forge/Fabric/Quilt/旧版Forge），
+                        // 版本占位符自动兜底（MANIFEST.MF -> 文件名）
+                        modInfos = ModMetadataParser.parseJar(file);
+                        MOD_INFO_CACHE.put(cacheKey, modInfos);
+                    }
                     if (modInfos.isEmpty()) {
                         LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file.getFileName());
                         return;

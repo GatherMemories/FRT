@@ -7,7 +7,6 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
-import com.awei.frt.model.RestoreResult;
 import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Path;
@@ -84,52 +83,11 @@ public class FileDeleteService {
             ProcessingResult processingResult = context.getProcessingResult();
             if(processingResult.getSuccessCount() > 0){
                 LoggerUtil.logInfo("[成功] 文件删除操作完成！");
+                // 备份操作记录 + 失败恢复询问（公共流程，见 BackupFileLoader.finishOperationSession）
+                BackupFileLoader.finishOperationSession(processingResult, scanner);
             }else{
                 LoggerUtil.logError("[失败] 文件删除操作失败！");
             }
-
-            if(processingResult.getSuccessCount() > 0){
-                // 备份操作记录
-                LoggerUtil.logInfo("[执行] 正在备份操作文件...");
-                boolean backupSuccess = BackupFileLoader.saveOperationRecord(context.getProcessingResult());
-                if (backupSuccess) {
-                    // 正式保存成功，清除实时会话记录
-                    BackupFileLoader.clearSessionRecord();
-                    LoggerUtil.logInfo("[成功] 备份操作文件成功！");
-
-                    // 判断有处理失败的文件时，是否执行恢复操作
-
-                    if (processingResult.getErrorCount() > 0 && processingResult.getSuccessCount() > 0) {
-                        LoggerUtil.logWarn("[警告] 检测到 " + processingResult.getErrorCount() + " 个文件处理失败");
-                        System.out.println("是否要执行恢复操作，将系统恢复到操作前的状态？(y/n)");
-
-                        String choice = scanner.nextLine().trim().toLowerCase();
-                        if (choice.equals("y") || choice.equals("yes")) {
-                            LoggerUtil.logInfo("[执行] 开始执行恢复操作...");
-                            RestoreResult restoreResult = BackupFileLoader.restoreFromResult(processingResult, scanner);
-
-                            // 打印恢复结果
-                            LoggerUtil.logInfo("[STATS] 恢复结果统计: 成功 " + restoreResult.getSuccessCount()
-                                    + ", 失败 " + restoreResult.getFailureCount()
-                                    + ", 回滚 " + restoreResult.getRollbackCount());
-
-                            if (restoreResult.isFullSuccess()) {
-                                LoggerUtil.logInfo("[成功] 系统已成功恢复到操作前的状态");
-                            } else if (restoreResult.getRollbackCount() > 0) {
-                                LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
-                            } else {
-                                LoggerUtil.logError("[失败] 系统恢复失败，可能处于不一致状态");
-                            }
-                        } else {
-                            LoggerUtil.logInfo("[信息] 用户取消恢复操作");
-                        }
-                    }
-
-                } else {
-                    LoggerUtil.logError("[失败] 备份操作文件失败！");
-                }
-            }
-
 
             return context.getProcessingResult();
         } catch (Exception e) {
