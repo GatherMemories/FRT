@@ -57,8 +57,12 @@ public class BackupFileLoaderTest {
             assertFalse(files.containsValue(recordJson), "backup/record/*.json 不应入索引");
             assertFalse(files.containsValue(sessionJson), "会话临时 json 不应入索引");
         } finally {
-            // 恢复真实备份索引，避免影响其他测试
-            BackupFileLoader.loadBackupFiles(ConfigLoader.getBackupPath());
+            // 恢复真实备份索引，避免影响其他测试（先初始化 ConfigLoader，避免静态字段未初始化 NPE）
+            ConfigLoader.getConfig();
+            Path realBackup = ConfigLoader.getBackupPath();
+            if (realBackup != null) {
+                BackupFileLoader.loadBackupFiles(realBackup);
+            }
         }
     }
 }

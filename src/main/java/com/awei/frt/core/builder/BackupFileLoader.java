@@ -169,8 +169,9 @@ public class BackupFileLoader {
         try {
             if (Files.isRegularFile(filePath)) {
                 String fileMd5 = FileSignUtil.getFileMd5(filePath);
-                if (backupFiles.containsKey(fileMd5)) {
-                    Files.delete(backupFiles.get(fileMd5));
+                Path indexedPath = backupFiles.get(fileMd5);
+                if (indexedPath != null) {
+                    Files.delete(indexedPath);
                     backupFiles.remove(fileMd5);
                     return true;
                 }
@@ -870,6 +871,85 @@ public class BackupFileLoader {
         LoggerUtil.logInfo("[成功] 回滚完成！");
     }
 
+
+    /**
+     * 查找孤立备份文件：备份索引中存在、但没有任何操作记录引用（sourceFileSign/targetFileSign）的文件。
+     * 来源：记录被删但备份残留、手工放入 backup/ 的文件、异常中断残留。
+     * @return 孤立备份文件列表（按路径排序），无则空列表
+     */
+    public static List<Path> findOrphanBackupFiles() {
+        return findOrphanBackupFiles(getOperationRecordFiles());
+    }
+
+    /**
+     * 查找孤立备份文件（可注入操作记录集合，便于测试）
+     * @param operationRecords 操作记录集合（key 不限）
+     * @return 孤立备份文件列表
+     */
+    public static List<Path> findOrphanBackupFiles(Map<String, ProcessingResult> operationRecords) {
+        Map<String, Path> files = getBackupFiles();
+        if (files == null || files.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // 收集所有操作记录引用的 MD5
+        Set<String> usedMd5 = new HashSet<>();
+        if (operationRecords != null) {
+            for (ProcessingResult result : operationRecords.values()) {
+                if (result == null || result.getOperationRecords() == null) {
+                    continue;
+                }
+                for (OperationRecord record : result.getOperationRecords()) {
+                    if (record.getSourceFileSign() != null && !record.getSourceFileSign().isEmpty()) {
+                        usedMd5.add(record.getSourceFileSign());
+                    }
+                    if (record.getTargetFileSign() != null && !record.getTargetFileSign().isEmpty()) {
+                        usedMd5.add(record.getTargetFileSign());
+                    }
+                }
+            }
+        }
+        List<Path> orphans = new ArrayList<>();
+        for (Map.Entry<String, Path> entry : files.entrySet()) {
+            if (!usedMd5.contains(entry.getKey())) {
+                orphans.add(entry.getValue());
+            }
+        }
+        orphans.sort(Comparator.comparing(Path::toString));
+        return orphans;
+    }
+
+    /**
+     * 清理孤立备份文件（交互版）：列出孤儿列表，用户确认后逐个删除
+     * @param scanner 用户输入
+     * @return 实际删除的文件数
+     */
+    public static int cleanupOrphanBackupFiles(Scanner scanner) {
+        List<Path> orphans = findOrphanBackupFiles();
+        if (orphans.isEmpty()) {
+            LoggerUtil.logInfo("[信息] 没有发现孤立备份文件");
+            return 0;
+        }
+        System.out.println("\n[列表] 孤立备份文件（未被任何备份记录引用）共 " + orphans.size() + " 个:");
+        System.out.println("-----------------------------------------");
+        for (int i = 0; i < orphans.size(); i++) {
+            System.out.printf("%d. %s%n", i + 1, orphans.get(i));
+        }
+        System.out.println("-----------------------------------------");
+        System.out.print("确认删除这些孤立备份文件吗？此操作不可逆！(y/n): ");
+        String choice = scanner.nextLine().trim().toLowerCase();
+        if (!choice.equals("y") && !choice.equals("yes")) {
+            LoggerUtil.logInfo("[信息] 已取消清理");
+            return 0;
+        }
+        int deleted = 0;
+        for (Path orphan : orphans) {
+            if (deleteBackupFile(orphan)) {
+                deleted++;
+            }
+        }
+        LoggerUtil.logInfo("[成功] 已删除孤立备份文件 " + deleted + "/" + orphans.size() + " 个");
+        return deleted;
+    }
 
     /**
      * 删除备份记录文件及其相关的备份文件

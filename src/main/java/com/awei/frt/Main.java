@@ -60,8 +60,9 @@ public class Main {
                 System.out.println("2. 删除文件");
                 System.out.println("3. 执行恢复操作");
                 System.out.println("4. 生成/编辑匹配规则配置文件");
-                System.out.println("5. 退出");
-                System.out.print("请输入选项 (1-5): ");
+                System.out.println("5. 清理孤立备份文件");
+                System.out.println("6. 退出");
+                System.out.print("请输入选项 (1-6): ");
 
                 String choice = scanner.nextLine().trim();
 
@@ -83,6 +84,10 @@ public class Main {
                         new RuleConfigWizard(config, scanner).start();
                         break;
                     case "5":
+                        LoggerUtil.logInfo("[清理] 执行孤立备份文件清理...");
+                        BackupFileLoader.cleanupOrphanBackupFiles(scanner);
+                        break;
+                    case "6":
                         LoggerUtil.logInfo("程序退出");
                         return;
                     default:
