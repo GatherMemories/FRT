@@ -1,105 +1,93 @@
 package com.awei.frt.factory;
 
-import com.awei.frt.core.strategy.*;
+import com.awei.frt.core.strategy.FileSameNameStrategy;
+import com.awei.frt.core.strategy.McModStrategy;
+import com.awei.frt.core.strategy.OperationStrategy;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
- * 策略工厂（工厂模式）
- * 用于创建不同类型的文件操作策略
+ * 策略工厂（注册表模式）
+ * 取代旧版 StrategyType 枚举 + switch：每个策略类自己声明 getStrategyType()，
+ * 工厂以 类型 -> 供应商(Supplier) 注册表登记，新增策略无需改动工厂代码
+ * （外部策略动态加载也通过 register 接入，见 StrategyLoader）。
  */
 public class StrategyFactory {
-    // 策略映射表（策略缓存，单例）
-    private static Map<String, OperationStrategy> strategyMap = new HashMap<>();
-    // StrategyFactory单例
-    private static volatile StrategyFactory instance = new StrategyFactory();
 
-    public enum StrategyType {
-        FILE_SAME_NAME("FileSameName", "文件名处理策略"),
-        MC_MOD("McMod", "mcMod处理策略");
+    // 策略注册表：类型 -> 供应商（保持注册顺序，便于菜单展示）
+    private static final Map<String, Supplier<OperationStrategy>> REGISTRY = new LinkedHashMap<>();
+    // 策略说明（菜单/向导展示用）
+    private static final Map<String, String> DESCRIPTIONS = new LinkedHashMap<>();
+    // 策略实例缓存（策略为无状态单例）
+    private static final Map<String, OperationStrategy> INSTANCE_CACHE = new HashMap<>();
 
-        private final String value;
-        private final String description;
-
-        StrategyType(String value, String description) {
-            this.value = value;
-            this.description = description;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        // 根据值获取枚举对象
-        public static StrategyType getByValue(String value) {
-            for (StrategyType type : values()) {
-                if (type.getValue().equals(value)) {
-                    return type;
-                }
-            }
-            return null;
-        }
+    // 内置策略注册（可被 register 覆盖；外部策略不得覆盖内置类型，见 StrategyLoader）
+    static {
+        register("FileSameName", FileSameNameStrategy::new, "同名文件处理策略（按文件名匹配，支持通配符）");
+        register("McMod", McModStrategy::new, "Minecraft 模组策略（按 modId 匹配 jar）");
     }
 
-    /**
-     * 私有构造函数，防止实例化
-     */
     private StrategyFactory() {
+        throw new UnsupportedOperationException("Utility class");
     }
 
     /**
-     * 获取策略工厂单例
-     * @return 策略工厂单例
+     * 注册策略类型（供内置注册与外部插件加载调用）
+     * @param type        策略类型标识（规则文件 strategyType 字段）
+     * @param supplier    策略实例供应商
+     * @param description 中文说明（可空）
      */
-    public static StrategyFactory getInstance() {
-        if(instance == null){
-            synchronized (StrategyFactory.class) {
-                if(instance == null){
-                    instance = new StrategyFactory();
-                }
-            }
+    public static synchronized void register(String type, Supplier<OperationStrategy> supplier, String description) {
+        if (type == null || type.isBlank()) {
+            throw new IllegalArgumentException("策略类型不能为空");
         }
-        return instance;
+        if (supplier == null) {
+            throw new IllegalArgumentException("策略供应商不能为空");
+        }
+        REGISTRY.put(type, supplier);
+        if (description != null && !description.isBlank()) {
+            DESCRIPTIONS.put(type, description);
+        }
+        // 重新注册后失效旧缓存
+        INSTANCE_CACHE.remove(type);
     }
 
     /**
-     * 创建匹配策略（单例）
-     * @param type 操作类型
-     * @return 对应的策略实例
+     * 策略类型是否已注册
      */
-    public static OperationStrategy createStrategy(StrategyType type) {
-        if(!strategyMap.containsKey(type.getValue())){
-            synchronized (StrategyFactory.class) {
-                if(!strategyMap.containsKey(type.getValue())){
-                    OperationStrategy strategy = null;
-                    switch (type) {
-                        case MC_MOD:
-                            strategy = new McModStrategy();
-                            break;
-                        case FILE_SAME_NAME:
-                            strategy = new FileSameNameStrategy();
-                            break;
-                        default:
-                            throw new IllegalArgumentException("不支持的匹配策略类型: " + type);
-                    }
-                    strategyMap.put(type.getValue(), strategy);
-                }
-            }
-        }
-        return strategyMap.get(type.getValue());
+    public static boolean isSupported(String type) {
+        return type != null && REGISTRY.containsKey(type);
     }
 
-    public static OperationStrategy createStrategy(String type) {
-        StrategyType strategyType = StrategyType.getByValue(type);
-        if (strategyType == null) {
+    /**
+     * 获取所有已注册的策略类型（不可修改视图）
+     */
+    public static Set<String> getSupportedTypes() {
+        return Collections.unmodifiableSet(REGISTRY.keySet());
+    }
+
+    /**
+     * 获取策略说明
+     */
+    public static String getDescription(String type) {
+        return DESCRIPTIONS.getOrDefault(type, "");
+    }
+
+    /**
+     * 创建（或取缓存）匹配策略
+     * @param type 策略类型（规则文件中的 strategyType）
+     * @return 策略实例（无状态单例）
+     */
+    public static synchronized OperationStrategy createStrategy(String type) {
+        Supplier<OperationStrategy> supplier = REGISTRY.get(type);
+        if (supplier == null) {
             throw new IllegalArgumentException("不支持的匹配策略类型: " + type);
         }
-        return createStrategy(strategyType);
+        return INSTANCE_CACHE.computeIfAbsent(type, k -> supplier.get());
     }
-
 }

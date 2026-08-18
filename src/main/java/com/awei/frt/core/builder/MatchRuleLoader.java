@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * @Author: mou_ren
@@ -26,17 +25,15 @@ public class MatchRuleLoader {
     public static MatchRule fromJson(String json) {
         try {
             // 去除 UTF-8 BOM（如果有），兼容记事本等编辑器保存的带BOM文件
-            if (json != null && json.startsWith("\uFEFF")) {
+            if (json != null && json.startsWith("﻿")) {
                 json = json.substring(1);
             }
             // 使用 Jackson 直接反序列化为对象
             MatchRule rule = objectMapper.readValue(json, MatchRule.class);
 
-            // 验证策略类型是否合法
-            if (rule.getStrategyType() != null) {
-                if (StrategyFactory.StrategyType.getByValue(rule.getStrategyType()) == null) {
-                    throw new IllegalArgumentException("策略类型不合法: " + rule.getStrategyType());
-                }
+            // 验证策略类型是否合法（注册表校验，取代旧枚举校验）
+            if (rule.getStrategyType() != null && !StrategyFactory.isSupported(rule.getStrategyType())) {
+                throw new IllegalArgumentException("策略类型不合法: " + rule.getStrategyType());
             }
 
             return rule;
@@ -52,40 +49,19 @@ public class MatchRuleLoader {
     }
 
     /**
-     * 检查文件名是否匹配规则
+     * 检查文件名是否匹配规则（统一走 GlobMatcher，正则元字符安全）
      */
     public static boolean matches(String fileName, MatchRule rule) {
-        // 如果有排除模式，且匹配任一排除模式，则不匹配
-        for (String excludePattern : rule.getExcludePatterns()) {
-            if (matchesPattern(fileName, excludePattern)) {
-                return false;
-            }
+        if (rule == null) {
+            return false;
+        }
+        // 黑名单：匹配任一排除模式则不匹配（空列表 = 不排除任何文件）
+        if (rule.getExcludePatterns() != null && !rule.getExcludePatterns().isEmpty()
+                && com.awei.frt.core.uitls.GlobMatcher.matchesAny(fileName, rule.getExcludePatterns(), true)) {
+            return false;
         }
 
-        // 如果没有指定模式，则匹配所有文件
-        if (rule.getPatterns().isEmpty()) {
-            return true;
-        }
-
-        // 检查是否匹配任一模式
-        for (String pattern : rule.getPatterns()) {
-            if (matchesPattern(fileName, pattern)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * 检查文件名是否匹配模式（支持通配符）
-     */
-    private static boolean matchesPattern(String fileName, String pattern) {
-        // 将通配符模式转换为正则表达式
-        String regex = pattern.replace(".", "\\.")
-                .replace("*", ".*")
-                .replace("?", ".");
-
-        return Pattern.matches(regex, fileName);
+        // 白名单：没有指定模式则匹配所有文件
+        return com.awei.frt.core.uitls.GlobMatcher.matchesAny(fileName, rule.getPatterns(), true);
     }
 }

@@ -12,7 +12,6 @@ import com.awei.frt.util.LoggerUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,90 +19,124 @@ import java.util.stream.Stream;
 import java.util.zip.ZipException;
 
 /**
- * @Author: mou_ren
- * @Date: 2026/1/10 20:04
+ * McMod 模组策略：按 modId 匹配 jar，处理目录级别的模组增/删/改。
+ * 目录级策略：一个目录内多个 mod 各自分派，因此 stopOnHandled=false，
+ * 三个钩子都会按序执行（各自内部按 modId 遍历分派）。
  */
-public class McModStrategy implements OperationStrategy{
-    // 一层一层目录里的文件处理
+public class McModStrategy extends AbstractOperationStrategy {
+
     @Override
-    public void execute(FileNode node, OperationContext context, String[] operationType) {
-        if (node == null || context == null) {
-            return;
-        }
-        // 文件直接返回
-        if (!node.isDirectory()) {
-            return;
-        }
-        String strategyType = context.getRuleInheritanceContext().getRuleChain().getStrategyType();
+    public String getStrategyType() {
+        return "McMod";
+    }
 
+    @Override
+    public String getDescription() {
+        return "Minecraft 模组策略（按 modId 匹配 jar）";
+    }
 
-        // 获取对应层目标文件夹
-        Path entryTargetPath = context.getTargetPath(node.getRelativePath());
+    @Override
+    protected boolean accepts(FileNode node, OperationContext context) {
+        return node.isDirectory();
+    }
 
-        // 判断操作类型
-        boolean addType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_ADD));
-        boolean replaceType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_REPLACE));
-        boolean deleteType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_DELETE));
-        // 获取当前层文件夹下所有文件
+    @Override
+    protected boolean stopOnHandled() {
+        return false;
+    }
+
+    /**
+     * 新增：目标层没有该 modId 时添加
+     */
+    @Override
+    protected boolean doAdd(FileNode node, OperationContext context) {
+        boolean any = false;
         Map<String, ModInfo> currentModInfoMap = getModInfo(node.getPath());
-        // 获取目标层文件夹下所有文件
-        Map<String, ModInfo> targetModInfoMap = getModInfo(entryTargetPath);
+        Map<String, ModInfo> targetModInfoMap = getModInfo(context.getTargetPath(node.getRelativePath()));
+        for (String modId : currentModInfoMap.keySet()) {
+            ModInfo currentModInfo = currentModInfoMap.get(modId);
+            if (targetModInfoMap.containsKey(modId)) {
+                continue;
+            }
+            OperationRecord record = newRecord(context);
+            Path targetFilePath = context.getTargetPath(node.getRelativePath())
+                    .resolve(currentModInfo.getPath().getFileName()).normalize();
+            boolean ok = FileUtil.addFile(currentModInfo.getPath(), targetFilePath, record);
+            context.recordOperation(record);
+            LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            any = true;
+        }
+        return any;
+    }
 
-        // 处理逻辑（仅记录操作，不进行 增、删、改，之后统一操作，方便 “补偿式事务”）
-        // 策略扩展参数：
-        //   onlyIfVersionChanged=true 时，目标已有同版本模组则跳过替换（版本字符串比较）
-        //   onlyIfContentSame=true 时，目标文件与源文件内容（MD5）相同则跳过替换（更准确，可识别同版本重打包的内容变化）
+    /**
+     * 替换：目标层已有同 modId 的 mod 时替换
+     * 策略扩展参数：
+     *   onlyIfVersionChanged=true 时，目标已有同版本模组则跳过替换（版本字符串比较）
+     *   onlyIfContentSame=true 时，目标文件与源文件内容（MD5）相同则跳过替换（更准确，可识别同版本重打包的内容变化）
+     */
+    @Override
+    protected boolean doReplace(FileNode node, OperationContext context) {
+        boolean any = false;
         boolean onlyIfVersionChanged = Boolean.parseBoolean(context.getRuleParam("onlyIfVersionChanged"));
         boolean onlyIfContentSame = Boolean.parseBoolean(context.getRuleParam("onlyIfContentSame"));
+
+        Map<String, ModInfo> currentModInfoMap = getModInfo(node.getPath());
+        Map<String, ModInfo> targetModInfoMap = getModInfo(context.getTargetPath(node.getRelativePath()));
+        Path entryTargetPath = context.getTargetPath(node.getRelativePath());
+
         for (String modId : currentModInfoMap.keySet()) {
             ModInfo currentModInfo = currentModInfoMap.get(modId);
             ModInfo targetModInfo = targetModInfoMap.get(modId);
+            if (targetModInfo == null) {
+                continue;
+            }
 
-            // 源文件和目标文件绝对路径
             Path sourceFilePath = currentModInfo.getPath();
             Path targetFilePath = entryTargetPath.resolve(currentModInfo.getPath().getFileName()).normalize();
 
-            // 创建操作记录对象，设置基础值
-            OperationRecord operationRecord = new OperationRecord();
-            operationRecord.setStrategyType(strategyType);
-
-
-            // 如果目标层没有该mod，则新增
-            if (addType && targetModInfo == null) {
-
-                boolean b = FileUtil.addFile(sourceFilePath, targetFilePath, operationRecord);
-                context.recordOperation(operationRecord);
-                LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
+            // 参数 onlyIfContentSame=true：源与目标文件 MD5 相同则跳过替换（内容一致无需更新）
+            if (onlyIfContentSame && isFileContentSame(sourceFilePath, targetFilePath)) {
+                LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 内容相同(MD5)，跳过替换");
                 continue;
             }
-            // 如果目标层有该mod，则替换（目标层不存在该mod时跳过，避免NPE）
-            if (replaceType && targetModInfo != null && currentModInfo.getId().equals(targetModInfo.getId())) {
-                // 参数 onlyIfContentSame=true：源与目标文件 MD5 相同则跳过替换（内容一致无需更新）
-                if (onlyIfContentSame && isFileContentSame(sourceFilePath, targetFilePath)) {
-                    LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 内容相同(MD5)，跳过替换");
-                    continue;
-                }
-                // 参数 onlyIfVersionChanged=true：目标已是相同版本则跳过替换
-                if (onlyIfVersionChanged && currentModInfo.getVersion().equals(targetModInfo.getVersion())) {
-                    LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
-                    continue;
-                }
+            // 参数 onlyIfVersionChanged=true：目标已是相同版本则跳过替换
+            if (onlyIfVersionChanged && currentModInfo.getVersion().equals(targetModInfo.getVersion())) {
+                LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
+                continue;
+            }
 
-                boolean b = FileUtil.replaceFile(sourceFilePath, targetFilePath, operationRecord);
-                context.recordOperation(operationRecord);
-                LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
-                        "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
-                continue;
-            }
-            // 删除操作：目标层存在该mod才删除（删除目标侧实际文件，不存在则无需处理）
-            if (deleteType && targetModInfo != null) {
-                Path deleteFilePath = targetModInfo.getPath();
-                boolean b = FileUtil.deleteFile(deleteFilePath, operationRecord);
-                context.recordOperation(operationRecord);
-                LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (b ? "成功" : "失败"));
-                continue;
-            }
+            OperationRecord record = newRecord(context);
+            boolean ok = FileUtil.replaceFile(sourceFilePath, targetFilePath, record);
+            context.recordOperation(record);
+            LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
+                    "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            any = true;
         }
+        return any;
+    }
+
+    /**
+     * 删除：目标层存在该 modId 时删除目标侧实际文件
+     */
+    @Override
+    protected boolean doDelete(FileNode node, OperationContext context) {
+        boolean any = false;
+        Map<String, ModInfo> currentModInfoMap = getModInfo(node.getPath());
+        Map<String, ModInfo> targetModInfoMap = getModInfo(context.getTargetPath(node.getRelativePath()));
+        for (String modId : currentModInfoMap.keySet()) {
+            ModInfo targetModInfo = targetModInfoMap.get(modId);
+            if (targetModInfo == null) {
+                continue;
+            }
+            OperationRecord record = newRecord(context);
+            Path deleteFilePath = targetModInfo.getPath();
+            boolean ok = FileUtil.deleteFile(deleteFilePath, record);
+            context.recordOperation(record);
+            LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            any = true;
+        }
+        return any;
     }
 
     /**
@@ -115,7 +148,6 @@ public class McModStrategy implements OperationStrategy{
         String targetMd5 = FileSignUtil.getFileMd5(targetPath);
         return sourceMd5 != null && sourceMd5.equals(targetMd5);
     }
-
 
     // 获取文件夹里的所有mod信息
     private Map<String, ModInfo> getModInfo(Path entryPath) {
@@ -148,5 +180,4 @@ public class McModStrategy implements OperationStrategy{
         }
         return modInfoMap;
     }
-
 }

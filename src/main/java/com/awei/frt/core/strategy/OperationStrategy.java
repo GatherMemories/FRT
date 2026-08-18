@@ -8,6 +8,22 @@ import com.awei.frt.core.node.FileNode;
  * 定义了所有文件操作策略的公共接口
  */
 public interface OperationStrategy {
+
+    /**
+     * 策略类型标识（注册表 key，也是规则文件 strategyType 字段的值）
+     * 由每个策略类自行声明（取代旧的 StrategyFactory.StrategyType 枚举）
+     * @return 策略类型字符串，如 "FileSameName" / "McMod"
+     */
+    String getStrategyType();
+
+    /**
+     * 策略说明（用于向导/菜单展示）
+     * @return 中文说明
+     */
+    default String getDescription() {
+        return "";
+    }
+
     /**
      * 执行操作（增、删、改）
      * @param node 文件节点

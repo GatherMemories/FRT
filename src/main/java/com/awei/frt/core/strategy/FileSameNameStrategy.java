@@ -3,124 +3,109 @@ package com.awei.frt.core.strategy;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.core.uitls.GlobMatcher;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 
 /**
- * @Author: mou_ren
- * @Date: 2026/1/10 19:50
  * 文件名称相同策略
- * 根据文件名进行匹配，支持通配符过滤，执行增、删、改操作
+ * 根据文件名进行匹配（统一走 GlobMatcher，支持通配符 * ? 且正则元字符安全），
+ * 执行增、删、改操作。只处理文件节点（目录节点交给 McMod 等目录级策略）。
  */
-public class FileSameNameStrategy implements OperationStrategy {
+public class FileSameNameStrategy extends AbstractOperationStrategy {
 
     @Override
-    public void execute(FileNode node, OperationContext context, String[] operationType) {
-        if (node == null || context == null) {
-            return;
-        }
+    public String getStrategyType() {
+        return "FileSameName";
+    }
 
-        // 如果是目录，不处理（文件节点会单独处理）
-        if (node.isDirectory()) {
-            return;
-        }
-
-        String fileName = node.getName();
-        String strategyType = context.getRuleInheritanceContext().getRuleChain().getStrategyType();
-
-        // 获取匹配规则
-        List<String> patterns = context.getRuleInheritanceContext().getRuleChain().getPatterns();
-        List<String> excludePatterns = context.getRuleInheritanceContext().getRuleChain().getExcludePatterns();
-
-        // 策略扩展参数：caseSensitive=false 时文件名匹配忽略大小写（默认 true 区分大小写）
-        boolean caseSensitive = !"false".equalsIgnoreCase(context.getRuleParam("caseSensitive"));
-
-        // 检查文件是否匹配patterns（白名单）
-        if (!matches(fileName, patterns, caseSensitive)) {
-            LoggerUtil.logInfo("忽略文件：" + fileName);
-            return;
-        }
-        // 检查文件是否被排除（黑名单）：空排除列表表示不排除任何文件
-        // （注意：matches 对空列表返回 true 是"白名单匹配所有"语义，不能直接用于黑名单）
-        if (excludePatterns != null && !excludePatterns.isEmpty() && matches(fileName, excludePatterns, caseSensitive)) {
-            LoggerUtil.logInfo("忽略文件：" + fileName);
-            return;
-        }
-
-        // 构建目标文件路径（相对同名路径）
-        Path targetFilePath = context.getTargetPath(node.getRelativePath());
-
-        // 判断操作类型
-        boolean addType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_ADD));
-        boolean replaceType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_REPLACE));
-        boolean deleteType = Arrays.stream(operationType).anyMatch(type -> type.equals(OperationContext.OPERATION_DELETE));
-
-        // 检查目标文件是否存在
-        boolean targetFileExists = Files.exists(targetFilePath);
-
-        // 创建操作记录对象，设置基础值
-        OperationRecord operationRecord = new OperationRecord();
-        operationRecord.setStrategyType(strategyType);
-
-        // 如果目标层没有该文件，则新增
-        if (addType && !targetFileExists) {
-            boolean b = FileUtil.addFile(node.getPath(), targetFilePath, operationRecord);
-            context.recordOperation(operationRecord);
-            LoggerUtil.logInfo("+ " + fileName + " " + (b ? "成功" : "失败"));
-            return;
-        }
-
-        // 如果目标层有同名文件，则替换
-        if (replaceType && targetFileExists) {
-            boolean b = FileUtil.replaceFile(node.getPath(), targetFilePath, operationRecord);
-            context.recordOperation(operationRecord);
-            LoggerUtil.logInfo("= " + fileName + " " + (b ? "成功" : "失败"));
-            return;
-        }
-
-        // 删除操作
-        if (deleteType) {
-            boolean b = FileUtil.deleteFile(targetFilePath, operationRecord);
-            context.recordOperation(operationRecord);
-            LoggerUtil.logInfo("- " + fileName + " " + (b ? "成功" : "失败"));
-            return;
-        }
+    @Override
+    public String getDescription() {
+        return "同名文件处理策略（按文件名匹配，支持通配符）";
     }
 
     /**
-     * 检查文件名是否匹配模式（白名单）
-     * @param fileName 文件名
-     * @param patterns 匹配模式列表
-     * @param caseSensitive 是否区分大小写
-     * @return 是否匹配
+     * 只处理文件；目录节点直接跳过（不产生忽略日志）
      */
-    private boolean matches(String fileName, List<String> patterns, boolean caseSensitive) {
-        if (patterns == null || patterns.isEmpty()) {
-            return true;
+    @Override
+    protected boolean accepts(FileNode node, OperationContext context) {
+        if (node.isDirectory()) {
+            return false;
         }
-        String name = caseSensitive ? fileName : fileName.toLowerCase(java.util.Locale.ROOT);
-        return patterns.stream().anyMatch(pattern -> {
-            if (pattern.isEmpty()) {
-                return true;
-            }
-            if (pattern.equals("*")) {
-                return true;
-            }
-            String p = caseSensitive ? pattern : pattern.toLowerCase(java.util.Locale.ROOT);
-            if (p.equals(name)) {
-                return true;
-            }
-            // 简单的 glob 模式匹配
-            String regex = p.replace(".", "\\.")
-                    .replace("*", ".*")
-                    .replace("?", ".");
-            return name.matches(regex);
-        });
+        return isMatch(node, context);
     }
 
+    /**
+     * 白名单/黑名单匹配
+     * 空白名单 = 匹配所有；空黑名单 = 不排除任何文件
+     */
+    private boolean isMatch(FileNode node, OperationContext context) {
+        String fileName = node.getName();
+        // 策略扩展参数：caseSensitive=false 时文件名匹配忽略大小写（默认 true 区分大小写）
+        boolean caseSensitive = !"false".equalsIgnoreCase(context.getRuleParam("caseSensitive"));
+
+        List<String> patterns = context.getRuleInheritanceContext().getRuleChain().getPatterns();
+        List<String> excludePatterns = context.getRuleInheritanceContext().getRuleChain().getExcludePatterns();
+
+        if (!GlobMatcher.matchesAny(fileName, patterns, caseSensitive)) {
+            LoggerUtil.logInfo("忽略文件：" + fileName);
+            return false;
+        }
+        // 黑名单：空列表表示不排除任何文件（matchesAny 空列表返回 true 是"白名单匹配所有"语义）
+        if (excludePatterns != null && !excludePatterns.isEmpty()
+                && GlobMatcher.matchesAny(fileName, excludePatterns, caseSensitive)) {
+            LoggerUtil.logInfo("忽略文件：" + fileName);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 新增：目标层没有该文件时才执行（已存在则交给 replace 钩子）
+     */
+    @Override
+    protected boolean doAdd(FileNode node, OperationContext context) {
+        Path targetFilePath = context.getTargetPath(node.getRelativePath());
+        if (Files.exists(targetFilePath)) {
+            return false;
+        }
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.addFile(node.getPath(), targetFilePath, record);
+        context.recordOperation(record);
+        LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
+        return true;
+    }
+
+    /**
+     * 替换：目标层存在同名文件时才执行
+     */
+    @Override
+    protected boolean doReplace(FileNode node, OperationContext context) {
+        Path targetFilePath = context.getTargetPath(node.getRelativePath());
+        if (!Files.exists(targetFilePath)) {
+            return false;
+        }
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.replaceFile(node.getPath(), targetFilePath, record);
+        context.recordOperation(record);
+        LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
+        return true;
+    }
+
+    /**
+     * 删除：按同名路径删除目标文件（目标不存在时由 FileUtil 记录失败）
+     */
+    @Override
+    protected boolean doDelete(FileNode node, OperationContext context) {
+        Path targetFilePath = context.getTargetPath(node.getRelativePath());
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.deleteFile(targetFilePath, record);
+        context.recordOperation(record);
+        LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
+        return true;
+    }
 }
