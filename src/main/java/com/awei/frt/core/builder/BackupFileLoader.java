@@ -108,7 +108,7 @@ public class BackupFileLoader {
     public static boolean addBackupFile(Path filePath) {
         try {
             if (!Files.isRegularFile(filePath)) {
-                System.err.println("备份文件失败: 不是有效文件");
+                LoggerUtil.logErrorMsg("备份文件失败: 不是有效文件");
                 return false;
             }
             // 检查文件是否已存在于备份文件列表中（存在更改为新路径）
@@ -194,14 +194,14 @@ public class BackupFileLoader {
         try {
             // 1. 检查record是否为null
             if (record == null || record.getOperationRecords() == null || record.getOperationRecords().isEmpty()) {
-                System.err.println("保存操作记录失败: 记录对象为空");
+                LoggerUtil.logErrorMsg("保存操作记录失败: 记录对象为空");
                 return false;
             }
 
             // 2. 检查备份路径是否可用
             Path backupPath = ConfigLoader.getBackupPath();
             if (backupPath == null) {
-                System.err.println("保存操作记录失败: 备份路径为空");
+                LoggerUtil.logErrorMsg("保存操作记录失败: 备份路径为空");
                 return false;
             }
 
@@ -213,7 +213,7 @@ public class BackupFileLoader {
 
             // 4. 验证备份路径确实是目录
             if (!Files.isDirectory(backupPath)) {
-                System.err.println("保存操作记录失败: 备份路径不是目录");
+                LoggerUtil.logErrorMsg("保存操作记录失败: 备份路径不是目录");
                 return false;
             }
 
@@ -225,14 +225,14 @@ public class BackupFileLoader {
 
             // 7. 验证文件路径在备份目录内（防止路径遍历攻击）
             if (!recordFilePath.startsWith(backupPath.normalize())) {
-                System.err.println("保存操作记录失败: 文件路径非法");
+                LoggerUtil.logErrorMsg("保存操作记录失败: 文件路径非法");
                 return false;
             }
 
             // 8. 检查父目录是否可写
             Path parentDir = recordFilePath.getParent();
             if (parentDir == null || !Files.isWritable(parentDir)) {
-                System.err.println("保存操作记录失败: 父目录不可写");
+                LoggerUtil.logErrorMsg("保存操作记录失败: 父目录不可写");
                 return false;
             }
 
@@ -300,7 +300,7 @@ public class BackupFileLoader {
             objectMapper.writeValue(sessionFile.toFile(), record);
             return true;
         } catch (Exception e) {
-            System.err.println("实时保存操作记录失败: " + e.getMessage());
+            LoggerUtil.logErrorMsg("实时保存操作记录失败: " + e.getMessage());
             return false;
         }
     }
@@ -334,7 +334,7 @@ public class BackupFileLoader {
             try {
                 Files.deleteIfExists(sessionFile);
             } catch (IOException e) {
-                System.err.println("清除会话记录失败: " + e.getMessage());
+                LoggerUtil.logErrorMsg("清除会话记录失败: " + e.getMessage());
             }
         }
     }
@@ -370,14 +370,14 @@ public class BackupFileLoader {
         try {
             // 1. 参数校验
             if (fileName == null || fileName.trim().isEmpty()) {
-                System.err.println("加载操作记录失败: 文件名为空");
+                LoggerUtil.logErrorMsg("加载操作记录失败: 文件名为空");
                 return null;
             }
 
             // 2. 检查备份路径是否可用
             Path backupRecordPath = ConfigLoader.getBackupPath().resolve("record").normalize();
             if (backupRecordPath == null) {
-                System.err.println("加载操作记录失败: 备份路径为空");
+                LoggerUtil.logErrorMsg("加载操作记录失败: 备份路径为空");
                 return null;
             }
 
@@ -387,19 +387,19 @@ public class BackupFileLoader {
 
             // 4. 验证文件路径在备份目录内
             if (!recordFilePath.startsWith(backupRecordPath.normalize())) {
-                System.err.println("加载操作记录失败: 文件路径非法");
+                LoggerUtil.logErrorMsg("加载操作记录失败: 文件路径非法");
                 return null;
             }
 
             // 5. 检查文件是否存在
             if (!Files.exists(recordFilePath)) {
-                System.err.println("加载操作记录失败: 文件不存在 - " + safeFileName);
+                LoggerUtil.logErrorMsg("加载操作记录失败: 文件不存在 - " + safeFileName);
                 return null;
             }
 
             // 6. 检查是否为常规文件
             if (!Files.isRegularFile(recordFilePath)) {
-                System.err.println("加载操作记录失败: 不是常规文件 - " + safeFileName);
+                LoggerUtil.logErrorMsg("加载操作记录失败: 不是常规文件 - " + safeFileName);
                 return null;
             }
 
@@ -429,7 +429,7 @@ public class BackupFileLoader {
             // 1. 检查备份路径是否可用
             Path backupPath = ConfigLoader.getBackupPath();
             if (backupPath == null) {
-                System.err.println("加载操作记录集失败: 备份路径为空");
+                LoggerUtil.logErrorMsg("加载操作记录集失败: 备份路径为空");
                 return results;
             }
 
@@ -438,13 +438,13 @@ public class BackupFileLoader {
 
             // 3. 检查目录是否存在
             if (!Files.exists(recordPath)) {
-                System.err.println("加载操作记录集失败: 记录目录不存在 - " + recordPath);
+                LoggerUtil.logErrorMsg("加载操作记录集失败: 记录目录不存在 - " + recordPath);
                 return results;
             }
 
             // 4. 检查是否为目录
             if (!Files.isDirectory(recordPath)) {
-                System.err.println("加载操作记录集失败: 路径不是目录 - " + recordPath);
+                LoggerUtil.logErrorMsg("加载操作记录集失败: 路径不是目录 - " + recordPath);
                 return results;
             }
 
@@ -468,7 +468,7 @@ public class BackupFileLoader {
                     if (record != null) {
                         results.put(fileName, record);
                     } else {
-                        System.err.println("加载操作记录集失败: 无法加载文件 - " + fileName);
+                        LoggerUtil.logErrorMsg("加载操作记录集失败: 无法加载文件 - " + fileName);
                     }
                 }
             }
@@ -561,14 +561,14 @@ public class BackupFileLoader {
         try {
             // 1. 参数校验
             if (result == null) {
-                System.err.println("恢复操作失败: 处理结果为空");
+                LoggerUtil.logErrorMsg("恢复操作失败: 处理结果为空");
                 restoreResult.incrementFailure("处理结果为空");
                 return restoreResult;
             }
 
             List<OperationRecord> records = result.getOperationRecords();
             if (records == null || records.isEmpty()) {
-                System.err.println("恢复操作失败: 操作记录列表为空");
+                LoggerUtil.logErrorMsg("恢复操作失败: 操作记录列表为空");
                 restoreResult.incrementFailure("操作记录列表为空");
                 return restoreResult;
             }
@@ -576,7 +576,7 @@ public class BackupFileLoader {
             // 2. 确保备份文件已加载
             getBackupFiles();
             if (backupFiles == null || backupFiles.isEmpty()) {
-                System.err.println("恢复操作失败: 备份文件列表为空");
+                LoggerUtil.logErrorMsg("恢复操作失败: 备份文件列表为空");
                 restoreResult.incrementFailure("备份文件列表为空");
                 return restoreResult;
             }
@@ -644,7 +644,7 @@ public class BackupFileLoader {
                 case OperationContext.OPERATION_DELETE:
                     return restoreDeleteOperation(record, restoreResult);
                 default:
-                    System.err.println("未知操作类型: " + operationType);
+                    LoggerUtil.logErrorMsg("未知操作类型: " + operationType);
                     restoreResult.incrementFailure("未知操作类型: " + operationType);
                     return false;
             }
@@ -666,7 +666,7 @@ public class BackupFileLoader {
             Path targetPath = record.getTargetPath();
 
             if (targetPath == null) {
-                System.err.println("ADD 操作恢复失败: 目标路径为空");
+                LoggerUtil.logErrorMsg("ADD 操作恢复失败: 目标路径为空");
                 restoreResult.incrementFailure("目标路径为空");
                 return false;
             }
@@ -704,7 +704,7 @@ public class BackupFileLoader {
             String targetFileSign = record.getTargetFileSign();
 
             if (targetPath == null || targetFileSign == null) {
-                System.err.println("REPLACE 操作恢复失败: 目标路径或文件签名为空");
+                LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 目标路径或文件签名为空");
                 restoreResult.incrementFailure("目标路径或文件签名为空");
                 return false;
             }
@@ -712,14 +712,14 @@ public class BackupFileLoader {
             // 通过替换前目标文件签名查找备份文件
             Path backupFile = findBackupFileBySignature(targetFileSign);
             if (backupFile == null) {
-                System.err.println("REPLACE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
+                LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
                 restoreResult.incrementFailure("未找到备份文件");
                 return false;
             }
 
             // 检查备份文件是否存在
             if (!Files.exists(backupFile)) {
-                System.err.println("REPLACE 操作恢复失败: 备份文件不存在: " + backupFile);
+                LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 备份文件不存在: " + backupFile);
                 restoreResult.incrementFailure("备份文件不存在");
                 return false;
             }
@@ -755,7 +755,7 @@ public class BackupFileLoader {
             String targetFileSign = record.getTargetFileSign();
 
             if (targetPath == null || targetFileSign == null) {
-                System.err.println("DELETE 操作恢复失败: 目标路径或目标文件签名为空");
+                LoggerUtil.logErrorMsg("DELETE 操作恢复失败: 目标路径或目标文件签名为空");
                 restoreResult.incrementFailure("目标路径或目标文件签名为空");
                 return false;
             }
@@ -770,14 +770,14 @@ public class BackupFileLoader {
             // 通过 MD5 查找备份文件
             Path backupFile = findBackupFileBySignature(targetFileSign);
             if (backupFile == null) {
-                System.err.println("DELETE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
+                LoggerUtil.logErrorMsg("DELETE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
                 restoreResult.incrementFailure("未找到备份文件");
                 return false;
             }
 
             // 检查备份文件是否存在
             if (!Files.exists(backupFile)) {
-                System.err.println("DELETE 操作恢复失败: 备份文件不存在: " + backupFile);
+                LoggerUtil.logErrorMsg("DELETE 操作恢复失败: 备份文件不存在: " + backupFile);
                 restoreResult.incrementFailure("备份文件不存在");
                 return false;
             }
@@ -880,7 +880,7 @@ public class BackupFileLoader {
         try {
             // 1. 参数校验
             if (fileName == null || fileName.trim().isEmpty()) {
-                System.err.println("删除备份记录失败: 文件名为空");
+                LoggerUtil.logErrorMsg("删除备份记录失败: 文件名为空");
                 return false;
             }
 
@@ -890,7 +890,7 @@ public class BackupFileLoader {
             // 3. 检查备份记录是否存在
             ProcessingResult result = operationRecordFiles.get(fileName);
             if (result == null) {
-                System.err.println("删除备份记录失败: 备份记录不存在 - " + fileName);
+                LoggerUtil.logErrorMsg("删除备份记录失败: 备份记录不存在 - " + fileName);
                 return false;
             }
 
@@ -954,7 +954,7 @@ public class BackupFileLoader {
                 }
             }
 
-            System.err.println("删除备份记录文件失败: 文件不存在");
+            LoggerUtil.logErrorMsg("删除备份记录文件失败: 文件不存在");
             // 恢复删除操作
             return false;
 

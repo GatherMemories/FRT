@@ -50,7 +50,7 @@ public class MatchRuleLoader {
             return rule;
         } catch (IllegalArgumentException e) {
             // 策略类型验证失败
-            System.err.println("解析规则失败: " + e.getMessage());
+            LoggerUtil.logErrorMsg("解析规则失败: " + e.getMessage());
             return null;
         } catch (Exception e) {
             // JSON 解析失败
