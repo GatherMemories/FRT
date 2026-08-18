@@ -3,6 +3,7 @@ package com.awei.frt.factory;
 import com.awei.frt.core.strategy.FileSameNameStrategy;
 import com.awei.frt.core.strategy.McModStrategy;
 import com.awei.frt.core.strategy.OperationStrategy;
+import com.awei.frt.core.strategy.StrategyProxy;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -88,6 +89,7 @@ public class StrategyFactory {
         if (supplier == null) {
             throw new IllegalArgumentException("不支持的匹配策略类型: " + type);
         }
-        return INSTANCE_CACHE.computeIfAbsent(type, k -> supplier.get());
+        // 统一包一层动态代理：日志 / 异常兜底 / 统计（见 StrategyProxy）
+        return INSTANCE_CACHE.computeIfAbsent(type, k -> StrategyProxy.wrap(supplier.get()));
     }
 }
