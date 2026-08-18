@@ -14,7 +14,9 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -131,37 +133,59 @@ public class RuleConfigWizard {
     private Map<Integer, Path> printIndexedTree(FileNode root) {
         Map<Integer, Path> folderIndex = new LinkedHashMap<>();
         folderCounter = 0;
-        printNode(root, "", true, true, folderIndex);
+        // 栈迭代打印（替代原 printNode/printChildren 相互递归，避免超深目录栈溢出）
+        Deque<PrintTask> stack = new ArrayDeque<>();
+        stack.push(new PrintTask(root, "", true, true));
+        while (!stack.isEmpty()) {
+            PrintTask task = stack.pop();
+            if (task.isRoot) {
+                if (task.node.isDirectory()) {
+                    int index = ++folderCounter;
+                    folderIndex.put(index, task.node.getPath());
+                    System.out.println("[" + index + "] [+] " + task.node.getName() + "/");
+                    pushChildTasks((FolderNode) task.node, "", stack);
+                } else {
+                    System.out.println("[-] " + task.node.getName());
+                }
+                continue;
+            }
+            String connector = task.isLast ? "└── " : "├── ";
+            if (task.node.isDirectory()) {
+                int index = ++folderCounter;
+                folderIndex.put(index, task.node.getPath());
+                System.out.println(task.prefix + connector + "[" + index + "] [+] " + task.node.getName() + "/");
+                pushChildTasks((FolderNode) task.node, task.prefix + (task.isLast ? "    " : "│   "), stack);
+            } else {
+                System.out.println(task.prefix + connector + "[-] " + task.node.getName());
+            }
+        }
         return folderIndex;
     }
 
-    private void printNode(FileNode node, String prefix, boolean isLast, boolean isRoot, Map<Integer, Path> folderIndex) {
-        if (isRoot) {
-            if (node.isDirectory()) {
-                int index = ++folderCounter;
-                folderIndex.put(index, node.getPath());
-                System.out.println("[" + index + "] [+] " + node.getName() + "/");
-                printChildren((FolderNode) node, "", folderIndex);
-            } else {
-                System.out.println("[-] " + node.getName());
-            }
-            return;
-        }
-        String connector = isLast ? "└── " : "├── ";
-        if (node.isDirectory()) {
-            int index = ++folderCounter;
-            folderIndex.put(index, node.getPath());
-            System.out.println(prefix + connector + "[" + index + "] [+] " + node.getName() + "/");
-            printChildren((FolderNode) node, prefix + (isLast ? "    " : "│   "), folderIndex);
-        } else {
-            System.out.println(prefix + connector + "[-] " + node.getName());
+    /**
+     * 将子节点倒序压栈，保证正序弹出（输出顺序与原递归实现一致）
+     */
+    private void pushChildTasks(FolderNode folder, String childPrefix, Deque<PrintTask> stack) {
+        List<FileNode> children = folder.getChildren();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            stack.push(new PrintTask(children.get(i), childPrefix, i == children.size() - 1, false));
         }
     }
 
-    private void printChildren(FolderNode folder, String childPrefix, Map<Integer, Path> folderIndex) {
-        List<FileNode> children = folder.getChildren();
-        for (int i = 0; i < children.size(); i++) {
-            printNode(children.get(i), childPrefix, i == children.size() - 1, false, folderIndex);
+    /**
+     * 打印任务（迭代遍历用）
+     */
+    private static class PrintTask {
+        final FileNode node;
+        final String prefix;
+        final boolean isLast;
+        final boolean isRoot;
+
+        PrintTask(FileNode node, String prefix, boolean isLast, boolean isRoot) {
+            this.node = node;
+            this.prefix = prefix;
+            this.isLast = isLast;
+            this.isRoot = isRoot;
         }
     }
 
