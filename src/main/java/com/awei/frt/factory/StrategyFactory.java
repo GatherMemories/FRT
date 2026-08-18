@@ -31,6 +31,8 @@ public class StrategyFactory {
     static {
         register("FileSameName", FileSameNameStrategy::new, "同名文件处理策略（按文件名匹配，支持通配符）");
         register("McMod", McModStrategy::new, "Minecraft 模组策略（按 modId 匹配 jar）");
+        // 动态加载外部策略插件（plugins/ 目录 + classpath SPI，见 StrategyLoader）
+        StrategyLoader.loadExternalStrategies();
     }
 
     private StrategyFactory() {
