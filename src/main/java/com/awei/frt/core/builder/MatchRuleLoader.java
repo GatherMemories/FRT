@@ -36,6 +36,17 @@ public class MatchRuleLoader {
                 throw new IllegalArgumentException("策略类型不合法: " + rule.getStrategyType());
             }
 
+            // 验证多策略组合链：每个步骤都必须注册
+            if (rule.getStrategyChain() != null) {
+                for (com.awei.frt.model.MatchRule step : rule.getStrategyChain()) {
+                    if (step == null || step.getStrategyType() == null
+                            || !StrategyFactory.isSupported(step.getStrategyType())) {
+                        throw new IllegalArgumentException("策略链步骤不合法: "
+                                + (step == null ? "null" : step.getStrategyType()));
+                    }
+                }
+            }
+
             return rule;
         } catch (IllegalArgumentException e) {
             // 策略类型验证失败

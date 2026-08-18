@@ -77,6 +77,9 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         boolean ok = FileUtil.addFile(node.getPath(), targetFilePath, record);
         context.recordOperation(record);
         LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
+        if (ok) {
+            node.setHandled(true); // 处理成功：链中后续策略不再处理该节点
+        }
         return true;
     }
 
@@ -93,6 +96,9 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         boolean ok = FileUtil.replaceFile(node.getPath(), targetFilePath, record);
         context.recordOperation(record);
         LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
+        if (ok) {
+            node.setHandled(true);
+        }
         return true;
     }
 
@@ -106,6 +112,9 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         boolean ok = FileUtil.deleteFile(targetFilePath, record);
         context.recordOperation(record);
         LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
+        if (ok) {
+            node.setHandled(true);
+        }
         return true;
     }
 }

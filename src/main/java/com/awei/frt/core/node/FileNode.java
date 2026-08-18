@@ -12,6 +12,7 @@ import java.nio.file.Path;
 public abstract class FileNode {
     protected final Path path;              // 节点的完整路径
     protected final String relativePath;    // 节点的相对路径
+    private boolean handled = false;        // 是否已被策略处理（多策略组合链用：已被前序策略处理的节点，后续策略跳过）
 
     // 限制操作类型
     public static final String[] UPDATE_OPERATION = new String[]{OperationContext.OPERATION_ADD, OperationContext.OPERATION_REPLACE}; //更新操作类型
@@ -60,4 +61,18 @@ public abstract class FileNode {
      * 获取子节点数量
      */
     public abstract int getChildCount();
+
+    /**
+     * 节点是否已被某策略处理（多策略组合链语义：后续策略只处理"剩余文件"）
+     */
+    public boolean isHandled() {
+        return handled;
+    }
+
+    /**
+     * 标记节点已被处理
+     */
+    public void setHandled(boolean handled) {
+        this.handled = handled;
+    }
 }

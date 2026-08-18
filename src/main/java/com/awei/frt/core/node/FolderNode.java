@@ -89,14 +89,26 @@ public class FolderNode extends FileNode {
         // 将规则上下文设置到操作上下文中（供策略类访问）
         context.setRuleInheritanceContext(ruleContext);
 
-        // 如果没有有效规则，直接返回
-        if (effectiveRule == null || effectiveRule.getStrategyType() == null) {
+        // 如果没有有效规则（或规则没有任何可执行的策略步骤），直接返回
+        if (effectiveRule == null || effectiveRule.getEffectiveStrategies().isEmpty()) {
             return;
         }
 
-        // 创建策略实例并执行
-        OperationStrategy strategy = StrategyFactory.createStrategy(effectiveRule.getStrategyType());
-        strategy.execute(node, context, operationType);
+        // 多策略组合链：按序执行每个策略步骤，前序已处理的节点（handled）后续步骤跳过
+        RuleInheritanceContext ric = context.getRuleInheritanceContext();
+        MatchRule savedRule = ric.getRuleChain();
+        try {
+            for (MatchRule step : effectiveRule.getEffectiveStrategies()) {
+                if (node.isHandled()) {
+                    break;
+                }
+                ric.setRuleChain(step);
+                OperationStrategy strategy = StrategyFactory.createStrategy(step.getStrategyType());
+                strategy.execute(node, context, operationType);
+            }
+        } finally {
+            ric.setRuleChain(savedRule);
+        }
 
         // 收集子节点：文件直接处理，文件夹暂存
         List<FolderNode> folderNodes = new ArrayList<>();

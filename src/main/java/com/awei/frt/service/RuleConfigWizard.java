@@ -5,6 +5,7 @@ import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.builder.MatchRuleLoader;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
+import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
 import com.awei.frt.util.LoggerUtil;
@@ -180,32 +181,28 @@ public class RuleConfigWizard {
         System.out.println("\n[输入] 请按提示输入规则参数（回车使用默认值/跳过）:");
         System.out.println("-----------------------------------------");
 
-        // 1. strategyType（必填）
-        System.out.println("[参数 1/5] strategyType — 策略类型");
+        // 1. strategyType（必填）—— 可选列表来自策略注册表（内置 + 外部插件动态加载的策略）
+        System.out.println("[参数 1/6] strategyType — 策略类型");
         System.out.println("  类型: String    必填: 是    默认值: (无)");
-        System.out.println("  可选值: 1=McMod        (Minecraft模组策略, 只处理jar文件, 按modId匹配)");
-        System.out.println("          2=FileSameName (同名文件处理策略, 按文件名匹配, 支持通配符)");
+        System.out.println("  可选值: " + listStrategies());
         String strategyType = null;
         while (strategyType == null) {
-            System.out.print("  请输入 (1-2, 或直接输入策略名, 0=取消): ");
+            System.out.print("  请输入 (编号或策略名, 0=取消): ");
             String input = readLine();
             if (input.equals("0")) {
                 System.out.println("[取消] 已取消生成");
                 return null;
             }
-            if (input.equals("1") || input.equalsIgnoreCase("McMod")) {
-                strategyType = "McMod";
-            } else if (input.equals("2") || input.equalsIgnoreCase("FileSameName")) {
-                strategyType = "FileSameName";
-            } else {
-                System.out.println("  [失败] 无效策略类型，请输入 1 或 2");
+            strategyType = resolveStrategyType(input);
+            if (strategyType == null) {
+                System.out.println("  [失败] 无效策略类型: " + input);
             }
         }
         System.out.println("  >> strategyType = \"" + strategyType + "\"");
         boolean mcMod = strategyType.equals("McMod");
 
         // 2. patterns
-        System.out.println("\n[参数 2/5] patterns — 匹配文件模式 (白名单)");
+        System.out.println("\n[参数 2/6] patterns — 匹配文件模式 (白名单)");
         System.out.println("  类型: List<String>    必填: 否    默认值: 空列表 (匹配所有文件)");
         System.out.println("  说明: 只处理匹配的文件; 支持通配符 * 和 ?; 多个用英文逗号分隔"
                 + (mcMod ? "   (当前策略 McMod 不生效, 可回车跳过)" : ""));
@@ -214,7 +211,7 @@ public class RuleConfigWizard {
         System.out.println("  >> patterns = " + patterns);
 
         // 3. excludePatterns
-        System.out.println("\n[参数 3/5] excludePatterns — 排除文件模式 (黑名单)");
+        System.out.println("\n[参数 3/6] excludePatterns — 排除文件模式 (黑名单)");
         System.out.println("  类型: List<String>    必填: 否    默认值: 空列表 (不排除任何文件)");
         System.out.println("  说明: 白名单通过后再排除; 支持通配符; 多个用英文逗号分隔"
                 + (mcMod ? "   (当前策略 McMod 不生效, 可回车跳过)" : ""));
@@ -223,7 +220,7 @@ public class RuleConfigWizard {
         System.out.println("  >> excludePatterns = " + excludePatterns);
 
         // 4. inheritToSubfolders
-        System.out.println("\n[参数 4/5] inheritToSubfolders — 规则是否继承到子文件夹");
+        System.out.println("\n[参数 4/6] inheritToSubfolders — 规则是否继承到子文件夹");
         System.out.println("  类型: Boolean    必填: 否    默认值: false");
         System.out.println("  说明: true 时, 子文件夹无本地规则则继承本层规则继续处理; false 则子层跳过");
         System.out.print("  请输入 (y/n, 回车=默认 false): ");
@@ -231,7 +228,7 @@ public class RuleConfigWizard {
         System.out.println("  >> inheritToSubfolders = " + inherit);
 
         // 5. replacements
-        System.out.println("\n[参数 5/5] replacements — 策略扩展参数 (键值对)");
+        System.out.println("\n[参数 5/6] replacements — 策略扩展参数 (键值对)");
         System.out.println("  类型: Map<String,String>    必填: 否    默认值: 空");
         System.out.println("  说明: 给策略传自定义配置; 格式 key=value, 多个用英文逗号分隔");
         System.out.println("        示例: McMod: onlyIfVersionChanged=true | FileSameName: caseSensitive=false");
@@ -246,6 +243,50 @@ public class RuleConfigWizard {
         rule.setExcludePatterns(excludePatterns);
         rule.setInheritToSubfolders(inherit);
         rule.setReplacements(replacements);
+
+        // 6. 多策略组合链（可选）：链中后续策略只处理前序策略"剩余"的文件
+        System.out.println("\n[参数 6/6] 多策略组合链 (可选)");
+        System.out.println("  说明: 配置策略链后, 本层按链顺序依次执行各策略,");
+        System.out.println("        后续策略只处理前序策略未处理(剩余)的文件");
+        System.out.print("  是否配置策略链? (y/n, 回车=n): ");
+        if (parseBoolean(readLine(), false)) {
+            List<MatchRule> chain = new ArrayList<>();
+            chain.add(rule); // 第一步 = 上面配置的策略
+            System.out.println("  [链] 步骤1: " + rule.getStrategyType() + " patterns=" + rule.getPatterns());
+            while (true) {
+                System.out.println("\n  [链] 新增步骤 (策略名留空或输入 0 结束):");
+                System.out.println("        可选策略: " + listStrategies());
+                System.out.print("        策略类型: ");
+                String input = readLine();
+                if (input.isEmpty() || input.equals("0")) {
+                    break;
+                }
+                String stepType = resolveStrategyType(input);
+                if (stepType == null) {
+                    System.out.println("  [失败] 无效策略类型: " + input);
+                    continue;
+                }
+                System.out.print("        patterns (逗号分隔, 回车=匹配所有): ");
+                List<String> stepPatterns = parseList(readLine());
+                System.out.print("        excludePatterns (逗号分隔, 回车=空): ");
+                List<String> stepExcludes = parseList(readLine());
+                System.out.print("        replacements (key=value, 逗号分隔, 回车=空): ");
+                Map<String, String> stepReplacements = parseMap(readLine());
+                MatchRule step = new MatchRule();
+                step.setStrategyType(stepType);
+                step.setPatterns(stepPatterns);
+                step.setExcludePatterns(stepExcludes);
+                step.setReplacements(stepReplacements);
+                chain.add(step);
+                System.out.println("  [链] 步骤" + chain.size() + ": " + stepType + " patterns=" + stepPatterns);
+            }
+            if (chain.size() > 1) {
+                rule.setStrategyChain(chain);
+                System.out.println("  [链] 策略链共 " + chain.size() + " 步");
+            } else {
+                System.out.println("  [链] 未新增步骤，保持单一策略");
+            }
+        }
         return rule;
     }
 
@@ -300,6 +341,49 @@ public class RuleConfigWizard {
             if (Files.exists(f)) {
                 return f;
             }
+        }
+        return null;
+    }
+
+    /**
+     * 列出策略注册表中所有可用策略（编号=类型(说明) 形式，供向导展示）
+     */
+    private String listStrategies() {
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        for (String type : StrategyFactory.getSupportedTypes()) {
+            if (i > 0) {
+                sb.append("; ");
+            }
+            sb.append(++i).append("=").append(type);
+            String desc = StrategyFactory.getDescription(type);
+            if (!desc.isEmpty()) {
+                sb.append(" (").append(desc).append(")");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 把用户输入解析为策略类型：直接策略名 或 注册表序号
+     * @return 策略类型；无法解析返回 null
+     */
+    private String resolveStrategyType(String input) {
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        String trimmed = input.trim();
+        if (StrategyFactory.isSupported(trimmed)) {
+            return trimmed;
+        }
+        try {
+            int idx = Integer.parseInt(trimmed);
+            List<String> types = new ArrayList<>(StrategyFactory.getSupportedTypes());
+            if (idx >= 1 && idx <= types.size()) {
+                return types.get(idx - 1);
+            }
+        } catch (NumberFormatException ignored) {
+            // 非数字输入，走策略名匹配
         }
         return null;
     }

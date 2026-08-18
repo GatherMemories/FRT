@@ -24,6 +24,10 @@ public abstract class AbstractOperationStrategy implements OperationStrategy {
         if (node == null || context == null || operationType == null) {
             return;
         }
+        // 多策略组合链语义：已被前序策略处理的节点，后续策略直接跳过
+        if (node.isHandled()) {
+            return;
+        }
         if (!accepts(node, context)) {
             return;
         }

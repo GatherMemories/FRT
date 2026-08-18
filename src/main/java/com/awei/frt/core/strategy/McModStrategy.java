@@ -66,6 +66,9 @@ public class McModStrategy extends AbstractOperationStrategy {
             LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
             any = true;
         }
+        if (any) {
+            node.setHandled(true); // 目录级策略消费整个文件夹（链中后续策略跳过该目录）
+        }
         return any;
     }
 
@@ -113,6 +116,9 @@ public class McModStrategy extends AbstractOperationStrategy {
                     "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
             any = true;
         }
+        if (any) {
+            node.setHandled(true);
+        }
         return any;
     }
 
@@ -135,6 +141,9 @@ public class McModStrategy extends AbstractOperationStrategy {
             context.recordOperation(record);
             LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
             any = true;
+        }
+        if (any) {
+            node.setHandled(true);
         }
         return any;
     }
