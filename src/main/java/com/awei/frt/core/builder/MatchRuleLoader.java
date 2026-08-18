@@ -6,9 +6,6 @@ import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * @Author: mou_ren
  * @Date: 2026/1/18 10:02
@@ -59,20 +56,5 @@ public class MatchRuleLoader {
         }
     }
 
-    /**
-     * 检查文件名是否匹配规则（统一走 GlobMatcher，正则元字符安全）
-     */
-    public static boolean matches(String fileName, MatchRule rule) {
-        if (rule == null) {
-            return false;
-        }
-        // 黑名单：匹配任一排除模式则不匹配（空列表 = 不排除任何文件）
-        if (rule.getExcludePatterns() != null && !rule.getExcludePatterns().isEmpty()
-                && com.awei.frt.core.uitls.GlobMatcher.matchesAny(fileName, rule.getExcludePatterns(), true)) {
-            return false;
-        }
-
-        // 白名单：没有指定模式则匹配所有文件
-        return com.awei.frt.core.uitls.GlobMatcher.matchesAny(fileName, rule.getPatterns(), true);
-    }
+    // 注：文件名匹配统一由 GlobMatcher 提供（策略内使用），不再保留本类中的重复实现
 }
