@@ -20,6 +20,12 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) {
+        // UI 模式入口：java -jar FRT.jar --ui（或 java -cp ... com.awei.frt.ui.MainUI）
+        if (args.length > 0 && "--ui".equals(args[0])) {
+            com.awei.frt.ui.MainUI.main(args);
+            return;
+        }
+
         LoggerUtil logger = null;// 日志工具类
         Scanner scanner = null;
 

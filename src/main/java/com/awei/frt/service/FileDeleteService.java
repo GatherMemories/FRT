@@ -7,6 +7,8 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Path;
@@ -21,11 +23,15 @@ import java.util.Scanner;
 public class FileDeleteService {
 
     private final Config config;
-    private final Scanner scanner;
+    private final UserPrompter prompter;
 
     public FileDeleteService(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner));
+    }
+
+    public FileDeleteService(Config config, UserPrompter prompter) {
         this.config = config;
-        this.scanner = scanner;
+        this.prompter = prompter;
     }
 
     /**
@@ -63,7 +69,7 @@ public class FileDeleteService {
             // 二次确认
             System.out.println("-----------------------------------------");
             System.out.print("确认要执行删除操作吗？此操作不可逆！(y/n): ");
-            String confirm = scanner.nextLine().trim().toLowerCase();
+            String confirm = prompter.readLine().toLowerCase();
 
             if (!confirm.equals("y") && !confirm.equals("yes")) {
                 LoggerUtil.logInfo("[信息] 已取消删除操作");
@@ -84,7 +90,7 @@ public class FileDeleteService {
             if(processingResult.getSuccessCount() > 0){
                 LoggerUtil.logInfo("[成功] 文件删除操作完成！");
                 // 备份操作记录 + 失败恢复询问（公共流程，见 BackupFileLoader.finishOperationSession）
-                BackupFileLoader.finishOperationSession(processingResult, scanner);
+                BackupFileLoader.finishOperationSession(processingResult, prompter);
             }else{
                 LoggerUtil.logError("[失败] 文件删除操作失败！");
             }

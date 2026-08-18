@@ -6,6 +6,8 @@ import com.awei.frt.model.Config;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -542,6 +544,10 @@ public class BackupFileLoader {
      * @return 正式备份是否保存成功
      */
     public static boolean finishOperationSession(ProcessingResult processingResult, Scanner scanner) {
+        return finishOperationSession(processingResult, new ConsoleUserPrompter(scanner));
+    }
+
+    public static boolean finishOperationSession(ProcessingResult processingResult, UserPrompter prompter) {
         if (processingResult == null || processingResult.getSuccessCount() <= 0) {
             return false;
         }
@@ -556,10 +562,10 @@ public class BackupFileLoader {
                 LoggerUtil.logWarn("[警告] 检测到 " + processingResult.getErrorCount() + " 个文件处理失败");
                 System.out.println("是否要执行恢复操作，将系统恢复到操作前的状态？(y/n)");
 
-                String choice = scanner.nextLine().trim().toLowerCase();
+                String choice = prompter.readLine().toLowerCase();
                 if (choice.equals("y") || choice.equals("yes")) {
                     LoggerUtil.logInfo("[执行] 开始执行恢复操作...");
-                    RestoreResult restoreResult = restoreFromResult(processingResult, scanner);
+                    RestoreResult restoreResult = restoreFromResult(processingResult, prompter);
 
                     // 打印恢复结果
                     LoggerUtil.logInfo("[STATS] 恢复结果统计: 成功 " + restoreResult.getSuccessCount()
@@ -590,6 +596,10 @@ public class BackupFileLoader {
      * @return 恢复结果
      */
     public static RestoreResult restoreFromResult(ProcessingResult result, Scanner scanner) {
+        return restoreFromResult(result, new ConsoleUserPrompter(scanner));
+    }
+
+    public static RestoreResult restoreFromResult(ProcessingResult result, UserPrompter prompter) {
         RestoreResult restoreResult = new RestoreResult();
 
         try {
@@ -640,7 +650,7 @@ public class BackupFileLoader {
                     LoggerUtil.logError("[失败] 恢复失败: " + record.getTargetPath());
                     System.out.println("\n恢复过程中遇到失败，是否要回滚已恢复的操作？(y/n)");
 
-                    String choice = scanner.nextLine().trim().toLowerCase();
+                    String choice = prompter.readLine().toLowerCase();
                     if (choice.equals("y") || choice.equals("yes")) {
                         LoggerUtil.logInfo("[执行] 开始回滚已恢复的操作...");
                         rollbackRestoredOperations(restoredRecords, restoreResult);
@@ -957,6 +967,10 @@ public class BackupFileLoader {
      * @return 实际删除的文件数
      */
     public static int cleanupOrphanBackupFiles(Scanner scanner) {
+        return cleanupOrphanBackupFiles(new ConsoleUserPrompter(scanner));
+    }
+
+    public static int cleanupOrphanBackupFiles(UserPrompter prompter) {
         List<Path> orphans = findOrphanBackupFiles();
         if (orphans.isEmpty()) {
             LoggerUtil.logInfo("[信息] 没有发现孤立备份文件");
@@ -969,7 +983,7 @@ public class BackupFileLoader {
         }
         System.out.println("-----------------------------------------");
         System.out.print("确认删除这些孤立备份文件吗？此操作不可逆！(y/n): ");
-        String choice = scanner.nextLine().trim().toLowerCase();
+        String choice = prompter.readLine().toLowerCase();
         if (!choice.equals("y") && !choice.equals("yes")) {
             LoggerUtil.logInfo("[信息] 已取消清理");
             return 0;

@@ -7,6 +7,8 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Path;
@@ -19,11 +21,15 @@ import java.util.Scanner;
 public class FileUpdateServiceNew {
 
     private final Config config;
-    private final Scanner scanner;
+    private final UserPrompter prompter;
 
     public FileUpdateServiceNew(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner));
+    }
+
+    public FileUpdateServiceNew(Config config, UserPrompter prompter) {
         this.config = config;
-        this.scanner = scanner;
+        this.prompter = prompter;
     }
 
     /**
@@ -60,7 +66,7 @@ public class FileUpdateServiceNew {
             // 判断有处理失败的文件时，是否执行恢复操作（备份+恢复询问已提炼为公共方法）
             ProcessingResult processingResult = context.getProcessingResult();
             LoggerUtil.logInfo("[成功] 文件替换操作完成！");
-            BackupFileLoader.finishOperationSession(processingResult, scanner);
+            BackupFileLoader.finishOperationSession(processingResult, prompter);
 
             return context.getProcessingResult();
         } catch (Exception e) {

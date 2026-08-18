@@ -8,6 +8,8 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -32,12 +34,16 @@ import java.util.Scanner;
 public class RuleConfigWizard {
 
     private final Config config;
-    private final Scanner scanner;
+    private final UserPrompter prompter;
     private int folderCounter = 0; // 文件夹编号计数器
 
     public RuleConfigWizard(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner));
+    }
+
+    public RuleConfigWizard(Config config, UserPrompter prompter) {
         this.config = config;
-        this.scanner = scanner;
+        this.prompter = prompter;
     }
 
     /**
@@ -471,6 +477,6 @@ public class RuleConfigWizard {
      * 读取一行输入
      */
     private String readLine() {
-        return scanner.hasNextLine() ? scanner.nextLine().trim() : "";
+        return prompter.readLine();
     }
 }
