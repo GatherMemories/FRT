@@ -35,11 +35,13 @@
 
 - **`FileSameNameStrategy`**：同名文件处理策略
   - 基于文件名进行文件匹配和操作
-  - 支持通配符模式的文件筛选
+  - 支持通配符模式的文件筛选（统一 `GlobMatcher`，正则元字符安全转义）
 
-#### 待实现的策略类
-- `ZipFileContentStrategy`：ZIP文件内容处理策略（规划中）
-- `ZipFileNameStrategy`：ZIP文件名处理策略（规划中）
+> 策略基类 `AbstractOperationStrategy` 提供模板方法（统一 null/类型校验 + add/replace/delete 钩子分派），
+> 新增策略只需实现三个钩子；`StrategyFactory` 采用**注册表**（策略类自报 `getStrategyType()`），
+> 不再依赖枚举。动态代理 `StrategyProxy` 自动为每次策略执行提供日志、异常兜底与失败统计。
+>
+> 旧的 Zip 空壳策略类已删除（规划功能可随时以插件方式接入，见"外部策略插件"）。
 
 ## 配置文件参数说明
 
@@ -57,9 +59,10 @@
 
 | 参数名 | 作用说明 | 是否必填  | 数据类型 | 默认值 | 示例 |
 |--------|----------|-------|----------|---------|------|
-| `strategyType` | **策略类型** | **是** | String | 无 | `"McMod"`, `"FileSameName"` |
+| `strategyType` | **策略类型**（单策略时使用） | 是/否 | String | 无 | `"McMod"`, `"FileSameName"` |
 | `patterns` | **匹配文件模式** | 否     | List\<String\> | 空列表 | `["*.jar"]`, `["*.txt", "*.doc"]` |
 | `excludePatterns` | 排除文件模式 | 否     | List\<String\> | 空列表 | `["*backup*", "*Test*"]` |
+| `strategyChain` | **多策略组合链**（可选）：依次执行各策略，后续策略只处理前序**剩余**的文件 | 否     | List\<规则对象\> | 空 | 见下方示例 |
 | `inheritToSubfolders` | 是否应用到子文件夹 | 否     | Boolean | `false` | `true`, `false` |
 | `replacements` | **策略扩展参数**（键值对，供策略读取自定义配置） | 否     | Map\<String, String\> | 空 Map | `{"onlyIfVersionChanged": "true"}` |
 
@@ -99,13 +102,28 @@
 }
 ```
 
-#### matching-rules.json 示例：
+#### matching-rules.json 示例（单策略）：
 ```json
 {
   "strategyType": "McMod",
   "inheritToSubfolders": true
 }
 ```
+
+#### matching-rules.json 示例（多策略组合链）：
+先处理 `*.txt`，剩余文件再交给第二个策略处理 `*.json`：
+```json
+{
+  "strategyChain": [
+    {"strategyType": "FileSameName", "patterns": ["*.txt"]},
+    {"strategyType": "FileSameName", "patterns": ["*.json"]}
+  ],
+  "inheritToSubfolders": false
+}
+```
+> 链中每个步骤都是独立的规则对象（可各自配置 patterns / excludePatterns / replacements）；
+> 某个文件被前序策略**成功处理**后，后续策略自动跳过它（"剩余文件"语义）。
+> 配置了 `strategyChain` 时忽略顶层 `strategyType`；也可在交互向导（菜单 4）中选择"是否配置策略链"按提示生成。
 
 ### 规则继承机制
 
@@ -129,25 +147,30 @@ src/main/java/com/awei/frt/
 │   │   ├── FolderNode.java                # 文件夹节点
 │   │   └── FileLeaf.java                  # 文件叶子节点
 │   ├── strategy/                          # 策略实现层
-│   │   ├── OperationStrategy.java         # 策略接口
+│   │   ├── OperationStrategy.java         # 策略接口（策略自报 getStrategyType）
+│   │   ├── AbstractOperationStrategy.java # 模板方法基类（add/replace/delete 钩子）
 │   │   ├── McModStrategy.java             # Minecraft模组策略
-│   │   └── FileSameNameStrategy.java      # 同名文件策略
+│   │   ├── FileSameNameStrategy.java      # 同名文件策略
+│   │   └── StrategyProxy.java             # 策略动态代理（日志/异常兜底/统计）
 │   ├── mod/                               # 模组元数据（自研解析，替代第三方库）
 │   │   ├── ModInfo.java                   # 模组元数据模型
 │   │   └── ModMetadataParser.java         # 模组元数据解析器
-│   └── builder/                           # 构建器
-│       └── FileTreeBuilder.java           # 文件树构建器
+│   ├── uitls/                             # 工具类（GlobMatcher / FileUtil / FileSignUtil）
+│   └── builder/                           # 构建器（文件树/规则加载/备份/配置）
+├── factory/                               # 策略工厂 + 外部插件加载
+│   ├── StrategyFactory.java               # 策略注册表（取代旧枚举）
+│   └── StrategyLoader.java                # 外部策略动态加载（plugins/ + SPI）
 ├── service/                               # 业务服务层
-│   ├── FileReplaceServiceNew.java         # 文件替换服务
-│   └── RestoreService.java                # 恢复服务
+│   ├── FileUpdateServiceNew.java          # 文件更新服务
+│   ├── FileDeleteService.java             # 文件删除服务
+│   ├── RestoreService.java                # 恢复服务
+│   └── RuleConfigWizard.java              # 规则配置交互向导（支持策略链）
 ├── model/                                 # 数据模型层
 │   ├── Config.java                        # 配置模型
-│   ├── MatchRule.java                     # 匹配规则模型
+│   ├── MatchRule.java                     # 匹配规则模型（支持 strategyChain）
 │   ├── OperationRecord.java               # 操作记录模型
 │   └── ProcessingResult.java              # 处理结果模型
-└── utils/                                 # 工具类层
-    ├── ConfigLoader.java                  # 配置加载器
-    └── FileUtils.java                     # 文件工具类
+└── util/                                  # LoggerUtil（slf4j + logback）
 ```
 
 ## 使用指南
@@ -193,10 +216,19 @@ mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 ## 扩展性设计
 
 ### 策略扩展
-系统采用策略模式设计，新增策略类只需：
-1. 实现`OperationStrategy`接口
-2. 在`StrategyFactory`中注册新策略
-3. 更新配置文件中的`strategyType`选项
+系统采用策略模式 + 注册表设计，新增策略有两种方式：
+
+**方式一：源码内注册（内置策略）**
+1. 实现 `OperationStrategy` 接口（推荐继承 `AbstractOperationStrategy` 模板基类，只实现 add/replace/delete 三个钩子）
+2. 类内声明 `getStrategyType()` 返回唯一类型标识
+3. 在 `StrategyFactory` 静态块中 `register("类型", 类::new, "说明")`
+
+**方式二：外部策略插件（无需改源码，动态加载）**
+1. 按上述规范编写策略类，打成 jar 放入程序工作目录的 `plugins/` 文件夹
+2. 加载方式二选一：
+   - 标准 SPI：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容为策略类全限定名
+   - 自动扫描：未提供 services 文件时，自动扫描 jar 内所有实现 `OperationStrategy` 的具体类（需公开无参构造）
+3. 启动程序即可，规则文件的 `strategyType` 直接填插件策略的类型标识；类型与内置策略冲突时插件会被跳过（内置优先）
 
 ### 规则扩展
 规则模型采用灵活的JSON配置，支持：
@@ -206,10 +238,10 @@ mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
 
 ## 测试与验证
 
-系统包含完整的测试用例：
-- `TestNewFramework.java`：验证多层级规则继承机制
-- 各策略类的单元测试
-- 集成测试验证端到端功能
+系统包含完整的 JUnit5 测试用例（`mvn test`，surefire 3.2.5 保证真实运行）：
+- 策略注册表 / 模板方法 / 动态代理 / 多策略链 / 外部插件加载测试
+- 模组元数据解析测试（NeoForge/Forge/Fabric/Quilt/旧版 + 版本占位符兜底）
+- 备份恢复与规则链集成测试
 
 ## 总结
 
