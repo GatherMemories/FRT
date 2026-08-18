@@ -12,9 +12,11 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -33,6 +35,10 @@ public class BackupFileLoader {
     private static Map<String, ProcessingResult> operationRecordFiles = new HashMap<>();
     // 未完成会话的临时记录文件名（操作过程中实时写入，异常中断后用于恢复）
     private static final String SESSION_RECORD_FILE = "session-current.json";
+    // 会话记录共享 JSON 序列化器（线程安全可复用，带 JSR310 时间支持）
+    private static final ObjectMapper SESSION_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     // 获取操作记录集文件列表
     public static Map<String, ProcessingResult> getOperationRecordFiles() {
@@ -276,12 +282,14 @@ public class BackupFileLoader {
     }
 
     /**
-     * 实时保存当前会话的操作记录（每次操作后调用）
-     * 写入临时文件 session-current.json，供异常中断后恢复
-     * @param record 当前处理结果
+     * 增量追加一条会话操作记录（每次操作后调用，P3 优化）
+     * 写入临时文件 session-current.json（JSON Lines 格式：一行一条 OperationRecord），
+     * 供异常中断后恢复；相比旧版"每次全量重写整个 ProcessingResult"，操作多时磁盘压力大幅下降，
+     * 且崩溃时最多只丢失当前这一条正在写的记录。
+     * @param record 刚完成的操作记录
      * @return 是否成功
      */
-    public static boolean saveSessionRecord(ProcessingResult record) {
+    public static boolean appendSessionRecord(OperationRecord record) {
         if (record == null) {
             return false;
         }
@@ -295,10 +303,9 @@ public class BackupFileLoader {
                 Files.createDirectories(recordPath);
             }
             Path sessionFile = recordPath.resolve(SESSION_RECORD_FILE).normalize();
-            ObjectMapper objectMapper = new ObjectMapper();
-            objectMapper.registerModule(new JavaTimeModule());
-            objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            objectMapper.writeValue(sessionFile.toFile(), record);
+            String line = SESSION_MAPPER.writeValueAsString(record) + System.lineSeparator();
+            Files.writeString(sessionFile, line, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return true;
         } catch (Exception e) {
             LoggerUtil.logErrorMsg("实时保存操作记录失败: " + e.getMessage());
@@ -316,14 +323,40 @@ public class BackupFileLoader {
     }
 
     /**
-     * 加载未完成的操作会话记录
+     * 加载未完成的操作会话记录（兼容两种格式）：
+     * - 新格式（JSON Lines）：每行一条 OperationRecord，逐行读取组装 ProcessingResult
+     * - 旧格式（整文件一个 ProcessingResult JSON）：含 "operationRecords" 字段时按整文件解析
      * @return 操作记录对象，不存在或加载失败返回null
      */
     public static ProcessingResult loadSessionRecord() {
         if (!hasSessionRecord()) {
             return null;
         }
-        return loadOperationRecord(SESSION_RECORD_FILE);
+        Path sessionFile = getSessionRecordPath();
+        try {
+            String content = Files.readString(sessionFile, StandardCharsets.UTF_8);
+            if (content == null || content.isBlank()) {
+                return null;
+            }
+            // 旧格式探测：整文件是 ProcessingResult（含 operationRecords 数组字段）
+            if (content.contains("\"operationRecords\"")) {
+                return SESSION_MAPPER.readValue(content, ProcessingResult.class);
+            }
+            // 新格式：逐行解析 OperationRecord
+            ProcessingResult result = new ProcessingResult();
+            String[] lines = content.split("\r?\n");
+            for (String line : lines) {
+                if (line == null || line.isBlank()) {
+                    continue;
+                }
+                OperationRecord record = SESSION_MAPPER.readValue(line, OperationRecord.class);
+                result.addOperationRecord(record);
+            }
+            return result;
+        } catch (Exception e) {
+            LoggerUtil.logException("加载会话记录失败: " + sessionFile, e);
+            return null;
+        }
     }
 
     /**

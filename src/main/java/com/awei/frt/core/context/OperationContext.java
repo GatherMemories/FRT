@@ -122,8 +122,8 @@ public class OperationContext {
      */
     public void recordOperation(OperationRecord record) {
         processingResult.addOperationRecord(record);
-        // 每次操作后实时写入会话记录，防止异常中断导致记录丢失
-        BackupFileLoader.saveSessionRecord(processingResult);
+        // 每次操作后增量追加会话记录（JSON Lines 一行一条，防止异常中断导致记录丢失）
+        BackupFileLoader.appendSessionRecord(record);
     }
 
     /**
