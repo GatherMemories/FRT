@@ -1,14 +1,65 @@
 package com.awei.frt;
 
-/**
- * @Author: mou_ren
- * @Date: 2026/1/18 22:33
- */
-public class FileUtilTest {
+import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.model.OperationRecord;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-    public static void main(String[] args) {
-//        Path sourcePath = Paths.get();
-//        Path targetPath = Paths.get();
-//        FileUtils.addFile()
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * FileUtil 文件操作测试（原为空壳 main，补为真实 JUnit 测试）
+ */
+class FileUtilTest {
+
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void addFileCopiesAndAutoCreatesParentDir() throws IOException {
+        Path src = tempDir.resolve("src.txt");
+        Path target = tempDir.resolve("sub").resolve("dst.txt"); // 父目录不存在，应自动创建
+        Files.writeString(src, "hello");
+
+        OperationRecord record = new OperationRecord();
+        boolean ok = FileUtil.addFile(src, target, record);
+
+        assertTrue(ok, "新增应成功");
+        assertTrue(Files.exists(target), "目标文件应存在");
+        assertEquals("hello", Files.readString(target));
+        assertTrue(record.isSuccess());
+    }
+
+    @Test
+    void addFileFailsWhenTargetExists() throws IOException {
+        Path src = tempDir.resolve("src.txt");
+        Path target = tempDir.resolve("dst.txt");
+        Files.writeString(src, "hello");
+        Files.writeString(target, "already");
+
+        OperationRecord record = new OperationRecord();
+        boolean ok = FileUtil.addFile(src, target, record);
+
+        assertFalse(ok, "目标已存在时新增应失败");
+        assertFalse(record.isSuccess());
+    }
+
+    @Test
+    void deleteFileBacksUpAndDeletes() throws IOException {
+        Path file = tempDir.resolve("del.txt");
+        Files.writeString(file, "to delete");
+
+        OperationRecord record = new OperationRecord();
+        boolean ok = FileUtil.deleteFile(file, record);
+
+        assertTrue(ok, "删除应成功");
+        assertFalse(Files.exists(file), "文件应已被删除");
+        assertTrue(record.isSuccess());
     }
 }

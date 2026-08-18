@@ -2,7 +2,6 @@ package com.awei.frt;
 
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
-import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import org.junit.jupiter.api.Test;
 
@@ -16,14 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
 public class BackupFileLoaderTest {
 
     @Test
-    public void test() {
-
-        Map<String, Path> backupFiles = BackupFileLoader.getBackupFiles();
-        System.out.println(backupFiles);
-
-        Path recordPath = Path.of("C:\\Users\\5454564546\\Desktop\\FRT\\backup\\record\\backup-20260131-184239.json");
-        ProcessingResult processingResult = BackupFileLoader.loadOperationRecord(recordPath.getFileName().toString());
-        System.out.println(processingResult);
+    public void loadMissingRecordReturnsNull() {
+        // 容错：加载不存在的备份记录应返回 null 而不是抛异常（原测试硬编码了 Windows 绝对路径，Linux 上形同虚设）
+        ProcessingResult processingResult = BackupFileLoader.loadOperationRecord("backup-not-exist-00000000-000000");
+        assertNull(processingResult, "加载不存在的备份记录应返回 null");
     }
 
     /**
