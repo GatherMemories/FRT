@@ -105,6 +105,13 @@
                     <mainClass>com.awei.frt.Main</mainClass>
                 </configuration>
             </plugin>
+            <!-- Maven Surefire 插件: 运行单元测试。必须 >= 3.0 才会用 JUnit Platform 真正执行 JUnit5 测试
+                 （旧版 2.17 只能靠方法名以 test 开头的 JUnit3 启发式"假装"运行，@Test 全部漏跑） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
         </plugins>
     </build>
 
