@@ -74,7 +74,7 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
             return false;
         }
         OperationRecord record = newRecord(context);
-        boolean ok = FileUtil.addFile(node.getPath(), targetFilePath, record);
+        boolean ok = FileUtil.addFile(node.getPath(), targetFilePath, record, context.isDryRun());
         context.recordOperation(record);
         LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
         if (ok) {
@@ -93,7 +93,7 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
             return false;
         }
         OperationRecord record = newRecord(context);
-        boolean ok = FileUtil.replaceFile(node.getPath(), targetFilePath, record);
+        boolean ok = FileUtil.replaceFile(node.getPath(), targetFilePath, record, context.isDryRun());
         context.recordOperation(record);
         LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
         if (ok) {
@@ -109,7 +109,7 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
     protected boolean doDelete(FileNode node, OperationContext context) {
         Path targetFilePath = context.getTargetPath(node.getRelativePath());
         OperationRecord record = newRecord(context);
-        boolean ok = FileUtil.deleteFile(targetFilePath, record);
+        boolean ok = FileUtil.deleteFile(targetFilePath, record, context.isDryRun());
         context.recordOperation(record);
         LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
         if (ok) {

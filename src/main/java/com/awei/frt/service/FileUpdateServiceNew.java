@@ -10,6 +10,7 @@ import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.ui.ConsoleUserPrompter;
 import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.awei.frt.util.PreviewUtil;
 
 import java.nio.file.Path;
 import java.util.Scanner;
@@ -43,13 +44,29 @@ public class FileUpdateServiceNew {
 
             // 构建操作上下文
             Path basePath = config.getBaseDirectory();
-
-            OperationContext context = new OperationContext(config);
-
-            // 构建更新目录的文件树
             Path updatePath = basePath.resolve(config.getUpdatePath()).normalize();
-            LoggerUtil.logInfo("[FOLDER] 扫描更新目录: " + updatePath);
 
+            // ===== 预览阶段（dryRun）：只收集操作计划，不真正改动文件 =====
+            LoggerUtil.logInfo("[FOLDER] 扫描更新目录: " + updatePath);
+            OperationContext previewContext = new OperationContext(config);
+            previewContext.setDryRun(true);
+            FileNode previewTree = FileTreeBuilder.buildTree(updatePath);
+            previewTree.process(null, previewContext, FileNode.UPDATE_OPERATION);
+            ProcessingResult preview = previewContext.getProcessingResult();
+            int planCount = PreviewUtil.printPreview(preview, "更新");
+            if (planCount == 0) {
+                LoggerUtil.logInfo("[信息] 没有需要更新的文件");
+                return preview;
+            }
+            System.out.print("是否执行以上 " + planCount + " 个更新操作？(y/n): ");
+            String choice = prompter.readLine().toLowerCase();
+            if (!choice.equals("y") && !choice.equals("yes")) {
+                LoggerUtil.logInfo("[信息] 用户取消更新操作");
+                return preview;
+            }
+
+            // ===== 真实执行阶段 =====
+            OperationContext context = new OperationContext(config);
             FileNode updateTree = FileTreeBuilder.buildTree(updatePath);
             // 打印文件树结构（调试用，仅控制台）
             System.out.println("[FILE] 文件树结构:");

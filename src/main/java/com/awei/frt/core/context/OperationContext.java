@@ -21,6 +21,7 @@ public class OperationContext {
 
     private RuleInheritanceContext ruleInheritanceContext; // 规则继承上下文，管理规则继承关系
     private final ProcessingResult processingResult;       // 处理结果对象，汇总处理结果
+    private boolean dryRun = false;                        // 预览模式：只收集操作计划，不执行文件 IO、不落盘会话记录
 
     // 操作类型（用于 ProcessingResult-->OperationRecord-->operationType）
     public static final String OPERATION_RENAME = "operation_rename";
@@ -123,7 +124,24 @@ public class OperationContext {
     public void recordOperation(OperationRecord record) {
         processingResult.addOperationRecord(record);
         // 每次操作后增量追加会话记录（JSON Lines 一行一条，防止异常中断导致记录丢失）
-        BackupFileLoader.appendSessionRecord(record);
+        // 预览模式（dryRun）不落盘，避免把"计划"当成"已执行"写入恢复记录
+        if (!dryRun) {
+            BackupFileLoader.appendSessionRecord(record);
+        }
+    }
+
+    /**
+     * 是否预览模式（只收集操作计划，不真正改动文件）
+     */
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    /**
+     * 设置预览模式
+     */
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
     }
 
     /**

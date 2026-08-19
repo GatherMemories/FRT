@@ -10,6 +10,7 @@ import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.ui.ConsoleUserPrompter;
 import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.awei.frt.util.PreviewUtil;
 
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -44,39 +45,39 @@ public class FileDeleteService {
 
             // 构建操作上下文
             Path basePath = config.getBaseDirectory();
-            OperationContext context = new OperationContext(config);
-
-            // 构建删除目录的文件树
             Path deletePath = basePath.resolve(config.getDeletePath()).normalize();
             LoggerUtil.logInfo("[FOLDER] 扫描删除目录: " + deletePath);
 
-            FileNode deleteTree = FileTreeBuilder.buildTree(deletePath);
-
-            // 检查是否有文件要删除
-            if (!hasFilesToDelete(deleteTree)) {
+            // ===== 预览阶段（dryRun）：列出将被删除的文件 =====
+            OperationContext previewContext = new OperationContext(config);
+            previewContext.setDryRun(true);
+            FileNode previewTree = FileTreeBuilder.buildTree(deletePath);
+            previewTree.process(null, previewContext, FileNode.DELETE_OPERATION);
+            ProcessingResult preview = previewContext.getProcessingResult();
+            int planCount = PreviewUtil.printPreview(preview, "删除");
+            if (planCount == 0) {
                 LoggerUtil.logInfo("[信息] 删除目录中没有文件需要处理");
-                ProcessingResult emptyResult = new ProcessingResult();
-                emptyResult.setSuccess(true);
-                return emptyResult;
+                return preview;
             }
 
-            // 打印文件树结构（仅控制台）
-            System.out.println("[FILE] 文件树结构:");
-            FileTreeBuilder.printTree(deleteTree, 0);
-            System.out.println();
-            LoggerUtil.logInfo("[FILE] 文件数量: " + countFiles(deleteTree));
-
-            // 二次确认
-            System.out.println("-----------------------------------------");
-            System.out.print("确认要执行删除操作吗？此操作不可逆！(y/n): ");
+            // 预览确认（替代原"确认要执行删除操作吗"二次确认，预览已列出具体文件）
+            System.out.print("确认要执行以上 " + planCount + " 个删除操作吗？此操作不可逆！(y/n): ");
             String confirm = prompter.readLine().toLowerCase();
-
             if (!confirm.equals("y") && !confirm.equals("yes")) {
                 LoggerUtil.logInfo("[信息] 已取消删除操作");
                 ProcessingResult cancelResult = new ProcessingResult();
                 cancelResult.setSuccess(false);
                 return cancelResult;
             }
+
+            // ===== 真实执行阶段 =====
+            OperationContext context = new OperationContext(config);
+            FileNode deleteTree = FileTreeBuilder.buildTree(deletePath);
+            // 打印文件树结构（仅控制台）
+            System.out.println("[FILE] 文件树结构:");
+            FileTreeBuilder.printTree(deleteTree, 0);
+            System.out.println();
+            LoggerUtil.logInfo("[FILE] 文件数量: " + countFiles(deleteTree));
 
             // 执行删除处理
             LoggerUtil.logInfo("[执行] 正在处理delete文件夹...");
@@ -105,32 +106,6 @@ public class FileDeleteService {
             return result;
         }
     }
-
-    /**
-     * 检查文件树是否有文件要删除（栈迭代，避免深目录递归栈溢出）
-     * @param node 文件节点
-     * @return 是否有文件
-     */
-    private boolean hasFilesToDelete(FileNode node) {
-        if (node == null) {
-            return false;
-        }
-        Deque<FileNode> stack = new ArrayDeque<>();
-        stack.push(node);
-        while (!stack.isEmpty()) {
-            FileNode current = stack.pop();
-            if (!current.isDirectory()) {
-                return true;
-            }
-            if (current instanceof FolderNode folderNode) {
-                for (FileNode child : folderNode.getChildren()) {
-                    stack.push(child);
-                }
-            }
-        }
-        return false;
-    }
-
 
     /**
      * 统计文件数量（栈迭代，避免深目录递归栈溢出）

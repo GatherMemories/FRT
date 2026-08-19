@@ -73,7 +73,7 @@ public class McModStrategy extends AbstractOperationStrategy {
             OperationRecord record = newRecord(context);
             Path targetFilePath = context.getTargetPath(node.getRelativePath())
                     .resolve(currentModInfo.getPath().getFileName()).normalize();
-            boolean ok = FileUtil.addFile(currentModInfo.getPath(), targetFilePath, record);
+            boolean ok = FileUtil.addFile(currentModInfo.getPath(), targetFilePath, record, context.isDryRun());
             context.recordOperation(record);
             LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
             any = true;
@@ -122,7 +122,7 @@ public class McModStrategy extends AbstractOperationStrategy {
             }
 
             OperationRecord record = newRecord(context);
-            boolean ok = FileUtil.replaceFile(sourceFilePath, targetFilePath, record);
+            boolean ok = FileUtil.replaceFile(sourceFilePath, targetFilePath, record, context.isDryRun());
             context.recordOperation(record);
             LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
                     "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
@@ -149,7 +149,7 @@ public class McModStrategy extends AbstractOperationStrategy {
             }
             OperationRecord record = newRecord(context);
             Path deleteFilePath = targetModInfo.getPath();
-            boolean ok = FileUtil.deleteFile(deleteFilePath, record);
+            boolean ok = FileUtil.deleteFile(deleteFilePath, record, context.isDryRun());
             context.recordOperation(record);
             LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
             any = true;
