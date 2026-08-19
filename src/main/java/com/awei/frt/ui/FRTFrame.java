@@ -80,6 +80,10 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
         // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
         quickPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        // 快捷按钮横向滚动（选项多时不换行挤压日志区，可横向拖动查看全部）
+        JScrollPane quickScroll = new JScrollPane(quickPanel,
+                JScrollPane.VERTICAL_SCROLLBAR_NEVER, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        quickScroll.setBorder(null);
         JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         inputField = new JTextField(38);
         inputField.addActionListener(e -> submitInput());
@@ -92,7 +96,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         inputRow.add(cancelButton);
         inputArea = new JPanel(new BorderLayout(0, 4));
         inputArea.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
-        inputArea.add(quickPanel, BorderLayout.NORTH);
+        inputArea.add(quickScroll, BorderLayout.NORTH);
         inputArea.add(inputRow, BorderLayout.SOUTH);
         inputArea.setVisible(false); // 平时隐藏，等待输入时才出现
 
@@ -267,7 +271,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
                 max = 9;
             }
             if (max > 0) {
-                int upper = Math.min(max, 12);
+                int upper = Math.min(max, 20);
                 for (int i = 1; i <= upper; i++) {
                     addQuick(String.valueOf(i), String.valueOf(i));
                 }

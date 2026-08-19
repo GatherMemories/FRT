@@ -77,8 +77,13 @@ public class RestoreService {
                 System.out.println("1-" + fileNames.size() + ". 恢复备份记录");
                 System.out.print("\n请输入选项 (0：返回, -1：删除, 1-" + fileNames.size() + "：恢复): ");
 
-                // 3. 用户选择
+                // 3. 用户选择（空输入=取消，直接退出恢复功能）
                 String choice = prompter.readLine();
+
+                if (choice.isEmpty()) {
+                    System.out.println("[信息] 已取消恢复操作");
+                    return;
+                }
 
                 if (choice.equals("0")) {
                     System.out.println("[返回] 已返回主菜单");
@@ -89,6 +94,10 @@ public class RestoreService {
                     // 删除备份记录
                     System.out.print("\n请输入要删除的备份记录编号，支持单个编号或范围 (如 3 或 1-5) (1-" + fileNames.size() + "): ");
                     String deleteChoice = prompter.readLine();
+                    if (deleteChoice.isEmpty()) {
+                        System.out.println("[信息] 已取消删除备份记录");
+                        continue; // 回到恢复菜单
+                    }
 
                     try {
                         List<Integer> deleteIndexes = new ArrayList<>();

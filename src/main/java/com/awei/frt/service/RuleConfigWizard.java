@@ -121,8 +121,12 @@ public class RuleConfigWizard {
         System.out.println("[选择] 规则文件作用目录:");
         System.out.println("       1. 更新目录: " + config.getUpdatePath());
         System.out.println("       2. 删除目录: " + config.getDeletePath());
-        System.out.print("请输入 (1-2, 回车=1): ");
+        System.out.print("请输入 (1-2, 回车/取消=返回): ");
         String input = readLine();
+        if (input.isEmpty()) {
+            System.out.println("[取消] 已返回主菜单");
+            return null;
+        }
         Path basePath;
         if (input.equals("2")) {
             basePath = config.getBaseDirectory().resolve(config.getDeletePath()).normalize();
@@ -247,9 +251,9 @@ public class RuleConfigWizard {
         System.out.println("  可选值: " + listStrategies());
         String strategyType = null;
         while (strategyType == null) {
-            System.out.print("  请输入 (编号或策略名, 0=取消): ");
+            System.out.print("  请输入 (编号或策略名, 回车/0=取消): ");
             String input = readLine();
-            if (input.equals("0")) {
+            if (input.isEmpty() || input.equals("0")) {
                 System.out.println("[取消] 已取消生成");
                 return null;
             }
