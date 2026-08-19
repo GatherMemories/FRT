@@ -2,6 +2,7 @@ package com.awei.frt;
 
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,11 @@ class FileUtilTest {
 
     @TempDir
     Path tempDir;
+
+    @AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
 
     @Test
     void addFileCopiesAndAutoCreatesParentDir() throws IOException {
@@ -52,6 +58,8 @@ class FileUtilTest {
 
     @Test
     void deleteFileBacksUpAndDeletes() throws IOException {
+        // 备份路径隔离到临时目录，避免测试污染真实 testDic/backup
+        TestSupport.isolateBackup(tempDir);
         Path file = tempDir.resolve("del.txt");
         Files.writeString(file, "to delete");
 

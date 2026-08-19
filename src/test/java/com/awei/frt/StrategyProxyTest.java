@@ -7,6 +7,7 @@ import com.awei.frt.core.strategy.OperationStrategy;
 import com.awei.frt.core.strategy.StrategyProxy;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
@@ -21,6 +22,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * - 策略抛异常时：代理记录日志与失败统计，不向上抛（更新流程不中断）
  */
 class StrategyProxyTest {
+
+    @AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
 
     @Test
     void factoryReturnsProxyInstance() {
@@ -47,17 +53,23 @@ class StrategyProxyTest {
 
         OperationStrategy proxy = StrategyProxy.wrap(failing);
 
-        Config config = ConfigLoader.getConfig();
-        config.setTargetPath(Path.of("target-tmp"));
-        OperationContext ctx = new OperationContext(config);
-        FileLeaf leaf = new FileLeaf(Path.of("x.txt"), "x.txt");
+        // 备份路径隔离到临时目录，避免会话记录污染真实 testDic/backup
+        TestSupport.isolateBackup(Path.of(System.getProperty("java.io.tmpdir"), "frt-proxy-test"));
+        try {
+            Config config = ConfigLoader.getConfig();
+            config.setTargetPath(Path.of("target-tmp"));
+            OperationContext ctx = new OperationContext(config);
+            FileLeaf leaf = new FileLeaf(Path.of("x.txt"), "x.txt");
 
-        // 不抛异常（代理兜底）
-        assertDoesNotThrow(() -> proxy.execute(leaf, ctx, new String[]{OperationContext.OPERATION_ADD}));
+            // 不抛异常（代理兜底）
+            assertDoesNotThrow(() -> proxy.execute(leaf, ctx, new String[]{OperationContext.OPERATION_ADD}));
 
-        // 失败被统计
-        assertEquals(1, ctx.getProcessingResult().getErrorCount());
-        assertFalse(ctx.getProcessingResult().isSuccess());
-        assertFalse(ctx.getProcessingResult().getOperationRecords().get(0).isSuccess());
+            // 失败被统计
+            assertEquals(1, ctx.getProcessingResult().getErrorCount());
+            assertFalse(ctx.getProcessingResult().isSuccess());
+            assertFalse(ctx.getProcessingResult().getOperationRecords().get(0).isSuccess());
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
     }
 }

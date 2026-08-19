@@ -1,13 +1,17 @@
 package com.awei.frt;
 
 import com.awei.frt.core.builder.BackupFileLoader;
+import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,6 +29,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * - 旧格式（整文件 ProcessingResult）兼容读取
  */
 class SessionRecordTest {
+
+    @TempDir
+    Path tempDir;
+
+    @BeforeEach
+    void isolateBackupPath() {
+        // 会话记录隔离到临时目录，避免污染真实 testDic/backup/record
+        TestSupport.isolateBackup(tempDir);
+    }
+
+    @AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
 
     @Test
     void appendAndLoadRoundTrip() {
@@ -62,7 +80,9 @@ class SessionRecordTest {
             ObjectMapper mapper = new ObjectMapper()
                     .registerModule(new JavaTimeModule())
                     .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            Path sessionFile = Path.of("testDic/backup/record/session-current.json");
+            // 会话文件路径跟随隔离后的备份路径（record 目录可能不存在，先创建）
+            Path sessionFile = ConfigLoader.getBackupPath().resolve("record").resolve("session-current.json");
+            Files.createDirectories(sessionFile.getParent());
             Files.writeString(sessionFile, mapper.writeValueAsString(legacy), StandardCharsets.UTF_8);
 
             ProcessingResult loaded = BackupFileLoader.loadSessionRecord();

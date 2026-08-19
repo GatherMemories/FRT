@@ -7,6 +7,7 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.core.strategy.McModStrategy;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -86,9 +87,16 @@ class McModStrategyTest {
         }
     }
 
+    @AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
+
     // ---------------- 辅助 ----------------
 
     private OperationContext buildContext(Path updateDir, Path targetDir, Map<String, String> replacements) throws IOException {
+        // 备份路径隔离到临时目录，避免测试污染真实 testDic/backup
+        TestSupport.isolateBackup(updateDir.getParent());
         Config config = ConfigLoader.getConfig();
         // 指向临时目录（绝对路径，OperationContext 构造时读取）
         config.setTargetPath(targetDir.toAbsolutePath());
