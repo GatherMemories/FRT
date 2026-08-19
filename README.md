@@ -37,11 +37,20 @@
   - 基于文件名进行文件匹配和操作
   - 支持通配符模式的文件筛选（统一 `GlobMatcher`，正则元字符安全转义）
 
+- **`ZipEntryNameStrategy`**：压缩包内文件名匹配策略（类型 `ZipEntryName`）
+  - 作用于 .zip/.jar 文件：压缩包内存在条目名匹配 `patterns` 即命中
+  - 例：`patterns: ["META-INF/*.toml"]` 只处理含 mods.toml 的包；`patterns: ["*.class"]` 处理含 class 文件的包
+  - 支持通配符与 `excludePatterns` 排除；空 patterns = 匹配所有压缩包
+
+- **`ZipEntryContentStrategy`**：压缩包内文件内容匹配策略（类型 `ZipEntryContent`）
+  - 读取 zip/jar 内条目文本，内容包含 `replacements.contentContains`（任一关键词）即命中
+  - 例：`replacements: {"contentContains": "port=8080"}` 处理含该配置内容的包
+  - 条目文本读取限制 1MB（防大二进制包拖慢扫描）
+
 > 策略基类 `AbstractOperationStrategy` 提供模板方法（统一 null/类型校验 + add/replace/delete 钩子分派），
 > 新增策略只需实现三个钩子；`StrategyFactory` 采用**注册表**（策略类自报 `getStrategyType()`），
 > 不再依赖枚举。动态代理 `StrategyProxy` 自动为每次策略执行提供日志、异常兜底与失败统计。
->
-> 旧的 Zip 空壳策略类已删除（规划功能可随时以插件方式接入，见"外部策略插件"）。
+> 向导（规则生成）的策略列表会自动包含所有内置与外部插件策略。
 
 ## 配置文件参数说明
 
