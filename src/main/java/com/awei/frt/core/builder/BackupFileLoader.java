@@ -9,8 +9,13 @@ import com.awei.frt.model.RestoreResult;
 import com.awei.frt.ui.ConsoleUserPrompter;
 import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
@@ -37,10 +42,36 @@ public class BackupFileLoader {
     private static Map<String, ProcessingResult> operationRecordFiles = new HashMap<>();
     // 未完成会话的临时记录文件名（操作过程中实时写入，异常中断后用于恢复）
     private static final String SESSION_RECORD_FILE = "session-current.json";
-    // 会话记录共享 JSON 序列化器（线程安全可复用，带 JSR310 时间支持）
-    private static final ObjectMapper SESSION_MAPPER = new ObjectMapper()
+
+    /**
+     * 备份体系共享 JSON 序列化器（线程安全可复用）：
+     * - JSR310 时间支持 + 禁用时间戳
+     * - 自定义 Path 反序列化：直接 Paths.get(字符串)，兼容 Windows 历史记录里的反斜杠路径
+     *   （Jackson 默认 NioPathDeserializer 按 URI 解析，遇到 "C:\Users\..." 会抛 Bad escape，
+     *    导致 Windows 上生成的旧备份记录在恢复菜单中全部加载失败）
+     */
+    private static final ObjectMapper BACKUP_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+            .registerModule(new SimpleModule()
+                    .addDeserializer(Path.class, new JsonDeserializer<Path>() {
+                        @Override
+                        public Path deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                            String pathString = p.getValueAsString();
+                            if (pathString == null || pathString.isEmpty()) {
+                                return null;
+                            }
+                            try {
+                                return java.nio.file.Paths.get(pathString);
+                            } catch (Exception e) {
+                                // 非法路径字符串不崩反序列化，恢复时按"文件不存在"处理
+                                return null;
+                            }
+                        }
+                    }));
+    // 会话记录共享 JSON 序列化器（同 BACKUP_MAPPER，别名语义更清晰）
+    private static final ObjectMapper SESSION_MAPPER = BACKUP_MAPPER;
 
     // 获取操作记录集文件列表
     public static Map<String, ProcessingResult> getOperationRecordFiles() {
@@ -249,10 +280,7 @@ public class BackupFileLoader {
             Path tempFilePath = recordFilePath.resolveSibling(fileName + ".json.tmp");
             try {
                 // 9.1 先写入临时文件
-                ObjectMapper objectMapper = new ObjectMapper();
-                objectMapper.registerModule(new JavaTimeModule());
-                objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-                objectMapper.writeValue(tempFilePath.toFile(), record);
+                BACKUP_MAPPER.writeValue(tempFilePath.toFile(), record);
 
                 // 9.2 写入成功后，原子性地重命名为目标文件
                 Files.move(tempFilePath, recordFilePath,
@@ -439,11 +467,8 @@ public class BackupFileLoader {
                 return null;
             }
 
-            // 7. 反序列化
-            ObjectMapper objectMapper = new ObjectMapper();
-            // 注册Java 8日期时间模块，支持LocalDateTime等类型的反序列化
-            objectMapper.registerModule(new JavaTimeModule());
-            return objectMapper.readValue(recordFilePath.toFile(), ProcessingResult.class);
+            // 7. 反序列化（BACKUP_MAPPER：JSR310 + 兼容 Windows 路径的自定义 Path 反序列化）
+            return BACKUP_MAPPER.readValue(recordFilePath.toFile(), ProcessingResult.class);
 
         } catch (IOException e) {
             LoggerUtil.logException("加载操作记录失败", e);

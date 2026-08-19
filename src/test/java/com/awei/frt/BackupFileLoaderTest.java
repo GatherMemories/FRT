@@ -22,6 +22,33 @@ public class BackupFileLoaderTest {
     }
 
     /**
+     * 回归测试：Windows 上生成的历史备份记录（路径含反斜杠）应能正常反序列化，
+     * 不再抛 Jackson "Bad escape"（默认 NioPathDeserializer 把路径当 URI 解析导致崩溃）
+     */
+    @Test
+    public void loadWindowsPathRecordDoesNotThrow() throws IOException {
+        // 模拟 Windows 平台生成的历史备份记录 JSON（反斜杠路径）
+        String json = "{\"resultTime\":\"2026-02-22T00:15:00\",\"successCount\":1,\"skipCount\":0,\"errorCount\":0,"
+                + "\"operationRecords\":[{\"strategyType\":\"McMod\",\"operationType\":\"operation_replace\","
+                + "\"sourcePath\":\"C:\\\\Users\\\\5454564546\\\\Desktop\\\\update\\\\mod.jar\","
+                + "\"targetPath\":\"C:\\\\Users\\\\5454564546\\\\Desktop\\\\THtest\\\\mod.jar\","
+                + "\"sourceFileSign\":\"abc\",\"targetFileSign\":\"def\",\"timestamp\":\"2026-02-22T00:15:00\","
+                + "\"success\":true,\"errorMessage\":null}],\"success\":true,\"resultPath\":null}";
+        Path recordFile = ConfigLoader.getBackupPath().resolve("record").resolve("backup-win-test.json");
+        Files.writeString(recordFile, json);
+        try {
+            ProcessingResult result = BackupFileLoader.loadOperationRecord("backup-win-test.json");
+            assertNotNull(result, "含 Windows 路径的历史记录应能加载");
+            assertEquals(1, result.getOperationRecords().size());
+            assertNotNull(result.getOperationRecords().get(0).getSourcePath(), "sourcePath 应被解析为 Path 对象");
+            assertTrue(result.getOperationRecords().get(0).getSourcePath().toString().contains("Desktop"),
+                    "sourcePath 应保留原路径内容");
+        } finally {
+            Files.deleteIfExists(recordFile);
+        }
+    }
+
+    /**
      * 回归测试：getBackupFiles 判空条件修复（原实现误检查 operationRecordFiles，
      * 且 loadBackupFiles 返回 null 时会把静态字段置 null 导致后续 NPE）
      */
