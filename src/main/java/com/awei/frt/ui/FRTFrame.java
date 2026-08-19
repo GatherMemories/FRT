@@ -39,8 +39,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
 
     private final JTextArea logArea;
     private final JLabel statusLabel;
-    private final StringBuilder pendingLine = new StringBuilder();
-    private String lastCompleteLine = "";
+    // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明），弹窗内可滚动完整查看
+    private final StringBuilder promptBuffer = new StringBuilder();
+    private static final int PROMPT_BUFFER_MAX = 20000;
     private Config config;
     private UserPrompter prompter;
 
@@ -186,23 +187,22 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
     }
 
     private void feedPrompt(String text) {
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '\n') {
-                lastCompleteLine = pendingLine.toString();
-                pendingLine.setLength(0);
-            } else {
-                pendingLine.append(c);
-            }
+        if (promptBuffer.length() + text.length() > PROMPT_BUFFER_MAX) {
+            // 限长保护：超长时截断头部，保留最近内容
+            promptBuffer.delete(0, Math.min(promptBuffer.length(), text.length()));
         }
+        promptBuffer.append(text);
     }
 
+    /**
+     * 取走提示缓冲（消费式）：返回自上次输入以来的完整提示文本并清空，
+     * 供 SwingPrompter 在弹窗中可滚动展示（含结构树、选项列表等长内容）
+     */
     @Override
-    public String lastPrompt() {
-        if (pendingLine.length() > 0) {
-            return pendingLine.toString();
-        }
-        return lastCompleteLine;
+    public String takePrompt() {
+        String prompt = promptBuffer.toString();
+        promptBuffer.setLength(0);
+        return prompt;
     }
 
     // ---------------- 双写流 ----------------
