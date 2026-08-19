@@ -37,15 +37,15 @@ import java.util.regex.Pattern;
  * FRT Swing 主窗口（固定输入区版）
  * - 顶部：5 个功能按钮（更新/删除/恢复/规则生成/清理残留备份）
  * - 中部：日志区（捕获 System.out/err 实时显示，长内容可滚动查看）
- * - 底部：固定输入区——提示行 + 快捷选项按钮（按提示自动生成 y/n、数字选项）+ 输入框
+ * - 底部：输入区（快捷选项按钮 + 输入框，仅等待输入时出现）+ 最底部状态栏
  * 服务层通过 UserPrompter 抽象复用同一套逻辑；等待输入时不弹窗，直接在窗口内交互。
  */
 public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, SwingPrompter.InputPanel {
 
     private final JTextArea logArea;
     private final JLabel statusLabel;
-    private final JLabel promptLabel;
     private final JPanel quickPanel;
+    private final JPanel inputArea;          // 快捷按钮 + 输入行（等待输入时显示）
     private final JTextField inputField;
     private final JButton submitButton;
     private final JButton cancelButton;
@@ -78,11 +78,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         top.add(topButton("清理残留备份", this::runCleanup));
         add(top, BorderLayout.NORTH);
 
-        // 底部固定输入区
-        JPanel bottom = new JPanel(new BorderLayout(4, 4));
-        bottom.setBorder(BorderFactory.createEmptyBorder(6, 10, 8, 10));
-        statusLabel = new JLabel("就绪");
-        promptLabel = new JLabel(" ");
+        // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
         quickPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         inputField = new JTextField(38);
@@ -94,15 +90,21 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         inputRow.add(inputField);
         inputRow.add(submitButton);
         inputRow.add(cancelButton);
-        JPanel promptRow = new JPanel(new BorderLayout());
-        promptRow.add(promptLabel, BorderLayout.CENTER);
-        bottom.add(statusLabel, BorderLayout.NORTH);
-        bottom.add(promptRow, BorderLayout.CENTER);
-        bottom.add(quickPanel, BorderLayout.SOUTH);
-        JPanel inputArea = new JPanel(new BorderLayout());
-        inputArea.add(bottom, BorderLayout.NORTH);
+        inputArea = new JPanel(new BorderLayout(0, 4));
+        inputArea.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
+        inputArea.add(quickPanel, BorderLayout.NORTH);
         inputArea.add(inputRow, BorderLayout.SOUTH);
-        add(inputArea, BorderLayout.SOUTH);
+        inputArea.setVisible(false); // 平时隐藏，等待输入时才出现
+
+        statusLabel = new JLabel("就绪");
+        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, java.awt.Color.LIGHT_GRAY));
+        statusBar.add(statusLabel);
+
+        JPanel bottomArea = new JPanel(new BorderLayout());
+        bottomArea.add(inputArea, BorderLayout.CENTER);
+        bottomArea.add(statusBar, BorderLayout.SOUTH);
+        add(bottomArea, BorderLayout.SOUTH);
         setInputEnabled(false);
 
         // 捕获 System.out/err 到日志区（双写：控制台 + 窗口）
@@ -199,19 +201,18 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
     @Override
     public void showPrompt(String prompt) {
-        // EDT：显示提示行（单行截断）、按提示生成快捷按钮、启用输入框并聚焦
-        String oneLine = prompt.replace('\n', ' ').replace('\r', ' ').trim();
-        promptLabel.setText(oneLine.length() > 120 ? oneLine.substring(0, 120) + "..." : (oneLine.isEmpty() ? " " : oneLine));
+        // EDT：按提示生成快捷按钮、显示输入区并聚焦（提示全文已在日志区，不重复展示）
         rebuildQuickButtons(prompt);
         inputField.setText("");
         setInputEnabled(true);
+        inputArea.setVisible(true);
         inputField.requestFocusInWindow();
     }
 
     @Override
     public void resetInput() {
         setInputEnabled(false);
-        promptLabel.setText(" ");
+        inputArea.setVisible(false);
         quickPanel.removeAll();
         quickPanel.revalidate();
         quickPanel.repaint();
