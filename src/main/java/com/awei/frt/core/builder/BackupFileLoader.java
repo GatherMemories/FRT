@@ -998,16 +998,16 @@ public class BackupFileLoader {
     public static int cleanupOrphanBackupFiles(UserPrompter prompter) {
         List<Path> orphans = findOrphanBackupFiles();
         if (orphans.isEmpty()) {
-            LoggerUtil.logInfo("[信息] 没有发现孤立备份文件");
+            LoggerUtil.logInfo("[信息] 没有发现残留备份文件");
             return 0;
         }
-        System.out.println("\n[列表] 孤立备份文件（未被任何备份记录引用）共 " + orphans.size() + " 个:");
+        System.out.println("\n[列表] 残留备份文件（未被任何备份记录引用）共 " + orphans.size() + " 个:");
         System.out.println("-----------------------------------------");
         for (int i = 0; i < orphans.size(); i++) {
             System.out.printf("%d. %s%n", i + 1, orphans.get(i));
         }
         System.out.println("-----------------------------------------");
-        System.out.print("确认删除这些孤立备份文件吗？此操作不可逆！(y/n): ");
+        System.out.print("确认删除这些残留备份文件吗？此操作不可逆！(y/n): ");
         String choice = prompter.readLine().toLowerCase();
         if (!choice.equals("y") && !choice.equals("yes")) {
             LoggerUtil.logInfo("[信息] 已取消清理");
@@ -1019,7 +1019,7 @@ public class BackupFileLoader {
                 deleted++;
             }
         }
-        LoggerUtil.logInfo("[成功] 已删除孤立备份文件 " + deleted + "/" + orphans.size() + " 个");
+        LoggerUtil.logInfo("[成功] 已删除残留备份文件 " + deleted + "/" + orphans.size() + " 个");
         return deleted;
     }
 

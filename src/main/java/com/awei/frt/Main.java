@@ -65,8 +65,8 @@ public class Main {
                 System.out.println("1. 更新文件");
                 System.out.println("2. 删除文件");
                 System.out.println("3. 执行恢复操作");
-                System.out.println("4. 生成/编辑匹配规则配置文件");
-                System.out.println("5. 清理孤立备份文件");
+                System.out.println("4. 规则生成（生成/编辑匹配规则配置文件）");
+                System.out.println("5. 清理残留备份");
                 System.out.println("6. 退出");
                 System.out.print("请输入选项 (1-6): ");
 
@@ -86,11 +86,11 @@ public class Main {
                         restoreService.executeRestore();
                         break;
                     case "4":
-                        LoggerUtil.logInfo("[向导] 生成/编辑匹配规则配置文件...");
+                        LoggerUtil.logInfo("[规则生成] 生成/编辑匹配规则配置文件...");
                         new RuleConfigWizard(config, scanner).start();
                         break;
                     case "5":
-                        LoggerUtil.logInfo("[清理] 执行孤立备份文件清理...");
+                        LoggerUtil.logInfo("[清理] 执行残留备份文件清理...");
                         BackupFileLoader.cleanupOrphanBackupFiles(scanner);
                         break;
                     case "6":

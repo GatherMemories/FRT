@@ -52,7 +52,7 @@ public class RuleConfigWizard {
     public void start() {
         try {
             System.out.println("\n=========================================");
-            System.out.println("[向导] 生成/编辑匹配规则配置文件 (matching-rules.json)");
+            System.out.println("[规则生成] 生成/编辑匹配规则配置文件 (matching-rules.json)");
             System.out.println("=========================================");
             System.out.println("[说明] 规则文件控制所在层文件夹的 增/删/改 操作");
             System.out.println("       查找优先级: matching-rules.json > replace.json > add.json > delete.json");
@@ -76,8 +76,13 @@ public class RuleConfigWizard {
 
             System.out.print("\n[选择] 请选择要在哪一层生成规则文件 (输入文件夹编号, 0=返回): ");
             int choice;
+            String choiceInput = readLine();
+            if (choiceInput.isEmpty()) {
+                System.out.println("[取消] 已返回主菜单");
+                return;
+            }
             try {
-                choice = Integer.parseInt(readLine());
+                choice = Integer.parseInt(choiceInput);
             } catch (NumberFormatException e) {
                 System.out.println("[失败] 无效编号");
                 return;
@@ -141,15 +146,17 @@ public class RuleConfigWizard {
         folderCounter = 0;
         // 栈迭代打印（替代原 printNode/printChildren 相互递归，避免超深目录栈溢出）
         Deque<PrintTask> stack = new ArrayDeque<>();
-        stack.push(new PrintTask(root, "", true, true));
+        stack.push(new PrintTask(root, "", true, true, false));
         while (!stack.isEmpty()) {
             PrintTask task = stack.pop();
             if (task.isRoot) {
                 if (task.node.isDirectory()) {
                     int index = ++folderCounter;
                     folderIndex.put(index, task.node.getPath());
-                    System.out.println("[" + index + "] [+] " + task.node.getName() + "/");
-                    pushChildTasks((FolderNode) task.node, "", stack);
+                    String ruleFile = ruleFileAt(task.node.getPath());
+                    System.out.println("[" + index + "] [+] " + task.node.getName() + "/"
+                            + (ruleFile != null ? "  [规则: " + ruleFile + "]" : ""));
+                    pushChildTasks((FolderNode) task.node, "", stack, ruleFile != null);
                 } else {
                     System.out.println("[-] " + task.node.getName());
                 }
@@ -159,22 +166,43 @@ public class RuleConfigWizard {
             if (task.node.isDirectory()) {
                 int index = ++folderCounter;
                 folderIndex.put(index, task.node.getPath());
-                System.out.println(task.prefix + connector + "[" + index + "] [+] " + task.node.getName() + "/");
-                pushChildTasks((FolderNode) task.node, task.prefix + (task.isLast ? "    " : "│   "), stack);
+                String ruleFile = ruleFileAt(task.node.getPath());
+                System.out.println(task.prefix + connector + "[" + index + "] [+] " + task.node.getName() + "/"
+                        + (ruleFile != null ? "  [规则: " + ruleFile + "]" : ""));
+                pushChildTasks((FolderNode) task.node, task.prefix + (task.isLast ? "    " : "│   "), stack,
+                        ruleFile != null);
             } else {
-                System.out.println(task.prefix + connector + "[-] " + task.node.getName());
+                // 文件行：若所在层有规则文件，标注"受规则影响"（便于预览该层配置的作用范围）
+                String affected = task.affectedByRule ? "  [受规则影响]" : "";
+                System.out.println(task.prefix + connector + "[-] " + task.node.getName() + affected);
             }
         }
         return folderIndex;
     }
 
     /**
-     * 将子节点倒序压栈，保证正序弹出（输出顺序与原递归实现一致）
+     * 返回目录下已存在的规则文件名（按查找优先级），无则 null
      */
-    private void pushChildTasks(FolderNode folder, String childPrefix, Deque<PrintTask> stack) {
+    private String ruleFileAt(Path dir) {
+        if (dir == null) {
+            return null;
+        }
+        for (String ruleType : RulesConstants.FileNames.ALL_RULE_FILES) {
+            if (Files.exists(dir.resolve(ruleType))) {
+                return ruleType;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 将子节点倒序压栈，保证正序弹出（输出顺序与原递归实现一致）
+     * @param parentHasRule 父目录是否含规则文件（决定直属文件是否标注"受规则影响"）
+     */
+    private void pushChildTasks(FolderNode folder, String childPrefix, Deque<PrintTask> stack, boolean parentHasRule) {
         List<FileNode> children = folder.getChildren();
         for (int i = children.size() - 1; i >= 0; i--) {
-            stack.push(new PrintTask(children.get(i), childPrefix, i == children.size() - 1, false));
+            stack.push(new PrintTask(children.get(i), childPrefix, i == children.size() - 1, false, parentHasRule));
         }
     }
 
@@ -186,12 +214,14 @@ public class RuleConfigWizard {
         final String prefix;
         final boolean isLast;
         final boolean isRoot;
+        final boolean affectedByRule; // 文件是否处于含规则文件的层（受规则影响）
 
-        PrintTask(FileNode node, String prefix, boolean isLast, boolean isRoot) {
+        PrintTask(FileNode node, String prefix, boolean isLast, boolean isRoot, boolean affectedByRule) {
             this.node = node;
             this.prefix = prefix;
             this.isLast = isLast;
             this.isRoot = isRoot;
+            this.affectedByRule = affectedByRule;
         }
     }
 

@@ -60,8 +60,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
         top.add(makeButton("更新文件", this::runUpdate));
         top.add(makeButton("删除文件", this::runDelete));
         top.add(makeButton("恢复备份", this::runRestore));
-        top.add(makeButton("规则向导", this::runWizard));
-        top.add(makeButton("清理备份", this::runCleanup));
+        top.add(makeButton("规则生成", this::runWizard));
+        top.add(makeButton("清理残留备份", this::runCleanup));
         add(top, BorderLayout.NORTH);
 
         statusLabel = new JLabel("就绪");
