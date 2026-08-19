@@ -76,7 +76,10 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.addFile(node.getPath(), targetFilePath, record, context.isDryRun());
         context.recordOperation(record);
-        LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
+        // 预览模式不打"成功/失败"日志（计划已在预览列表展示），避免误以为已执行
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true); // 处理成功：链中后续策略不再处理该节点
         }
@@ -95,7 +98,9 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.replaceFile(node.getPath(), targetFilePath, record, context.isDryRun());
         context.recordOperation(record);
-        LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);
         }
@@ -111,7 +116,9 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.deleteFile(targetFilePath, record, context.isDryRun());
         context.recordOperation(record);
-        LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);
         }

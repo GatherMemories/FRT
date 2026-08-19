@@ -34,7 +34,7 @@ public final class PreviewUtil {
             return 0;
         }
         int planCount = 0;
-        System.out.println("\n[预览] 将执行以下 " + records.size() + " 个" + actionName + "操作:");
+        System.out.println("\n[预览] 将执行以下 " + records.size() + " 个" + actionName + "操作（预览模式：尚未执行任何操作，确认后才真正执行）:");
         System.out.println("-----------------------------------------");
         for (OperationRecord r : records) {
             if (!r.isSuccess()) {

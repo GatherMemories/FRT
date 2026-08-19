@@ -75,7 +75,9 @@ public class McModStrategy extends AbstractOperationStrategy {
                     .resolve(currentModInfo.getPath().getFileName()).normalize();
             boolean ok = FileUtil.addFile(currentModInfo.getPath(), targetFilePath, record, context.isDryRun());
             context.recordOperation(record);
-            LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            if (!context.isDryRun()) {
+                LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            }
             any = true;
         }
         if (any) {
@@ -124,8 +126,10 @@ public class McModStrategy extends AbstractOperationStrategy {
             OperationRecord record = newRecord(context);
             boolean ok = FileUtil.replaceFile(sourceFilePath, targetFilePath, record, context.isDryRun());
             context.recordOperation(record);
-            LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
-                    "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            if (!context.isDryRun()) {
+                LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
+                        "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            }
             any = true;
         }
         if (any) {
@@ -151,7 +155,9 @@ public class McModStrategy extends AbstractOperationStrategy {
             Path deleteFilePath = targetModInfo.getPath();
             boolean ok = FileUtil.deleteFile(deleteFilePath, record, context.isDryRun());
             context.recordOperation(record);
-            LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            if (!context.isDryRun()) {
+                LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            }
             any = true;
         }
         if (any) {
