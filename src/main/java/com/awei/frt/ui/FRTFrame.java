@@ -79,11 +79,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         add(top, BorderLayout.NORTH);
 
         // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
+        // 快捷按钮自动换行（不设滚动条，避免滚动条遮住按钮；按钮多时换行显示）
         quickPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        // 快捷按钮横向滚动（选项多时不换行挤压日志区，可横向拖动查看全部）
-        JScrollPane quickScroll = new JScrollPane(quickPanel,
-                JScrollPane.VERTICAL_SCROLLBAR_NEVER, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        quickScroll.setBorder(null);
         JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         inputField = new JTextField(38);
         inputField.addActionListener(e -> submitInput());
@@ -96,7 +93,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         inputRow.add(cancelButton);
         inputArea = new JPanel(new BorderLayout(0, 4));
         inputArea.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
-        inputArea.add(quickScroll, BorderLayout.NORTH);
+        inputArea.add(quickPanel, BorderLayout.NORTH);
         inputArea.add(inputRow, BorderLayout.SOUTH);
         inputArea.setVisible(false); // 平时隐藏，等待输入时才出现
 
@@ -121,6 +118,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             appendText("[失败] 配置加载失败，请检查 config.json\n");
             LoggerUtil.logError("[失败] 配置加载失败，请检查配置文件");
         }
+        // 残留备份过多时提醒清理
+        BackupFileLoader.warnOrphanBackupsIfNeeded();
     }
 
     private JButton topButton(String label, Runnable action) {

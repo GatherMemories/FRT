@@ -52,6 +52,9 @@ public class Main {
             // 检测是否有未完成的操作会话（上次异常中断遗留），提示用户恢复
             checkInterruptedSession(scanner);
 
+            // 残留备份过多时提醒清理（不影响启动）
+            BackupFileLoader.warnOrphanBackupsIfNeeded();
+
             // 创建服务实例
             FileUpdateServiceNew updateService = new FileUpdateServiceNew(config, scanner);
             FileDeleteService deleteService = new FileDeleteService(config, scanner);

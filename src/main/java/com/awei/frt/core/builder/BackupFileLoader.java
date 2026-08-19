@@ -943,6 +943,10 @@ public class BackupFileLoader {
     /**
      * 查找孤立备份文件：备份索引中存在、但没有任何操作记录引用（sourceFileSign/targetFileSign）的文件。
      * 来源：记录被删但备份残留、手工放入 backup/ 的文件、异常中断残留。
+     *
+     * 注意：本方法只"查找"不删除；删除前请用 cleanupOrphanBackupFiles 的"无记录保护"
+     * （没有任何操作记录可参照时，所有备份都会被视为孤立，直接删除是危险的）。
+     *
      * @return 孤立备份文件列表（按路径排序），无则空列表
      */
     public static List<Path> findOrphanBackupFiles() {
@@ -995,8 +999,31 @@ public class BackupFileLoader {
         return cleanupOrphanBackupFiles(new ConsoleUserPrompter(scanner));
     }
 
+    /**
+     * 残留备份提醒：检测到较多残留备份文件时打印提示（程序启动后调用）
+     * 阈值：>= 5 个时提醒；任何异常静默（不影响启动）
+     */
+    public static void warnOrphanBackupsIfNeeded() {
+        try {
+            List<Path> orphans = findOrphanBackupFiles();
+            if (orphans.size() >= 5) {
+                LoggerUtil.logWarn("[提示] 检测到 " + orphans.size() + " 个残留备份文件（未被任何记录引用），"
+                        + "可在「清理残留备份」中清除，避免备份目录膨胀");
+            }
+        } catch (Exception e) {
+            // 提醒失败不影响启动
+        }
+    }
+
     public static int cleanupOrphanBackupFiles(UserPrompter prompter) {
-        List<Path> orphans = findOrphanBackupFiles();
+        // 安全保护：没有任何操作记录可参照时，所有备份都会被视为"孤立"，直接删除会误删恢复所需文件
+        Map<String, ProcessingResult> operationRecords = getOperationRecordFiles();
+        if (operationRecords == null || operationRecords.isEmpty()) {
+            LoggerUtil.logWarn("[警告] 没有可参照的备份记录，为防止误删备份文件，已跳过清理");
+            LoggerUtil.logWarn("[提示] 请先执行一次更新/删除操作产生备份记录，或手动处理 backup/ 目录");
+            return 0;
+        }
+        List<Path> orphans = findOrphanBackupFiles(operationRecords);
         if (orphans.isEmpty()) {
             LoggerUtil.logInfo("[信息] 没有发现残留备份文件");
             return 0;
