@@ -76,6 +76,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         top.add(topButton("恢复备份", this::runRestore));
         top.add(topButton("规则生成", this::runWizard));
         top.add(topButton("清理残留备份", this::runCleanup));
+        JButton clearLogButton = new JButton("清空日志");
+        clearLogButton.addActionListener(e -> logArea.setText(""));
+        top.add(clearLogButton);
         add(top, BorderLayout.NORTH);
 
         // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
@@ -217,6 +220,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     @Override
     public void showPrompt(String prompt) {
         // EDT：按提示生成快捷按钮、显示输入区并聚焦（提示全文已在日志区，不重复展示）
+        statusLabel.setText("等待输入：请在下方输入或点击快捷按钮");
         rebuildQuickButtons(prompt);
         inputField.setText("");
         setInputEnabled(true);
