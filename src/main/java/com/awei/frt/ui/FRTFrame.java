@@ -17,6 +17,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
@@ -27,28 +28,39 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * FRT Swing 主窗口（P3 UI 化基础版）
- * - 顶部：5 个功能按钮（更新/删除/恢复/规则向导/清理备份）
- * - 中部：日志区（捕获 System.out/err 实时显示）
- * - 底部：状态栏
- * 交互确认改为对话框（SwingPrompter）；服务层通过 UserPrompter 抽象复用同一套逻辑。
+ * FRT Swing 主窗口（固定输入区版）
+ * - 顶部：5 个功能按钮（更新/删除/恢复/规则生成/清理残留备份）
+ * - 中部：日志区（捕获 System.out/err 实时显示，长内容可滚动查看）
+ * - 底部：固定输入区——提示行 + 快捷选项按钮（按提示自动生成 y/n、数字选项）+ 输入框
+ * 服务层通过 UserPrompter 抽象复用同一套逻辑；等待输入时不弹窗，直接在窗口内交互。
  */
-public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
+public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, SwingPrompter.InputPanel {
 
     private final JTextArea logArea;
     private final JLabel statusLabel;
-    // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明），弹窗内可滚动完整查看
+    private final JLabel promptLabel;
+    private final JPanel quickPanel;
+    private final JTextField inputField;
+    private final JButton submitButton;
+    private final JButton cancelButton;
+    private final List<JButton> topButtons = new ArrayList<>();
+    // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明）
     private final StringBuilder promptBuffer = new StringBuilder();
     private static final int PROMPT_BUFFER_MAX = 20000;
+    private static final Pattern OPTION_RANGE = Pattern.compile("1\\s*-\\s*(\\d+)");
     private Config config;
-    private UserPrompter prompter;
+    private SwingPrompter prompter;
 
     public FRTFrame() throws HeadlessException {
         super("FRT - 多层级文件夹更新系统");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(760, 520);
+        setSize(860, 600);
         setLocationRelativeTo(null);
 
         logArea = new JTextArea();
@@ -56,21 +68,44 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         add(new JScrollPane(logArea), BorderLayout.CENTER);
 
+        // 顶部功能按钮
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
         top.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        top.add(makeButton("更新文件", this::runUpdate));
-        top.add(makeButton("删除文件", this::runDelete));
-        top.add(makeButton("恢复备份", this::runRestore));
-        top.add(makeButton("规则生成", this::runWizard));
-        top.add(makeButton("清理残留备份", this::runCleanup));
+        top.add(topButton("更新文件", this::runUpdate));
+        top.add(topButton("删除文件", this::runDelete));
+        top.add(topButton("恢复备份", this::runRestore));
+        top.add(topButton("规则生成", this::runWizard));
+        top.add(topButton("清理残留备份", this::runCleanup));
         add(top, BorderLayout.NORTH);
 
+        // 底部固定输入区
+        JPanel bottom = new JPanel(new BorderLayout(4, 4));
+        bottom.setBorder(BorderFactory.createEmptyBorder(6, 10, 8, 10));
         statusLabel = new JLabel("就绪");
-        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        bottom.add(statusLabel);
-        add(bottom, BorderLayout.SOUTH);
+        promptLabel = new JLabel(" ");
+        quickPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        inputField = new JTextField(38);
+        inputField.addActionListener(e -> submitInput());
+        submitButton = new JButton("提交");
+        submitButton.addActionListener(e -> submitInput());
+        cancelButton = new JButton("取消");
+        cancelButton.addActionListener(e -> prompter.submit(""));
+        inputRow.add(inputField);
+        inputRow.add(submitButton);
+        inputRow.add(cancelButton);
+        JPanel promptRow = new JPanel(new BorderLayout());
+        promptRow.add(promptLabel, BorderLayout.CENTER);
+        bottom.add(statusLabel, BorderLayout.NORTH);
+        bottom.add(promptRow, BorderLayout.CENTER);
+        bottom.add(quickPanel, BorderLayout.SOUTH);
+        JPanel inputArea = new JPanel(new BorderLayout());
+        inputArea.add(bottom, BorderLayout.NORTH);
+        inputArea.add(inputRow, BorderLayout.SOUTH);
+        add(inputArea, BorderLayout.SOUTH);
+        setInputEnabled(false);
 
-        // 捕获 System.out/err 到日志区（双写：控制台 + 窗口），供 SwingPrompter 取提示行
+        // 捕获 System.out/err 到日志区（双写：控制台 + 窗口）
         redirectOutput();
 
         // 初始化配置与日志（LoggerUtil 会在 tee 之后初始化，其输出链仍回到日志区）
@@ -82,9 +117,10 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
         }
     }
 
-    private JButton makeButton(String label, Runnable action) {
+    private JButton topButton(String label, Runnable action) {
         JButton b = new JButton(label);
         b.addActionListener(e -> action.run());
+        topButtons.add(b);
         return b;
     }
 
@@ -112,16 +148,16 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
     }
 
     private void runWizard() {
-        runService("规则向导", () -> {
+        runService("规则生成", () -> {
             new RuleConfigWizard(config, prompter).start();
-            return "向导结束";
+            return "规则生成结束";
         });
     }
 
     private void runCleanup() {
-        runService("清理备份", () -> {
+        runService("清理残留备份", () -> {
             int deleted = BackupFileLoader.cleanupOrphanBackupFiles(prompter);
-            return "清理完成: 删除 " + deleted + " 个孤立备份文件";
+            return "清理完成: 删除 " + deleted + " 个残留备份文件";
         });
     }
 
@@ -130,6 +166,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
             appendText("[失败] 配置未加载，无法执行\n");
             return;
         }
+        setTopButtonsEnabled(false);
+        setInputEnabled(false);
         statusLabel.setText(name + " 执行中...");
         new SwingWorker<String, Void>() {
             @Override
@@ -151,8 +189,108 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
                 } catch (Exception e) {
                     statusLabel.setText(name + " 执行异常");
                 }
+                setTopButtonsEnabled(true);
+                setInputEnabled(false);
             }
         }.execute();
+    }
+
+    // ---------------- 输入区（SwingPrompter.InputPanel） ----------------
+
+    @Override
+    public void showPrompt(String prompt) {
+        // EDT：显示提示行（单行截断）、按提示生成快捷按钮、启用输入框并聚焦
+        String oneLine = prompt.replace('\n', ' ').replace('\r', ' ').trim();
+        promptLabel.setText(oneLine.length() > 120 ? oneLine.substring(0, 120) + "..." : (oneLine.isEmpty() ? " " : oneLine));
+        rebuildQuickButtons(prompt);
+        inputField.setText("");
+        setInputEnabled(true);
+        inputField.requestFocusInWindow();
+    }
+
+    @Override
+    public void resetInput() {
+        setInputEnabled(false);
+        promptLabel.setText(" ");
+        quickPanel.removeAll();
+        quickPanel.revalidate();
+        quickPanel.repaint();
+    }
+
+    private void setInputEnabled(boolean enabled) {
+        inputField.setEnabled(enabled);
+        submitButton.setEnabled(enabled);
+        cancelButton.setEnabled(enabled);
+    }
+
+    private void setTopButtonsEnabled(boolean enabled) {
+        for (JButton b : topButtons) {
+            b.setEnabled(enabled);
+        }
+    }
+
+    private void submitInput() {
+        if (prompter != null) {
+            prompter.submit(inputField.getText());
+        }
+    }
+
+    /**
+     * 按提示生成快捷按钮：
+     * - 含 (y/n) → 是/否
+     * - 含 "1-N" 数字范围 → 1..N 数字按钮（上限 12）
+     * - 含 编号/选项 但无范围 → 1..9
+     * - 含 "0" / "-1" 特殊选项 → 对应按钮
+     * - 始终附 取消
+     */
+    private void rebuildQuickButtons(String prompt) {
+        quickPanel.removeAll();
+        if (prompt.contains("(y/n)")) {
+            addQuick("是", "y");
+            addQuick("否", "n");
+        } else {
+            int max = parseMaxOption(prompt);
+            if (max == 0 && (prompt.contains("编号") || prompt.contains("选项"))) {
+                max = 9;
+            }
+            if (max > 0) {
+                int upper = Math.min(max, 12);
+                for (int i = 1; i <= upper; i++) {
+                    addQuick(String.valueOf(i), String.valueOf(i));
+                }
+            }
+            if (prompt.contains("0")) {
+                addQuick("0", "0");
+            }
+            if (prompt.contains("-1")) {
+                addQuick("-1", "-1");
+            }
+        }
+        addQuick("取消", "");
+        quickPanel.revalidate();
+        quickPanel.repaint();
+    }
+
+    private void addQuick(String label, String value) {
+        JButton b = new JButton(label);
+        b.addActionListener(e -> prompter.submit(value));
+        quickPanel.add(b);
+    }
+
+    private static int parseMaxOption(String prompt) {
+        int max = 0;
+        Matcher m = OPTION_RANGE.matcher(prompt);
+        while (m.find()) {
+            try {
+                int v = Integer.parseInt(m.group(1));
+                if (v > max) {
+                    max = v;
+                }
+            } catch (NumberFormatException ignored) {
+                // 忽略异常格式
+            }
+        }
+        return max;
     }
 
     // ---------------- 日志区输出与提示捕获 ----------------
@@ -195,8 +333,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource {
     }
 
     /**
-     * 取走提示缓冲（消费式）：返回自上次输入以来的完整提示文本并清空，
-     * 供 SwingPrompter 在弹窗中可滚动展示（含结构树、选项列表等长内容）
+     * 取走提示缓冲（消费式）：返回自上次输入以来的完整提示文本并清空
      */
     @Override
     public String takePrompt() {
