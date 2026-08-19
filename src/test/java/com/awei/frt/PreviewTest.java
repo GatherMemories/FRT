@@ -44,6 +44,7 @@ class PreviewTest {
 
         assertFalse(Files.exists(targetDir.resolve("a.txt")), "取消后不应写入目标文件");
         assertTrue(Files.exists(targetDir.resolve("b.txt")), "已有文件不受影响");
+        assertTrue(result.isCancelled(), "取消后结果应标记 cancelled（UI 不再提示成功数）");
     }
 
     @Test
@@ -75,6 +76,7 @@ class PreviewTest {
         ProcessingResult result = new FileDeleteService(config, prompter("n")).deleteExecute();
 
         assertTrue(Files.exists(targetDir.resolve("b.txt")), "取消后不应删除目标文件");
+        assertTrue(result.isCancelled(), "取消后结果应标记 cancelled（UI 不再提示成功数）");
     }
 
     @Test

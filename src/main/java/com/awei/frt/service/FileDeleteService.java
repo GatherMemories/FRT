@@ -64,10 +64,9 @@ public class FileDeleteService {
             System.out.print("确认要执行以上 " + planCount + " 个删除操作吗？此操作不可逆！(y/n): ");
             String confirm = prompter.readLine().toLowerCase();
             if (!confirm.equals("y") && !confirm.equals("yes")) {
-                LoggerUtil.logInfo("[信息] 已取消删除操作");
-                ProcessingResult cancelResult = new ProcessingResult();
-                cancelResult.setSuccess(false);
-                return cancelResult;
+                LoggerUtil.logInfo("[信息] 已取消删除操作（未执行任何操作）");
+                preview.setCancelled(true); // 标记取消：预览的"成功数"只是计划，不是已执行
+                return preview;
             }
 
             // ===== 真实执行阶段 =====

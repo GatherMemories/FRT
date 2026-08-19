@@ -1,5 +1,7 @@
 package com.awei.frt.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,6 +19,8 @@ public class ProcessingResult {
     private List<OperationRecord> operationRecords; // 操作记录列表
     private boolean success;           // 整体操作是否成功
     private Path resultPath;           // 结果文件路径
+    @JsonIgnore
+    private transient boolean cancelled; // 操作被用户取消（预览确认时选否，未真正执行）
 
     public ProcessingResult() {
         this.resultTime = LocalDateTime.now();
@@ -83,6 +87,17 @@ public class ProcessingResult {
 
     public void setSuccess(boolean success) {
         this.success = success;
+    }
+
+    /**
+     * 操作是否被用户取消（预览确认时选否）
+     */
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    public void setCancelled(boolean cancelled) {
+        this.cancelled = cancelled;
     }
 
     /**

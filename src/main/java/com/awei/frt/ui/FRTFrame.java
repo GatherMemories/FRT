@@ -131,6 +131,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private void runUpdate() {
         runService("更新文件", () -> {
             ProcessingResult r = new FileUpdateServiceNew(config, prompter).updateExecute();
+            if (r.isCancelled()) {
+                return "已取消更新操作（未执行任何操作）";
+            }
+            if (r.getSuccessCount() == 0 && r.getErrorCount() == 0) {
+                return "没有需要更新的文件";
+            }
             return "更新完成: 成功 " + r.getSuccessCount() + "，失败 " + r.getErrorCount() + "，跳过 " + r.getSkipCount();
         });
     }
@@ -138,6 +144,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private void runDelete() {
         runService("删除文件", () -> {
             ProcessingResult r = new FileDeleteService(config, prompter).deleteExecute();
+            if (r.isCancelled()) {
+                return "已取消删除操作（未执行任何操作）";
+            }
+            if (r.getSuccessCount() == 0 && r.getErrorCount() == 0) {
+                return "没有需要删除的文件";
+            }
             return "删除完成: 成功 " + r.getSuccessCount() + "，失败 " + r.getErrorCount();
         });
     }

@@ -61,7 +61,8 @@ public class FileUpdateServiceNew {
             System.out.print("是否执行以上 " + planCount + " 个更新操作？(y/n): ");
             String choice = prompter.readLine().toLowerCase();
             if (!choice.equals("y") && !choice.equals("yes")) {
-                LoggerUtil.logInfo("[信息] 用户取消更新操作");
+                LoggerUtil.logInfo("[信息] 用户取消更新操作（未执行任何操作）");
+                preview.setCancelled(true); // 标记取消：预览的"成功数"只是计划，不是已执行
                 return preview;
             }
 
