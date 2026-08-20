@@ -2,6 +2,7 @@ package com.awei.frt.ui;
 
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
+import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.service.FileDeleteService;
@@ -15,6 +16,7 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -22,7 +24,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.HeadlessException;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -44,6 +45,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
     private final JTextArea logArea;
     private final JLabel statusLabel;
+    private final JProgressBar progressBar;
     private final JPanel quickPanel;
     private final JPanel inputArea;          // 快捷按钮 + 输入行（等待输入时显示）
     private final JTextField inputField;
@@ -59,13 +61,17 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
     public FRTFrame() throws HeadlessException {
         super("FRT - 多层级文件夹更新系统");
+        UITheme.apply(); // 全局主题：统一字体/颜色/间距
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(860, 600);
         setLocationRelativeTo(null);
 
         logArea = new JTextArea();
         logArea.setEditable(false);
-        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        logArea.setFont(UITheme.MONO_FONT);
+        logArea.setBackground(UITheme.PANEL_BG);
+        logArea.setForeground(UITheme.TEXT);
+        logArea.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         add(new JScrollPane(logArea), BorderLayout.CENTER);
 
         // 顶部功能按钮
@@ -77,6 +83,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         top.add(topButton("规则生成", this::runWizard));
         top.add(topButton("清理残留备份", this::runCleanup));
         JButton clearLogButton = new JButton("清空日志");
+        UITheme.styleButton(clearLogButton);
         clearLogButton.addActionListener(e -> logArea.setText(""));
         top.add(clearLogButton);
         add(top, BorderLayout.NORTH);
@@ -101,11 +108,21 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         inputArea.setVisible(false); // 平时隐藏，等待输入时才出现
 
         statusLabel = new JLabel("就绪");
+        statusLabel.setFont(UITheme.SMALL_FONT);
+        statusLabel.setForeground(UITheme.MUTED);
         JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
-        statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, java.awt.Color.LIGHT_GRAY));
+        statusBar.setBackground(UITheme.PANEL_BG);
+        statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
         statusBar.add(statusLabel);
 
+        // 进度条：更新/删除真实执行阶段显示，平时隐藏
+        progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setFont(UITheme.SMALL_FONT);
+        progressBar.setVisible(false);
+
         JPanel bottomArea = new JPanel(new BorderLayout());
+        bottomArea.add(progressBar, BorderLayout.NORTH);
         bottomArea.add(inputArea, BorderLayout.CENTER);
         bottomArea.add(statusBar, BorderLayout.SOUTH);
         add(bottomArea, BorderLayout.SOUTH);
@@ -127,6 +144,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
     private JButton topButton(String label, Runnable action) {
         JButton b = new JButton(label);
+        UITheme.styleButton(b);
         b.addActionListener(e -> action.run());
         topButtons.add(b);
         return b;
@@ -135,8 +153,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     // ---------------- 功能入口（后台线程执行，避免卡住 UI） ----------------
 
     private void runUpdate() {
-        runService("更新文件", () -> {
-            ProcessingResult r = new FileUpdateServiceNew(config, prompter).updateExecute();
+        runServiceWithProgress("更新文件", progress -> {
+            ProcessingResult r = new FileUpdateServiceNew(config, prompter).updateExecute(progress);
             if (r.isCancelled()) {
                 return "已取消更新操作（未执行任何操作）";
             }
@@ -148,8 +166,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     }
 
     private void runDelete() {
-        runService("删除文件", () -> {
-            ProcessingResult r = new FileDeleteService(config, prompter).deleteExecute();
+        runServiceWithProgress("删除文件", progress -> {
+            ProcessingResult r = new FileDeleteService(config, prompter).deleteExecute(progress);
             if (r.isCancelled()) {
                 return "已取消删除操作（未执行任何操作）";
             }
@@ -168,8 +186,22 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     }
 
     private void runWizard() {
+        if (config == null) {
+            appendText("[失败] 配置未加载，无法执行\n");
+            return;
+        }
+        // 表单式配置：一次填完所有参数（含策略链），模态弹窗（EDT 上阻塞直到确定/取消）
+        RuleWizardForm form = new RuleWizardForm(this, config);
+        form.setVisible(true);
+        RuleWizardForm.Result result = form.getResult();
+        if (result == null) {
+            appendText("[取消] 规则生成已取消\n");
+            statusLabel.setText("已取消规则生成");
+            return;
+        }
         runService("规则生成", () -> {
-            new RuleConfigWizard(config, prompter).start();
+            // 复用控制台向导的预览/确认/写入/自校验公共流程
+            new RuleConfigWizard(config, prompter).writeRuleFile(result.rule, result.targetDir);
             return "规则生成结束";
         });
     }
@@ -202,6 +234,65 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
             @Override
             protected void done() {
+                try {
+                    String summary = get();
+                    appendText("\n===== " + summary + " =====\n");
+                    statusLabel.setText(summary);
+                } catch (Exception e) {
+                    statusLabel.setText(name + " 执行异常");
+                }
+                setTopButtonsEnabled(true);
+                setInputEnabled(false);
+            }
+        }.execute();
+    }
+
+    /**
+     * 带进度条的异步服务执行（更新/删除用）：
+     * 服务通过 ProgressCallback 上报（已处理数/总数/当前文件），
+     * SwingWorker 批量刷新进度条与状态栏，不阻塞 EDT。
+     */
+    private void runServiceWithProgress(String name, java.util.function.Function<ProgressCallback, String> task) {
+        if (config == null) {
+            appendText("[失败] 配置未加载，无法执行\n");
+            return;
+        }
+        setTopButtonsEnabled(false);
+        setInputEnabled(false);
+        statusLabel.setText(name + " 执行中...");
+        progressBar.setValue(0);
+        progressBar.setMaximum(100);
+        progressBar.setString("准备中...");
+        progressBar.setVisible(true);
+        new SwingWorker<String, int[]>() {
+            private volatile String currentFile = "";
+
+            @Override
+            protected String doInBackground() {
+                try {
+                    return task.apply((processed, total, current) -> {
+                        currentFile = current == null ? "" : current;
+                        publish(new int[]{processed, Math.max(total, 0)});
+                    });
+                } catch (Exception e) {
+                    LoggerUtil.logException("[" + name + "] 执行失败", e);
+                    return "[" + name + "] 执行失败，详见日志";
+                }
+            }
+
+            @Override
+            protected void process(List<int[]> chunks) {
+                int[] last = chunks.get(chunks.size() - 1);
+                progressBar.setMaximum(Math.max(1, last[1]));
+                progressBar.setValue(last[0]);
+                progressBar.setString(last[0] + " / " + last[1]);
+                String cur = currentFile;
+                statusLabel.setText(name + " 执行中" + (cur.isEmpty() ? "" : ": " + cur));
+            }
+
+            @Override
+            protected void done() {
+                progressBar.setVisible(false);
                 try {
                     String summary = get();
                     appendText("\n===== " + summary + " =====\n");

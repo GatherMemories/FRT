@@ -22,6 +22,9 @@ public class OperationContext {
     private RuleInheritanceContext ruleInheritanceContext; // 规则继承上下文，管理规则继承关系
     private final ProcessingResult processingResult;       // 处理结果对象，汇总处理结果
     private boolean dryRun = false;                        // 预览模式：只收集操作计划，不执行文件 IO、不落盘会话记录
+    private ProgressCallback progressCallback;             // 进度回调（null = 不上报）
+    private int progressTotal = 0;                         // 总文件数
+    private int progressDone = 0;                          // 已处理文件数
 
     // 操作类型（用于 ProcessingResult-->OperationRecord-->operationType）
     public static final String OPERATION_RENAME = "operation_rename";
@@ -142,6 +145,28 @@ public class OperationContext {
      */
     public void setDryRun(boolean dryRun) {
         this.dryRun = dryRun;
+    }
+
+    /**
+     * 绑定进度回调（真实执行阶段使用；预览阶段不绑定）
+     * @param callback 回调，null 表示不上报
+     * @param total    总文件数
+     */
+    public void setProgressCallback(ProgressCallback callback, int total) {
+        this.progressCallback = callback;
+        this.progressTotal = Math.max(0, total);
+        this.progressDone = 0;
+    }
+
+    /**
+     * 上报一次进度（每个文件叶子节点处理时调用一次）
+     * @param current 当前处理的文件相对路径
+     */
+    public void reportProgress(String current) {
+        progressDone++;
+        if (progressCallback != null) {
+            progressCallback.onProgress(progressDone, progressTotal, current == null ? "" : current);
+        }
     }
 
     /**

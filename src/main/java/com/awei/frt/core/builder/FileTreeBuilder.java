@@ -33,6 +33,33 @@ public class FileTreeBuilder {
     }
 
     /**
+     * 统计文件树中的文件（叶子）数量（栈迭代，避免深目录递归栈溢出）
+     * @param root 根节点
+     * @return 文件数量
+     */
+    public static int countFiles(FileNode root) {
+        if (root == null) {
+            return 0;
+        }
+        int count = 0;
+        Deque<FileNode> stack = new ArrayDeque<>();
+        stack.push(root);
+        while (!stack.isEmpty()) {
+            FileNode current = stack.pop();
+            if (current.isDirectory()) {
+                if (current instanceof FolderNode folderNode) {
+                    for (FileNode child : folderNode.getChildren()) {
+                        stack.push(child);
+                    }
+                }
+            } else {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
      * 打印文件树结构（用于调试）
      * 使用栈实现的迭代方式，避免递归栈溢出
      *

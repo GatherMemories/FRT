@@ -3,8 +3,8 @@ package com.awei.frt.service;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.ui.ConsoleUserPrompter;
@@ -13,8 +13,6 @@ import com.awei.frt.util.LoggerUtil;
 import com.awei.frt.util.PreviewUtil;
 
 import java.nio.file.Path;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.Scanner;
 
 /**
@@ -40,6 +38,15 @@ public class FileDeleteService {
      * @return 处理结果
      */
     public ProcessingResult deleteExecute() {
+        return deleteExecute(null);
+    }
+
+    /**
+     * 执行文件删除操作（带进度回调）
+     * @param progress 进度回调（真实执行阶段逐文件上报；null 不上报）
+     * @return 处理结果
+     */
+    public ProcessingResult deleteExecute(ProgressCallback progress) {
         try {
             LoggerUtil.logInfo("[执行] 开始执行文件删除操作...");
 
@@ -76,7 +83,11 @@ public class FileDeleteService {
             System.out.println("[FILE] 文件树结构:");
             FileTreeBuilder.printTree(deleteTree, 0);
             System.out.println();
-            LoggerUtil.logInfo("[FILE] 文件数量: " + countFiles(deleteTree));
+            int totalFiles = FileTreeBuilder.countFiles(deleteTree);
+            LoggerUtil.logInfo("[FILE] 文件数量: " + totalFiles);
+            if (progress != null) {
+                context.setProgressCallback(progress, totalFiles);
+            }
 
             // 执行删除处理
             LoggerUtil.logInfo("[执行] 正在处理delete文件夹...");
@@ -106,28 +117,4 @@ public class FileDeleteService {
         }
     }
 
-    /**
-     * 统计文件数量（栈迭代，避免深目录递归栈溢出）
-     * @param node 文件节点
-     * @return 文件数量
-     */
-    private int countFiles(FileNode node) {
-        if (node == null) {
-            return 0;
-        }
-        int count = 0;
-        Deque<FileNode> stack = new ArrayDeque<>();
-        stack.push(node);
-        while (!stack.isEmpty()) {
-            FileNode current = stack.pop();
-            if (!current.isDirectory()) {
-                count++;
-            } else if (current instanceof FolderNode folderNode) {
-                for (FileNode child : folderNode.getChildren()) {
-                    stack.push(child);
-                }
-            }
-        }
-        return count;
-    }
 }

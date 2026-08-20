@@ -356,10 +356,11 @@ public class RuleConfigWizard {
 
     /**
      * 生成规则文件并写入（预览 + 确认 + 自校验）
+     * 供控制台向导（inputRule 组装规则后调用）与 UI 表单（RuleWizardForm 一次填完参数后调用）共用
      * @param rule 规则对象
      * @param targetDir 目标目录
      */
-    private void writeRuleFile(MatchRule rule, Path targetDir) {
+    public void writeRuleFile(MatchRule rule, Path targetDir) {
         try {
             Path ruleFile = targetDir.resolve(RulesConstants.FileNames.MATCHING_RULES_JSON).normalize();
 

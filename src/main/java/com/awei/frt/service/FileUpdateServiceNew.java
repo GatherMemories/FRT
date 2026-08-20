@@ -3,6 +3,7 @@ package com.awei.frt.service;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.Config;
@@ -35,10 +36,18 @@ public class FileUpdateServiceNew {
 
     /**
      * 执行文件更新操作（服务层）
-     * @param
      * @return 处理结果
      */
     public ProcessingResult updateExecute() {
+        return updateExecute(null);
+    }
+
+    /**
+     * 执行文件更新操作（服务层，带进度回调）
+     * @param progress 进度回调（真实执行阶段逐文件上报；null 不上报）
+     * @return 处理结果
+     */
+    public ProcessingResult updateExecute(ProgressCallback progress) {
         try {
             LoggerUtil.logInfo("[执行] 开始执行文件更新操作...");
 
@@ -69,6 +78,9 @@ public class FileUpdateServiceNew {
             // ===== 真实执行阶段 =====
             OperationContext context = new OperationContext(config);
             FileNode updateTree = FileTreeBuilder.buildTree(updatePath);
+            if (progress != null) {
+                context.setProgressCallback(progress, FileTreeBuilder.countFiles(updateTree));
+            }
             // 打印文件树结构（调试用，仅控制台）
             System.out.println("[FILE] 文件树结构:");
             FileTreeBuilder.printTree(updateTree, 0);

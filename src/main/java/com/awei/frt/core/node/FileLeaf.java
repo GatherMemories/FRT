@@ -45,6 +45,8 @@ public class FileLeaf extends FileNode {
         } finally {
             localRuleIC.setRuleChain(savedRule);
         }
+        // 进度上报：每个文件叶子节点处理完毕上报一次（UI 进度条用；预览阶段无回调，空转）
+        context.reportProgress(this.getRelativePath());
     }
 
     @Override
