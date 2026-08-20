@@ -224,9 +224,14 @@ public class MyStrategy implements OperationStrategy {
 
 `OperationRecord` —— 操作记录（继承 `AbstractOperationStrategy` 时用 `newRecord(context)` 创建，已填好策略类型；常规流程中 FileUtil 会自动填写操作类型/路径/MD5，**无需手动设置**）。手动场景可用 setter：`setOperationType(OperationContext.OPERATION_ADD 等)`、`setSourcePath`/`setTargetPath`、`setSuccess`、`setErrorMessage`；最后 `context.recordOperation(record)` 提交。
 
-**加载方式（二选一）**：
-1. **SPI**：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容写策略类全限定名（如 `com.example.MyStrategy`）；
-2. **自动扫描**：无 services 文件时，自动扫描 jar 内所有实现 `OperationStrategy` 的具体类（需公开无参构造）。
+**加载方式**（启动时自动执行，无需额外配置）：
+
+1. **classpath SPI**：读取应用 classpath 上的 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 描述符（适合策略类与主程序同 classpath 部署）；
+2. **plugins/ 目录 jar**（每个 jar 二选一）：
+   - **标准 SPI**：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容写策略类全限定名（如 `com.example.MyStrategy`，一行一个）；
+   - **自动扫描**：jar 内无 services 文件时，自动扫描 jar 内所有实现 `OperationStrategy` 的具体类（需公开无参构造）。仅当 SPI 实际注册数为 0 时才启用该兜底。
+
+> 注册时若 `strategyType` 与已注册类型（含内置策略）冲突，外部策略被跳过（内置优先），并输出告警。
 
 ## 测试
 
