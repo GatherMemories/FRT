@@ -5,6 +5,7 @@ import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.service.CoreConfigWizard;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.RestoreService;
@@ -82,6 +83,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         top.add(topButton("恢复备份", this::runRestore));
         top.add(topButton("规则生成", this::runWizard));
         top.add(topButton("清理残留备份", this::runCleanup));
+        top.add(topButton("核心配置", this::runConfig));
         JButton clearLogButton = new JButton("清空日志");
         UITheme.styleButton(clearLogButton);
         clearLogButton.addActionListener(e -> logArea.setText(""));
@@ -210,6 +212,31 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         runService("清理残留备份", () -> {
             int deleted = BackupFileLoader.cleanupOrphanBackupFiles(prompter);
             return "清理完成: 删除 " + deleted + " 个残留备份文件";
+        });
+    }
+
+    /**
+     * 核心配置编写向导（表单式）：设置 更新/目标/删除/备份目录 与日志级别，
+     * 保存走 CoreConfigWizard 公共流程（预览/确认/自动创建缺失目录/写入/自校验）
+     */
+    private void runConfig() {
+        if (config == null) {
+            appendText("[失败] 配置未加载，无法执行\n");
+            return;
+        }
+        ConfigFormDialog dialog = new ConfigFormDialog(this, config);
+        dialog.setVisible(true); // 模态：EDT 上阻塞直到确定/取消
+        ConfigFormDialog.Result result = dialog.getResult();
+        if (result == null) {
+            appendText("[取消] 核心配置已取消\n");
+            statusLabel.setText("已取消核心配置");
+            return;
+        }
+        runService("核心配置", () -> {
+            boolean ok = new CoreConfigWizard(config, prompter)
+                    .writeFromValues(result.updatePath, result.targetPath,
+                            result.deletePath, result.backupPath, result.logLevel);
+            return ok ? "核心配置保存完成（下次启动生效）" : "核心配置未保存";
         });
     }
 

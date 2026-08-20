@@ -4,6 +4,7 @@ import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.service.CoreConfigWizard;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.RestoreService;
@@ -70,8 +71,9 @@ public class Main {
                 System.out.println("3. 执行恢复操作");
                 System.out.println("4. 规则生成（生成/编辑匹配规则配置文件）");
                 System.out.println("5. 清理残留备份");
-                System.out.println("6. 退出");
-                System.out.print("请输入选项 (1-6): ");
+                System.out.println("6. 核心配置（设置目标/更新/删除/备份路径、日志级别）");
+                System.out.println("7. 退出");
+                System.out.print("请输入选项 (1-7): ");
 
                 String choice = scanner.nextLine().trim();
 
@@ -97,6 +99,10 @@ public class Main {
                         BackupFileLoader.cleanupOrphanBackupFiles(scanner);
                         break;
                     case "6":
+                        LoggerUtil.logInfo("[配置] 执行核心配置编写向导...");
+                        new CoreConfigWizard(config, scanner).start();
+                        break;
+                    case "7":
                         LoggerUtil.logInfo("程序退出");
                         return;
                     default:
