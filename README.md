@@ -109,6 +109,11 @@ package com.example;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.strategy.AbstractOperationStrategy;
+import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.model.OperationRecord;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** 自定义策略：只处理 .dat 文件 */
 public class MyStrategy extends AbstractOperationStrategy {
@@ -127,19 +132,50 @@ public class MyStrategy extends AbstractOperationStrategy {
     /** 新增钩子：返回 true = 已处理该节点（链中后续策略跳过） */
     @Override
     protected boolean doAdd(FileNode node, OperationContext context) {
-        // context.getTargetPath(node.getRelativePath()) 为目标路径
-        // 新增/替换/删除文件可用 com.awei.frt.core.uitls.FileUtil（addFile/replaceFile/deleteFile），自动写操作记录与备份
-        // 读取规则额外参数：context.getRuleParam("key")
-        return false; // 示例未实际操作
+        Path target = context.getTargetPath(node.getRelativePath()); // 目标位置
+        if (Files.exists(target)) {
+            return false;                       // 目标已存在，交给 replace 钩子
+        }
+        OperationRecord record = newRecord(context);                // 创建操作记录（已带策略类型；FileUtil 会自动写入操作类型）
+        boolean ok = FileUtil.addFile(node.getPath(), target, record, context.isDryRun()); // 复制+备份+记录
+        context.recordOperation(record);        // 提交记录（预览模式不落盘）
+        if (ok) {
+            node.setHandled(true);              // 标记已处理（策略链后续策略跳过）
+        }
+        return ok;
     }
 
     @Override
-    protected boolean doReplace(FileNode node, OperationContext context) { return false; }
+    protected boolean doReplace(FileNode node, OperationContext context) {
+        Path target = context.getTargetPath(node.getRelativePath());
+        if (!Files.exists(target)) {
+            return false;
+        }
+        // 读取规则额外参数：context.getRuleParam("key")，如 {"caseSensitive": "false"}
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.replaceFile(node.getPath(), target, record, context.isDryRun());
+        context.recordOperation(record);
+        if (ok) {
+            node.setHandled(true);
+        }
+        return ok;
+    }
 
     @Override
-    protected boolean doDelete(FileNode node, OperationContext context) { return false; }
+    protected boolean doDelete(FileNode node, OperationContext context) {
+        Path target = context.getTargetPath(node.getRelativePath());
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.deleteFile(target, record, context.isDryRun());
+        context.recordOperation(record);
+        if (ok) {
+            node.setHandled(true);
+        }
+        return ok;
+    }
 }
 ```
+
+> 上述写法与内置策略（如 `ZipEntryBaseStrategy`）完全一致，可直接参考其源码；`accepts` 只做筛选，真正的文件操作统一走 `FileUtil` + `OperationRecord` 流程，即可自动获得备份、操作记录与会话恢复能力。
 
 **简单方式：直接实现 `OperationStrategy` 接口**（需自行处理一切，适合极简场景）：
 
@@ -148,10 +184,45 @@ public class MyStrategy implements OperationStrategy {
     public String getStrategyType() { return "MyStrategy"; }
     public String getDescription() { return "说明"; }
     public void execute(FileNode node, OperationContext context, String[] operationType) {
-        // 自行判断操作类型（operationType 含 "ADD"/"REPLACE"/"DELETE"）与节点筛选
+        // 自行判断操作类型（与 OperationContext.OPERATION_ADD / OPERATION_REPLACE / OPERATION_DELETE 常量比较）与节点筛选
     }
 }
 ```
+
+**方法参数对象参考**：
+
+`FileNode node` —— 当前被处理的文件/目录节点：
+
+| 方法 | 返回 | 作用 |
+|------|------|------|
+| `getPath()` | `Path` | 节点完整路径（源文件路径） |
+| `getRelativePath()` | `String` | 相对路径，传给 `context.getTargetPath()` 计算目标位置 |
+| `getName()` | `String` | 节点名称 |
+| `isDirectory()` | `boolean` | 是否目录 |
+| `isHandled()` / `setHandled(true)` | `boolean`/`void` | 策略链"已处理"标记：处理成功后 `setHandled(true)`，后续策略跳过该节点 |
+
+`OperationContext context` —— 操作上下文：
+
+| 方法 | 返回 | 作用 |
+|------|------|------|
+| `getTargetPath(relativePath)` | `Path` | 目标目录下对应路径（操作目标位置） |
+| `getRuleParam(key)` | `String` | 读取规则文件 `replacements` 中的参数，未配置返回 `null` |
+| `isDryRun()` | `boolean` | 是否预览模式（true 时不应真正改动文件；FileUtil 带 dryRun 参数的重载已自动处理） |
+| `recordOperation(record)` | `void` | 记录一次操作（预览模式不落盘会话记录） |
+| `getConfig()` | `Config` | 全局配置（目录/日志级别等） |
+| `OPERATION_ADD` / `OPERATION_REPLACE` / `OPERATION_DELETE` | `String` 常量 | 操作类型值（`"operation_add"` 等），记录或判断操作类型用 |
+
+`com.awei.frt.core.uitls.FileUtil` —— 文件操作工具（自动备份 + 写操作记录，三个方法均有带 `dryRun` 的重载）：
+
+| 方法 | 返回 | 作用 |
+|------|------|------|
+| `addFile(source, target, record[, dryRun])` | `boolean` | 复制新增源文件到目标 |
+| `replaceFile(source, target, record[, dryRun])` | `boolean` | 用源文件替换目标文件（自动备份） |
+| `deleteFile(file, record[, dryRun])` | `boolean` | 删除目标文件（自动备份） |
+
+> FileUtil 三个方法内部会自动写入 `record` 的操作类型（`OPERATION_ADD`/`OPERATION_REPLACE`/`OPERATION_DELETE`）与源/目标路径、MD5 特征码，无需手动设置。
+
+`OperationRecord` —— 操作记录（继承 `AbstractOperationStrategy` 时用 `newRecord(context)` 创建，已填好策略类型；常规流程中 FileUtil 会自动填写操作类型/路径/MD5，**无需手动设置**）。手动场景可用 setter：`setOperationType(OperationContext.OPERATION_ADD 等)`、`setSourcePath`/`setTargetPath`、`setSuccess`、`setErrorMessage`；最后 `context.recordOperation(record)` 提交。
 
 **加载方式（二选一）**：
 1. **SPI**：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容写策略类全限定名（如 `com.example.MyStrategy`）；
