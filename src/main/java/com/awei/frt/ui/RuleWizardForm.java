@@ -455,11 +455,11 @@ public class RuleWizardForm extends JDialog {
             panel.add(new JLabel("步骤" + index + ":"));
             panel.add(new JLabel("策略"));
             panel.add(typeCombo);
-            panel.add(new JLabel("patterns"));
+            panel.add(new JLabel("patterns（白名单）"));
             panel.add(patterns);
-            panel.add(new JLabel("排除"));
+            panel.add(new JLabel("excludePatterns（黑名单）"));
             panel.add(excludes);
-            panel.add(new JLabel("replacements"));
+            panel.add(new JLabel("replacements（key=value）"));
             panel.add(replacements);
             panel.add(removeButton);
         }

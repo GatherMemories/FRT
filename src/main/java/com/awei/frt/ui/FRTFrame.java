@@ -24,6 +24,8 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.HeadlessException;
 import java.io.IOException;
@@ -48,6 +50,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private final JLabel statusLabel;
     private final JProgressBar progressBar;
     private final JPanel quickPanel;
+    private final JScrollPane quickScroll;   // 快捷按钮滚动区（最多显示约 3 行，超出滚动）
     private final JPanel inputArea;          // 快捷按钮 + 输入行（等待输入时显示）
     private final JTextField inputField;
     private final JButton submitButton;
@@ -56,7 +59,13 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明）
     private final StringBuilder promptBuffer = new StringBuilder();
     private static final int PROMPT_BUFFER_MAX = 20000;
+    private static final int QUICK_MAX_VISIBLE_HEIGHT = 96; // 快捷按钮区最多显示约 3 行，超出滚动查看
+    private static final int QUICK_MIN_HEIGHT = 30;
     private static final Pattern OPTION_RANGE = Pattern.compile("1\\s*-\\s*(\\d+)");
+    /** 独立选项 "0"（排除 10/20 等数字中的 0，也排除 1.0 版本号里的 0） */
+    private static final Pattern OPTION_ZERO = Pattern.compile("(^|[^0-9.])0([^0-9]|$)");
+    /** 独立选项 "-1"（排除 1-10 等范围里的 "-1"） */
+    private static final Pattern OPTION_MINUS_ONE = Pattern.compile("(^|[^0-9.])-1([^0-9]|$)");
     private Config config;
     private SwingPrompter prompter;
 
@@ -91,8 +100,21 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         add(top, BorderLayout.NORTH);
 
         // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
-        // 快捷按钮自动换行（不设滚动条，避免滚动条遮住按钮；按钮多时换行显示）
-        quickPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        // 快捷按钮：FlowLayout 自动换行；最多显示约 3 行，超出部分右侧滚动查看
+        // （不设横向滚动条，避免遮住按钮；按钮再多也不会把输入区撑出窗口或被裁掉）
+        quickPanel = new QuickButtonPanel();
+        quickScroll = new JScrollPane(quickPanel,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension d = super.getPreferredSize();
+                int h = Math.max(d.height, QUICK_MIN_HEIGHT);
+                return new Dimension(d.width, Math.min(h, QUICK_MAX_VISIBLE_HEIGHT));
+            }
+        };
+        quickScroll.setBorder(null);
+        quickScroll.setBackground(UITheme.PANEL_BG);
+        quickScroll.getViewport().setBackground(UITheme.PANEL_BG);
         JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         inputField = new JTextField(38);
         inputField.addActionListener(e -> submitInput());
@@ -105,7 +127,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         inputRow.add(cancelButton);
         inputArea = new JPanel(new BorderLayout(0, 4));
         inputArea.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
-        inputArea.add(quickPanel, BorderLayout.NORTH);
+        inputArea.add(quickScroll, BorderLayout.NORTH);
         inputArea.add(inputRow, BorderLayout.SOUTH);
         inputArea.setVisible(false); // 平时隐藏，等待输入时才出现
 
@@ -353,6 +375,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         quickPanel.removeAll();
         quickPanel.revalidate();
         quickPanel.repaint();
+        quickScroll.revalidate();
+        quickScroll.repaint();
     }
 
     private void setInputEnabled(boolean enabled) {
@@ -376,16 +400,28 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     /**
      * 按提示生成快捷按钮：
      * - 含 (y/n) → 是/否
-     * - 含 "1-N" 数字范围 → 1..N 数字按钮（上限 12）
+     * - 含 "1-N" 数字范围 → 1..N 数字按钮（上限 20）
      * - 含 编号/选项 但无范围 → 1..9
-     * - 含 "0" / "-1" 特殊选项 → 对应按钮
+     * - 含独立选项 "0" / "-1" → 对应按钮（只匹配独立数字，避免 1-10 等误判）
      * - 始终附 取消
      */
     private void rebuildQuickButtons(String prompt) {
         quickPanel.removeAll();
+        for (QuickOption option : buildQuickOptions(prompt)) {
+            addQuick(option.label(), option.value());
+        }
+        quickPanel.revalidate();
+        quickPanel.repaint();
+        quickScroll.revalidate();
+        quickScroll.repaint();
+    }
+
+    /** 由提示文本生成快捷按钮选项（显示名 -> 提交值），纯逻辑便于单元测试 */
+    static List<QuickOption> buildQuickOptions(String prompt) {
+        List<QuickOption> options = new ArrayList<>();
         if (prompt.contains("(y/n)")) {
-            addQuick("是", "y");
-            addQuick("否", "n");
+            options.add(new QuickOption("是", "y"));
+            options.add(new QuickOption("否", "n"));
         } else {
             int max = parseMaxOption(prompt);
             if (max == 0 && (prompt.contains("编号") || prompt.contains("选项"))) {
@@ -394,25 +430,76 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             if (max > 0) {
                 int upper = Math.min(max, 20);
                 for (int i = 1; i <= upper; i++) {
-                    addQuick(String.valueOf(i), String.valueOf(i));
+                    options.add(new QuickOption(String.valueOf(i), String.valueOf(i)));
                 }
             }
-            if (prompt.contains("0")) {
-                addQuick("0", "0");
+            if (OPTION_ZERO.matcher(prompt).find()) {
+                options.add(new QuickOption("0", "0"));
             }
-            if (prompt.contains("-1")) {
-                addQuick("-1", "-1");
+            if (OPTION_MINUS_ONE.matcher(prompt).find()) {
+                options.add(new QuickOption("-1", "-1"));
             }
         }
-        addQuick("取消", "");
-        quickPanel.revalidate();
-        quickPanel.repaint();
+        options.add(new QuickOption("取消", ""));
+        return options;
     }
 
     private void addQuick(String label, String value) {
         JButton b = new JButton(label);
         b.addActionListener(e -> prompter.submit(value));
         quickPanel.add(b);
+    }
+
+    /** 快捷按钮选项（显示名 -> 提交值） */
+    record QuickOption(String label, String value) {
+    }
+
+    /**
+     * 快捷按钮面板：FlowLayout 自动换行。
+     * 宽度始终跟随外层视口（JViewport），高度按该宽度换行后的实际高度计算；
+     * 由外层滚动面板决定最多显示多少行，超出部分可滚动查看，不会被窗口边缘裁掉。
+     */
+    private static class QuickButtonPanel extends JPanel {
+        private static final int HGAP = 4;
+        private static final int VGAP = 2;
+
+        QuickButtonPanel() {
+            super(new FlowLayout(FlowLayout.LEFT, HGAP, VGAP));
+            setBackground(UITheme.PANEL_BG);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int width = getParent() != null ? getParent().getWidth() : 0;
+            if (width <= 0) {
+                width = 700; // 首次布局前按默认窗口宽度估算
+            }
+            return new Dimension(width, flowHeight(width));
+        }
+
+        /** 按 FlowLayout 相同的换行规则，计算在指定宽度下的实际总高度 */
+        private int flowHeight(int width) {
+            if (getComponentCount() == 0) {
+                return 0;
+            }
+            int maxWidth = Math.max(width, 10);
+            int x = 0;
+            int y = 0;
+            int rowH = 0;
+            int maxY = 0;
+            for (Component c : getComponents()) {
+                Dimension p = c.getPreferredSize();
+                if (x > 0 && x + p.width > maxWidth) {
+                    y += rowH + VGAP;
+                    x = 0;
+                    rowH = 0;
+                }
+                rowH = Math.max(rowH, p.height);
+                x += p.width + HGAP;
+                maxY = Math.max(maxY, y + rowH);
+            }
+            return maxY + VGAP * 2;
+        }
     }
 
     private static int parseMaxOption(String prompt) {

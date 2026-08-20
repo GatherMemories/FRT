@@ -1,0 +1,76 @@
+package com.awei.frt.ui;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * 快捷按钮生成逻辑测试：
+ * - 恢复备份菜单必须生成 1..N、0、-1、取消 全部按钮
+ * - 独立 0/-1 只按"独立选项"识别，避免 1-10 等数字被误判
+ * - y/n 提示只生成 是/否
+ */
+class FRTFrameQuickOptionsTest {
+
+    private static List<String> labels(String prompt) {
+        return FRTFrame.buildQuickOptions(prompt).stream()
+                .map(FRTFrame.QuickOption::label)
+                .collect(Collectors.toList());
+    }
+
+    @Test
+    void restoreMenuGeneratesAllSpecialButtons() {
+        // 恢复备份菜单：0=返回, -1=删除, 1-3=恢复
+        String prompt = "0. 返回主菜单\n-1. 删除备份记录\n1-3. 恢复备份记录\n"
+                + "\n请输入选项 (0：返回, -1：删除, 1-3：恢复): ";
+        assertEquals(List.of("1", "2", "3", "0", "-1", "取消"), labels(prompt));
+    }
+
+    @Test
+    void restoreMenuWithMoreRecords() {
+        String prompt = "0. 返回主菜单\n-1. 删除备份记录\n1-17. 恢复备份记录\n"
+                + "\n请输入选项 (0：返回, -1：删除, 1-17：恢复): ";
+        List<String> labels = labels(prompt);
+        assertEquals(17, labels.indexOf("0")); // 1..17 后接 0
+        assertEquals(18, labels.indexOf("-1"));
+        assertEquals("取消", labels.get(labels.size() - 1));
+    }
+
+    @Test
+    void rangeWithTenDoesNotFakeZeroOrMinusOne() {
+        // 旧实现 prompt.contains("0") / contains("-1") 会在 1-10 时误生成 0 和 -1 按钮
+        String prompt = "请输入要删除的备份记录编号，支持单个编号或范围 (如 3 或 1-5) (1-10): ";
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "取消"), labels(prompt));
+    }
+
+    @Test
+    void versionLikeNumberDoesNotFakeZero() {
+        assertEquals(List.of("取消"), labels("检测到 Java 1.8，请升级到 17 以上"));
+    }
+
+    @Test
+    void yesNoPromptOnlyYesNoCancel() {
+        assertEquals(List.of("是", "否", "取消"), labels("是否执行以上 3 个更新操作？(y/n): "));
+    }
+
+    @Test
+    void optionKeywordFallback() {
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "取消"),
+                labels("请选择要处理的选项（无编号范围）："));
+    }
+
+    @Test
+    void folderNumberPromptUsesFallbackAndZero() {
+        // 规则生成向导的文件夹编号提示：无 1-N 范围但有 "编号" → 1..9 + 0 + 取消
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "取消"),
+                labels("请选择要在哪一层生成规则文件 (输入文件夹编号, 0=返回): "));
+    }
+
+    @Test
+    void plainInputPromptOnlyCancel() {
+        assertEquals(List.of("取消"), labels("请输入文件名: "));
+    }
+}
