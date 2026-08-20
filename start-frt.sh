@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# ============================================================
+#  FRT - Multi-level Folder Update Tool (Linux launcher)
+#
+#  用法:
+#    ./start-frt.sh              普通交互模式（默认）
+#    ./start-frt.sh --ui        UI 图形界面模式
+#    其他参数会原样透传给程序
+#
+#  要求: JDK 17+（与 start-frt.bat 一致，实测 21 可用）
+#
+#  注意: config.json 里的 baseDirectory 若还是 Windows 路径
+#        （如 C:/Users/...），在 Linux 上请改为对应的绝对路径，
+#        否则基于它的相对路径会解析到错误位置。
+# ============================================================
+set -euo pipefail
+
+# 切换到脚本所在目录，保证 target/、config.json 等相对路径始终正确
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+JAR="target/FRT-0.1.0-SNAPSHOT.jar"
+
+# 1. 检查可执行 jar 是否存在
+if [[ ! -f "$JAR" ]]; then
+    echo "[ERROR] jar 不存在: $JAR" >&2
+    echo "请先构建: mvn -o package -DskipTests" >&2
+    echo "（首次构建如缺依赖可去掉 -o 联网下载）" >&2
+    exit 1
+fi
+
+# 2. 检查 java 命令是否可用
+if ! command -v java >/dev/null 2>&1; then
+    echo "[ERROR] 未找到 java 命令，请先安装 JDK 17+" >&2
+    exit 1
+fi
+
+# 3. 检查 Java 主版本是否 >= 17（仅警告，不阻止运行）
+JAVA_MAJOR="$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')"
+if [[ -n "$JAVA_MAJOR" && "$JAVA_MAJOR" -lt 17 ]]; then
+    echo "[WARN] 检测到 Java $JAVA_MAJOR，FRT 要求 JDK 17+，可能无法运行" >&2
+fi
+
+# 4. 启动（透传所有参数，例如 --ui）
+exec java -Dfile.encoding=UTF-8 -jar "$JAR" "$@"
