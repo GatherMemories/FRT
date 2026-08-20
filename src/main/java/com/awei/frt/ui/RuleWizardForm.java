@@ -2,6 +2,7 @@ package com.awei.frt.ui;
 
 import com.awei.frt.constants.RulesConstants;
 import com.awei.frt.core.builder.FileTreeBuilder;
+import com.awei.frt.core.builder.MatchRuleLoader;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
@@ -26,6 +27,7 @@ import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -73,6 +75,7 @@ public class RuleWizardForm extends JDialog {
     private final JLabel warningLabel = new JLabel(" ");
     private final JLabel folderCountLabel = new JLabel("");
     private final Map<String, Path> folderMap = new LinkedHashMap<>(); // 下拉显示名 -> 目录路径
+    private final List<String> strategyTypes = new ArrayList<>();      // 注册表顺序（与下拉一一对应）
 
     public RuleWizardForm(Frame owner, Config config) {
         super(owner, "规则生成 - 表单式配置", true);
@@ -124,7 +127,7 @@ public class RuleWizardForm extends JDialog {
         folderRow.add(new JLabel("目标文件夹:"));
         folderRow.add(folderCombo);
         folderRow.add(folderCountLabel);
-        folderCombo.addActionListener(e -> updateExistingWarning());
+        folderCombo.addActionListener(e -> reloadFromSelectedFolder());
         form.add(folderRow, c);
 
         // ---- 3. 主策略参数 ----
@@ -188,6 +191,7 @@ public class RuleWizardForm extends JDialog {
 
         // 策略下拉：注册表全部类型（内置 + 外部插件）
         for (String type : StrategyFactory.getSupportedTypes()) {
+            strategyTypes.add(type);
             String desc = StrategyFactory.getDescription(type);
             strategyCombo.addItem(desc.isEmpty() ? type : type + "（" + desc + "）");
         }
@@ -217,7 +221,7 @@ public class RuleWizardForm extends JDialog {
         if (basePath == null || !Files.isDirectory(basePath)) {
             folderCombo.addItem("（目录不存在）");
             folderCountLabel.setText("");
-            updateExistingWarning();
+            reloadFromSelectedFolder();
             return;
         }
         FileNode tree = FileTreeBuilder.buildTree(basePath);
@@ -245,7 +249,7 @@ public class RuleWizardForm extends JDialog {
             }
         }
         folderCountLabel.setText("（共 " + folderMap.size() + " 个可选目录）");
-        updateExistingWarning();
+        reloadFromSelectedFolder();
     }
 
     private Path resolveBasePath() {
@@ -257,26 +261,138 @@ public class RuleWizardForm extends JDialog {
         return config.getBaseDirectory().resolve(rel).normalize();
     }
 
-    /** 目标层已有规则文件时红字提示（查找优先级最高的 matching-rules.json 优先生效） */
-    private void updateExistingWarning() {
+    /**
+     * 切换目标文件夹时刷新表单：
+     * 该层已有规则文件（按查找优先级）→ 解析并预填全部字段（主策略 + 策略链），基于现有配置编辑；
+     * 无规则文件 → 表单恢复空白。
+     */
+    private void reloadFromSelectedFolder() {
         Path targetDir = folderMap.get(folderCombo.getSelectedItem());
         if (targetDir == null) {
             warningLabel.setText(" ");
+            warningLabel.setForeground(UITheme.ERROR);
             return;
         }
-        for (String name : RulesConstants.FileNames.ALL_RULE_FILES) {
-            if (Files.exists(targetDir.resolve(name))) {
-                warningLabel.setText("警告：该目录已存在规则文件 " + name + "，生成后将优先生效");
+        Path existing = findExistingRuleFile(targetDir);
+        if (existing == null) {
+            warningLabel.setText(" ");
+            warningLabel.setForeground(UITheme.ERROR);
+            resetForm();
+            return;
+        }
+        try {
+            String json = Files.readString(existing);
+            MatchRule rule = MatchRuleLoader.fromJson(json);
+            if (rule == null) {
+                warningLabel.setText("警告：解析 " + existing.getFileName() + " 失败，表单为空（生成将覆盖原文件）");
+                warningLabel.setForeground(UITheme.ERROR);
+                resetForm();
                 return;
             }
+            applyRuleToForm(rule);
+            warningLabel.setText("已加载现有规则文件 " + existing.getFileName() + "，可修改后重新生成（将覆盖原文件）");
+            warningLabel.setForeground(UITheme.MUTED);
+        } catch (IOException e) {
+            warningLabel.setText("警告：读取 " + existing.getFileName() + " 失败");
+            warningLabel.setForeground(UITheme.ERROR);
         }
-        warningLabel.setText(" ");
+    }
+
+    /** 按查找优先级返回目录下已存在的规则文件，无则 null */
+    private Path findExistingRuleFile(Path dir) {
+        if (dir == null) {
+            return null;
+        }
+        for (String name : RulesConstants.FileNames.ALL_RULE_FILES) {
+            Path f = dir.resolve(name);
+            if (Files.exists(f)) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    /** 将已解析的规则填充到表单（主策略 = 规则自身或链首步；链步骤 = 第 2 步起） */
+    private void applyRuleToForm(MatchRule rule) {
+        if (rule == null) {
+            return;
+        }
+        List<MatchRule> steps = rule.getStrategyChain();
+        MatchRule main = rule;
+        if (steps != null && !steps.isEmpty()) {
+            main = steps.get(0);
+        }
+        selectStrategy(main.getStrategyType());
+        patternsField.setText(joinList(main.getPatterns()));
+        excludeField.setText(joinList(main.getExcludePatterns()));
+        inheritCheck.setSelected(main.isInheritToSubfolders());
+        replacementsField.setText(joinMap(main.getReplacements()));
+
+        // 清空旧链步骤，按第 2 步起重建
+        chainRows.clear();
+        chainPanel.removeAll();
+        if (steps != null) {
+            for (int i = 1; i < steps.size(); i++) {
+                addChainRow(steps.get(i));
+            }
+        }
+        rebuildChainPanel();
+    }
+
+    /** 表单恢复空白默认值 */
+    private void resetForm() {
+        strategyCombo.setSelectedIndex(0);
+        patternsField.setText("");
+        excludeField.setText("");
+        replacementsField.setText("");
+        inheritCheck.setSelected(false);
+        chainRows.clear();
+        chainPanel.removeAll();
+        chainPanel.revalidate();
+        chainPanel.repaint();
+    }
+
+    /** 按策略类型选中下拉项；不在注册表时红字提示 */
+    private void selectStrategy(String type) {
+        if (type == null) {
+            return;
+        }
+        int idx = strategyTypes.indexOf(type);
+        if (idx >= 0) {
+            strategyCombo.setSelectedIndex(idx);
+        } else {
+            warningLabel.setText("警告：策略类型 " + type + " 不在当前注册表，请重新选择");
+            warningLabel.setForeground(UITheme.ERROR);
+        }
+    }
+
+    private static String joinList(List<String> list) {
+        return list == null || list.isEmpty() ? "" : String.join(", ", list);
+    }
+
+    private static String joinMap(Map<String, String> map) {
+        if (map == null || map.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : map.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(e.getKey()).append('=').append(e.getValue());
+        }
+        return sb.toString();
     }
 
     // ---------------- 策略链步骤 ----------------
 
     private void addChainRow() {
-        ChainRow row = new ChainRow(chainRows.size() + 1);
+        addChainRow(null);
+    }
+
+    /** 添加链步骤；step 非空时按已有规则预填该步骤 */
+    private void addChainRow(MatchRule step) {
+        ChainRow row = new ChainRow(chainRows.size() + 1, step);
         chainRows.add(row);
         row.installRemoveAction(() -> {
             chainRows.remove(row);
@@ -306,10 +422,19 @@ public class RuleWizardForm extends JDialog {
         private final JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         private int index;
 
-        ChainRow(int index) {
+        ChainRow(int index, MatchRule step) {
             this.index = index;
             for (String type : StrategyFactory.getSupportedTypes()) {
                 typeCombo.addItem(type);
+            }
+            if (step != null) {
+                int idx = strategyTypes.indexOf(step.getStrategyType());
+                if (idx >= 0) {
+                    typeCombo.setSelectedIndex(idx);
+                }
+                patterns.setText(joinList(step.getPatterns()));
+                excludes.setText(joinList(step.getExcludePatterns()));
+                replacements.setText(joinMap(step.getReplacements()));
             }
             UITheme.styleButton(removeButton);
             panel.setBackground(UITheme.PANEL_BG);
