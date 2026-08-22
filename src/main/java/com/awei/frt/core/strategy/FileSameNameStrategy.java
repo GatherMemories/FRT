@@ -53,14 +53,15 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
         List<String> excludePatterns = context.getRuleInheritanceContext().getRuleChain().getExcludePatterns();
 
         if (!GlobMatcher.matchesAny(fileName, patterns, caseSensitive)) {
-            // 白名单未命中属于正常过滤，DEBUG 级（避免逐文件刷屏）
-            LoggerUtil.logDebug("忽略文件：" + fileName);
+            // 白名单未命中：提示跳过原因（INFO，用户需要知道哪些文件被跳过；
+            // 配合已去除的"处理/完成"配对日志，不会像早期那样逐文件刷屏）
+            LoggerUtil.logInfo("忽略文件：" + fileName);
             return false;
         }
         // 黑名单：空列表表示不排除任何文件（matchesAny 空列表返回 true 是"白名单匹配所有"语义）
         if (excludePatterns != null && !excludePatterns.isEmpty()
                 && GlobMatcher.matchesAny(fileName, excludePatterns, caseSensitive)) {
-            LoggerUtil.logDebug("忽略文件：" + fileName);
+            LoggerUtil.logInfo("忽略文件：" + fileName);
             return false;
         }
         return true;

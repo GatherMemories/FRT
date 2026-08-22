@@ -194,7 +194,9 @@ public class McModStrategy extends AbstractOperationStrategy {
                         MOD_INFO_CACHE.put(cacheKey, modInfos);
                     }
                     if (modInfos.isEmpty()) {
-                        LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file.getFileName());
+                        // 带完整路径：update 与 target 目录可能各有一个同名 jar（如 app.jar），
+                        // 只显示文件名会误以为"同一个文件被扫了两次"
+                        LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file);
                         return;
                     }
                     for (ModInfo modInfo : modInfos) {
@@ -204,7 +206,7 @@ public class McModStrategy extends AbstractOperationStrategy {
                 catch (Throwable e) {
                     // 兜底：单个 jar 解析失败只跳过该 jar，不影响整个更新流程
                     if(!(e instanceof ZipException)){
-                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file.getFileName() + " - " + e);
+                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file + " - " + e);
                     }
                 }
             });
