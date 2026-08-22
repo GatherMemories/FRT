@@ -126,11 +126,14 @@ public class McModStrategy extends AbstractOperationStrategy {
             // 参数 onlyIfContentSame=true：源与目标文件 MD5 相同则跳过替换（内容一致无需更新）
             if (onlyIfContentSame && isFileContentSame(sourceFilePath, targetFilePath)) {
                 LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 内容相同(MD5)，跳过替换");
+                // McMod 已判定该 mod 无需更新（消费），链中后续策略同样不应再按文件名处理
+                markModFilesHandled(node, sourceFilePath);
                 continue;
             }
             // 参数 onlyIfVersionChanged=true：目标已是相同版本则跳过替换
             if (onlyIfVersionChanged && currentModInfo.getVersion().equals(targetModInfo.getVersion())) {
                 LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
+                markModFilesHandled(node, sourceFilePath);
                 continue;
             }
 
