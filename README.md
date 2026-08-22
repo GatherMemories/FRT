@@ -39,6 +39,31 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 
 > 注意：图形界面模式下黑色控制台窗口保持空白是**正常现象**（日志显示在程序窗口内）；如需控制台菜单模式，运行 `start-frt.bat --console`（Linux：`./start-frt.sh --console`）。
 
+## 无 JDK 环境运行（发布包自带精简运行时）
+
+发布包内的 `runtime/` 是 **jlink 生成的精简版 Java 运行时**（约 86MB，仅为完整 JDK 的三分之一），启动脚本**优先使用它**，目标机器**无需安装 JDK**。
+
+```
+工具包/
+├── runtime/            # 精简 Java 运行时（无 JDK 也能运行）
+├── FRT-0.1.0-SNAPSHOT.jar
+├── start-frt.sh        # Linux/macOS 启动脚本
+├── start-frt.bat       # Windows 启动脚本
+├── config.json         # 配置模板
+└── README.md
+```
+
+> **注意**：`runtime/` 与操作系统平台相关（Linux 的 runtime 不能在 Windows 用）。各平台发布包需在对应平台生成 runtime：
+
+```bash
+# 在有 JDK 17+ 的机器上（Windows 用户在 Windows 上执行，Linux 用户在 Linux 上执行）
+jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported \
+      --strip-debug --no-header-files --no-man-pages \
+      --output runtime
+```
+
+把生成的 `runtime/` 目录放进发布包即可；系统已装 JDK 时脚本自动回退用系统 java。
+
 ## 配置文件
 
 ### config.json（全局配置，均可省略）

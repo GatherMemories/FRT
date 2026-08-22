@@ -31,14 +31,19 @@ else
     exit 1
 fi
 
-# 2. 检查 java 命令是否可用
-if ! command -v java >/dev/null 2>&1; then
-    echo "[ERROR] 未找到 java 命令，请先安装 JDK 17+" >&2
+# 2. 定位 java：优先发布包自带的精简运行时（runtime/，无 JDK 环境可用），其次系统 PATH
+if [[ -x "runtime/bin/java" ]]; then
+    JAVA="runtime/bin/java"
+elif command -v java >/dev/null 2>&1; then
+    JAVA="java"
+else
+    echo "[ERROR] 未找到 java：发布包缺少 runtime/ 且系统未安装 JDK 17+" >&2
+    echo "       请使用完整发布包（含 runtime/），或安装 JDK 17+ 后重试" >&2
     exit 1
 fi
 
 # 3. 检查 Java 主版本是否 >= 17（仅警告，不阻止运行）
-JAVA_MAJOR="$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')"
+JAVA_MAJOR="$("$JAVA" -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')"
 if [[ -n "$JAVA_MAJOR" && "$JAVA_MAJOR" -lt 17 ]]; then
     echo "[WARN] 检测到 Java $JAVA_MAJOR，本工具要求 JDK 17+，可能无法运行" >&2
 fi
@@ -57,7 +62,7 @@ done
 if [[ "$USE_UI" == true ]]; then
     echo "正在启动图形界面（多层级文件夹更新工具）..."
     echo "若未弹出窗口，请运行: ./start-frt.sh --console 进入控制台模式"
-    exec java -Dfile.encoding=UTF-8 -jar "$JAR" --ui "${FORWARD[@]}"
+    exec "$JAVA" -Dfile.encoding=UTF-8 -jar "$JAR" --ui "${FORWARD[@]}"
 else
-    exec java -Dfile.encoding=UTF-8 -jar "$JAR" "${FORWARD[@]}"
+    exec "$JAVA" -Dfile.encoding=UTF-8 -jar "$JAR" "${FORWARD[@]}"
 fi
