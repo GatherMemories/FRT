@@ -41,6 +41,8 @@ goto parse_args
 
 :run
 if "%USE_UI%"=="1" (
+    echo 正在启动图形界面（多层级文件夹更新工具）...
+    echo 若未弹出窗口，请关闭本窗口后运行: start-frt.bat --console 进入控制台模式
     java -Dfile.encoding=UTF-8 -jar "%JAR%" --ui %FORWARD%
 ) else (
     java -Dfile.encoding=UTF-8 -jar "%JAR%" %FORWARD%

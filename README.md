@@ -28,6 +28,17 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 
 要求 JDK 17+。跨平台注意：config.json 的 `baseDirectory` 若是 Windows 路径，在 Linux 上需改为对应绝对路径。
 
+### 发布包（zip）首次使用
+
+发布包内含 jar + 启动脚本 + `config.json` 模板（相对路径 `update/THtest/delete/backup`）。解压后：
+
+1. 确认 JDK 17+ 已安装且在 PATH；
+2. 默认启动**图形界面**：双击 `start-frt.bat`（Windows）或运行 `./start-frt.sh`（Linux/macOS，若无可执行权限先 `chmod +x start-frt.sh`）；
+3. 首次使用建议先点顶部"**核心配置**"按钮，把 更新/目标/删除/备份 目录设到实际位置（或直接编辑 `config.json`）；
+4. 更新/删除操作前会创建对应目录；无 `config.json` 时程序使用 jar 内置默认配置。
+
+> 注意：图形界面模式下黑色控制台窗口保持空白是**正常现象**（日志显示在程序窗口内）；如需控制台菜单模式，运行 `start-frt.bat --console`（Linux：`./start-frt.sh --console`）。
+
 ## 配置文件
 
 ### config.json（全局配置，均可省略）

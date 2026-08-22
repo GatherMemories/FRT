@@ -55,6 +55,8 @@ for arg in "$@"; do
 done
 
 if [[ "$USE_UI" == true ]]; then
+    echo "正在启动图形界面（多层级文件夹更新工具）..."
+    echo "若未弹出窗口，请运行: ./start-frt.sh --console 进入控制台模式"
     exec java -Dfile.encoding=UTF-8 -jar "$JAR" --ui "${FORWARD[@]}"
 else
     exec java -Dfile.encoding=UTF-8 -jar "$JAR" "${FORWARD[@]}"
