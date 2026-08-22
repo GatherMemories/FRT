@@ -2,6 +2,7 @@ package com.awei.frt.core.strategy;
 
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
+import com.awei.frt.core.uitls.FileSignUtil;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.core.uitls.GlobMatcher;
 import com.awei.frt.model.OperationRecord;
@@ -89,12 +90,22 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
 
     /**
      * 替换：目标层存在同名文件时才执行
+     * 策略扩展参数：
+     *   onlyIfContentSame=true 时，源与目标文件内容（MD5）相同则跳过替换（内容一致无需更新）
      */
     @Override
     protected boolean doReplace(FileNode node, OperationContext context) {
         Path targetFilePath = context.getTargetPath(node.getRelativePath());
         if (!Files.exists(targetFilePath)) {
             return false;
+        }
+        // 参数 onlyIfContentSame=true：源与目标 MD5 相同则跳过替换（内容一致无需写入）
+        if (Boolean.parseBoolean(context.getRuleParam("onlyIfContentSame"))
+                && isFileContentSame(node.getPath(), targetFilePath)) {
+            LoggerUtil.logInfo("~ " + node.getName() + " 内容相同(MD5)，跳过替换");
+            context.recordSkip();
+            node.setHandled(true); // 内容已一致：链中后续策略无需再处理该文件
+            return true;
         }
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.replaceFile(node.getPath(), targetFilePath, record, context.isDryRun());
@@ -106,6 +117,16 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
             node.setHandled(true);
         }
         return true;
+    }
+
+    /**
+     * 判断源与目标文件内容是否完全相同（MD5 比较）
+     * 任一文件不存在或计算失败时返回 false（保守：不确定就执行替换）
+     */
+    private boolean isFileContentSame(Path sourcePath, Path targetPath) {
+        String sourceMd5 = FileSignUtil.getFileMd5(sourcePath);
+        String targetMd5 = FileSignUtil.getFileMd5(targetPath);
+        return sourceMd5 != null && sourceMd5.equals(targetMd5);
     }
 
     /**

@@ -184,6 +184,13 @@ public class OperationContext {
     }
 
     /**
+     * 记录一次"跳过"（如源与目标内容相同无需更新），计入跳过统计
+     */
+    public void recordSkip() {
+        processingResult.setSkipCount(processingResult.getSkipCount() + 1);
+    }
+
+    /**
      * 获取处理结果对象
      * @return 处理结果对象
      */

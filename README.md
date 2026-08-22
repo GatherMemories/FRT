@@ -69,6 +69,7 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar --ui   # 直接运行 jar
   | 参数 | 作用 |
   |------|------|
   | `caseSensitive=false` | 文件名匹配忽略大小写（默认区分） |
+  | `onlyIfContentSame=true` | 替换时源与目标文件**内容（MD5）相同**则跳过（避免无谓写入，计入"跳过"） |
 
 ### ZipEntryName —— 压缩包内文件名匹配（zip/jar）
 - **作用**：仅处理 .zip/.jar；打开包检查**内部条目名**，包内**任意一个**条目名匹配 `patterns`（且不匹配 `excludePatterns`）即命中，命中后整包参与操作（新增/替换/删除，**不解压**内部文件）。`patterns` 留空 = 匹配所有压缩包。例：`["META-INF/*.toml"]` 只处理含 mods.toml 的包。
