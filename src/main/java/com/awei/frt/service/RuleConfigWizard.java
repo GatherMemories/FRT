@@ -8,6 +8,7 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.StrategyStep;
 import com.awei.frt.ui.ConsoleUserPrompter;
 import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
@@ -311,12 +312,11 @@ public class RuleConfigWizard {
         // 6. 多策略组合链（可选）：链中后续策略只处理前序策略"剩余"的文件
         System.out.println("\n[参数 6/6] 多策略组合链 (可选)");
         System.out.println("  说明: 配置策略链后, 本层按链顺序依次执行各策略,");
-        System.out.println("        后续策略只处理前序策略未处理(剩余)的文件");
+        System.out.println("        第 1 步 = 上面配置的主策略, 后续策略只处理前序策略未处理(剩余)的文件");
         System.out.print("  是否配置策略链? (y/n, 回车=n): ");
         if (parseBoolean(readLine(), false)) {
-            List<MatchRule> chain = new ArrayList<>();
-            chain.add(rule.copy()); // 第一步 = 上面配置的策略（拷贝，避免链引用自身导致序列化无限递归）
-            System.out.println("  [链] 步骤1: " + rule.getStrategyType() + " patterns=" + rule.getPatterns());
+            List<StrategyStep> chain = new ArrayList<>();
+            System.out.println("  [链] 步骤1: " + rule.getStrategyType() + " patterns=" + rule.getPatterns() + "（主策略）");
             while (true) {
                 System.out.println("\n  [链] 新增步骤 (策略名留空或输入 0 结束):");
                 System.out.println("        可选策略: " + listStrategies());
@@ -336,17 +336,17 @@ public class RuleConfigWizard {
                 List<String> stepExcludes = parseList(readLine());
                 System.out.print("        replacements (key=value, 逗号分隔, 回车=空): ");
                 Map<String, String> stepReplacements = parseMap(readLine());
-                MatchRule step = new MatchRule();
+                StrategyStep step = new StrategyStep();
                 step.setStrategyType(stepType);
                 step.setPatterns(stepPatterns);
                 step.setExcludePatterns(stepExcludes);
                 step.setReplacements(stepReplacements);
                 chain.add(step);
-                System.out.println("  [链] 步骤" + chain.size() + ": " + stepType + " patterns=" + stepPatterns);
+                System.out.println("  [链] 步骤" + (chain.size() + 1) + ": " + stepType + " patterns=" + stepPatterns);
             }
-            if (chain.size() > 1) {
+            if (!chain.isEmpty()) {
                 rule.setStrategyChain(chain);
-                System.out.println("  [链] 策略链共 " + chain.size() + " 步");
+                System.out.println("  [链] 策略链共 " + (chain.size() + 1) + " 步");
             } else {
                 System.out.println("  [链] 未新增步骤，保持单一策略");
             }

@@ -8,6 +8,7 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.StrategyStep;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -312,28 +313,25 @@ public class RuleWizardForm extends JDialog {
         return null;
     }
 
-    /** 将已解析的规则填充到表单（主策略 = 规则自身或链首步；链步骤 = 第 2 步起） */
+    /** 将已解析的规则填充到表单（主策略 = 规则自身即链第 1 步；链步骤 = strategyChain 中的后续步骤） */
     private void applyRuleToForm(MatchRule rule) {
         if (rule == null) {
             return;
         }
-        List<MatchRule> steps = rule.getStrategyChain();
-        MatchRule main = rule;
-        if (steps != null && !steps.isEmpty()) {
-            main = steps.get(0);
-        }
-        selectStrategy(main.getStrategyType());
-        patternsField.setText(joinList(main.getPatterns()));
-        excludeField.setText(joinList(main.getExcludePatterns()));
-        inheritCheck.setSelected(main.isInheritToSubfolders());
-        replacementsField.setText(joinMap(main.getReplacements()));
+        // 主策略 = 规则自身（strategyChain 只存后续步骤，无"链首步=主策略"冗余）
+        selectStrategy(rule.getStrategyType());
+        patternsField.setText(joinList(rule.getPatterns()));
+        excludeField.setText(joinList(rule.getExcludePatterns()));
+        inheritCheck.setSelected(rule.isInheritToSubfolders());
+        replacementsField.setText(joinMap(rule.getReplacements()));
 
-        // 清空旧链步骤，按第 2 步起重建
+        // 清空旧链步骤，按 strategyChain 重建（均为第 2 步起的后续步骤）
         chainRows.clear();
         chainPanel.removeAll();
+        List<StrategyStep> steps = rule.getStrategyChain();
         if (steps != null) {
-            for (int i = 1; i < steps.size(); i++) {
-                addChainRow(steps.get(i));
+            for (StrategyStep step : steps) {
+                addChainRow(step);
             }
         }
         rebuildChainPanel();
@@ -391,7 +389,7 @@ public class RuleWizardForm extends JDialog {
     }
 
     /** 添加链步骤；step 非空时按已有规则预填该步骤 */
-    private void addChainRow(MatchRule step) {
+    private void addChainRow(StrategyStep step) {
         ChainRow row = new ChainRow(chainRows.size() + 1, step);
         chainRows.add(row);
         row.installRemoveAction(() -> {
@@ -422,7 +420,7 @@ public class RuleWizardForm extends JDialog {
         private final JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         private int index;
 
-        ChainRow(int index, MatchRule step) {
+        ChainRow(int index, StrategyStep step) {
             this.index = index;
             for (String type : StrategyFactory.getSupportedTypes()) {
                 typeCombo.addItem(type);
@@ -464,8 +462,8 @@ public class RuleWizardForm extends JDialog {
             panel.add(removeButton);
         }
 
-        MatchRule buildRule() {
-            MatchRule step = new MatchRule();
+        StrategyStep buildRule() {
+            StrategyStep step = new StrategyStep();
             step.setStrategyType((String) typeCombo.getSelectedItem());
             step.setPatterns(parseList(patterns.getText()));
             step.setExcludePatterns(parseList(excludes.getText()));
@@ -483,7 +481,9 @@ public class RuleWizardForm extends JDialog {
             return;
         }
         Path targetDir = folderMap.get(folderSel);
-        String strategy = (String) strategyCombo.getSelectedItem();
+        // 下拉项显示"类型（说明）"，但存入规则的必须是注册表标识（否则解析失败）
+        int strategyIdx = strategyCombo.getSelectedIndex();
+        String strategy = (strategyIdx >= 0 && strategyIdx < strategyTypes.size()) ? strategyTypes.get(strategyIdx) : null;
         if (strategy == null) {
             showError("请选择策略类型");
             return;
@@ -496,9 +496,9 @@ public class RuleWizardForm extends JDialog {
         rule.setInheritToSubfolders(inheritCheck.isSelected());
         rule.setReplacements(parseMap(replacementsField.getText()));
 
+        // 链只存"后续步骤"（第 1 步=主策略本身，无需拷贝入链，杜绝重复参数）
         if (!chainRows.isEmpty()) {
-            List<MatchRule> chain = new ArrayList<>();
-            chain.add(rule.copy()); // 第 1 步 = 主策略（拷贝，避免链引用自身导致序列化无限递归）
+            List<StrategyStep> chain = new ArrayList<>();
             for (ChainRow row : chainRows) {
                 chain.add(row.buildRule());
             }

@@ -4,6 +4,7 @@ import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.core.builder.MatchRuleLoader;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.StrategyStep;
 import com.awei.frt.service.RuleConfigWizard;
 import com.awei.frt.ui.UserPrompter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -24,47 +24,64 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 回归测试：多策略组合链组装时，主策略作为链步骤 1 必须是"拷贝"而非原对象引用，
- * 否则 rule.strategyChain 引用 rule 自身 → Jackson 序列化无限递归 StackOverflowError
- * （对应日志 "生成规则文件失败 ... Infinite recursion ... MatchRule[\"strategyChain\"]"）。
+ * 回归测试：多策略组合链的扁平化建模与序列化。
+ * 背景：早期把主策略作为"链步骤1"拷贝进 strategyChain（List&lt;MatchRule&gt;），
+ * 造成 ① 主策略参数在顶层与链中重复 ② 链步骤还能再套子链（无限层级）
+ * ③ 曾因 self-reference 引发 Jackson 序列化 StackOverflowError。
+ * 现改为：顶层即主策略（第1步），strategyChain 只存后续步骤（StrategyStep 扁平结构）。
  */
 class RuleChainSerializationTest {
 
-    /** 与向导相同的组装方式：主策略拷贝入链 + 追加链步骤 */
+    /** 与向导相同的组装方式：主策略留在顶层，strategyChain 只存后续步骤 */
     private static MatchRule buildRuleWithChain() {
         MatchRule rule = new MatchRule();
         rule.setStrategyType("FileSameName");
         rule.setPatterns(List.of("*.txt"));
         rule.setInheritToSubfolders(false);
 
-        List<MatchRule> chain = new ArrayList<>();
-        chain.add(rule.copy()); // 第 1 步 = 主策略（拷贝）
-        MatchRule step2 = new MatchRule();
+        StrategyStep step2 = new StrategyStep();
         step2.setStrategyType("ZipEntryName");
         step2.setPatterns(List.of("*.jar"));
-        chain.add(step2);
-        rule.setStrategyChain(chain);
+        rule.setStrategyChain(List.of(step2));
         return rule;
     }
 
     @Test
-    void chainStepOneMustNotReferenceTheRuleItself() {
+    void chainStoresOnlyAdditionalStepsNotTheRuleItself() {
         MatchRule rule = buildRuleWithChain();
-        assertNotSame(rule, rule.getStrategyChain().get(0),
-                "链步骤 1 引用规则自身会造成 Jackson 序列化无限递归");
-        assertEquals("FileSameName", rule.getStrategyChain().get(0).getStrategyType());
+        // 链只存后续步骤，不包含主策略自身（杜绝 self-reference 与重复参数）
+        assertEquals(1, rule.getStrategyChain().size());
+        assertNotSame(rule, rule.getStrategyChain().get(0), "链步骤不应引用规则自身");
+        assertEquals("ZipEntryName", rule.getStrategyChain().get(0).getStrategyType());
+
+        // 生效步骤 = [主策略, 后续步骤]
+        List<String> types = rule.getEffectiveStrategies().stream()
+                .map(MatchRule::getStrategyType)
+                .toList();
+        assertEquals(List.of("FileSameName", "ZipEntryName"), types);
     }
 
     @Test
-    void serializeRuleWithChainSucceeds() throws Exception {
+    void serializeRuleWithChainIsFlatAndNonRedundant() throws Exception {
         MatchRule rule = buildRuleWithChain();
         ObjectMapper mapper = new ObjectMapper();
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
-        String json = mapper.writeValueAsString(rule); // 修复前此处抛 StackOverflowError
+        String json = mapper.writeValueAsString(rule);
+
         assertTrue(json.contains("FileSameName"));
         assertTrue(json.contains("ZipEntryName"));
-        // 计算属性 effectiveStrategies 不应出现在 JSON 中（叶规则返回 [this]，序列化会无限递归）
+        // 计算属性 effectiveStrategies 不应出现在 JSON 中（返回 [this] 会无限递归）
         assertFalse(json.contains("effectiveStrategies"));
+        // 主策略只出现一次（不再复制进链）；后续步骤也只出现一次
+        assertEquals(json.indexOf("FileSameName"), json.lastIndexOf("FileSameName"),
+                "主策略不应在链中重复出现");
+        assertEquals(json.indexOf("ZipEntryName"), json.lastIndexOf("ZipEntryName"));
+        // 继承开关只属于顶层规则，链步骤内不应出现（扁平结构无冗余字段）
+        assertEquals(json.indexOf("inheritToSubfolders"), json.lastIndexOf("inheritToSubfolders"),
+                "链步骤内不应携带 inheritToSubfolders");
+        // 链步骤内不应出现嵌套 strategyChain（只有顶层一个 strategyChain 键）
+        assertEquals(json.indexOf("strategyChain"), json.lastIndexOf("strategyChain"),
+                "链步骤内不应嵌套 strategyChain");
     }
 
     @Test
@@ -96,9 +113,10 @@ class RuleChainSerializationTest {
             assertTrue(json.contains("FileSameName"));
             assertTrue(json.contains("ZipEntryName"));
 
-            // 自校验 + 执行语义：链步骤按序展开
+            // 自校验 + 执行语义：主策略为第1步，链步骤按序展开
             MatchRule loaded = MatchRuleLoader.fromJson(json);
             assertNotNull(loaded);
+            assertEquals(1, loaded.getStrategyChain().size(), "链只存后续步骤，不含主策略");
             List<String> types = loaded.getEffectiveStrategies().stream()
                     .map(MatchRule::getStrategyType)
                     .toList();
@@ -113,13 +131,13 @@ class RuleChainSerializationTest {
         MatchRule rule = buildRuleWithChain();
         MatchRule copy = rule.copy();
         // 修改拷贝不影响原对象
-        copy.getStrategyChain().get(1).setStrategyType("McMod");
+        copy.getStrategyChain().get(0).setStrategyType("McMod");
         copy.getPatterns().add("*.bak");
         copy.getReplacements().put("k", "v");
-        assertEquals("ZipEntryName", rule.getStrategyChain().get(1).getStrategyType());
+        assertEquals("ZipEntryName", rule.getStrategyChain().get(0).getStrategyType());
         assertEquals(1, rule.getPatterns().size());
         assertFalse(rule.getReplacements().containsKey("k"));
-        // 嵌套链也被深拷贝（拷贝的链步骤与原件不是同一对象）
+        // 链步骤也被深拷贝（拷贝的链步骤与原件不是同一对象）
         assertNotSame(rule.getStrategyChain().get(0), copy.getStrategyChain().get(0));
     }
 

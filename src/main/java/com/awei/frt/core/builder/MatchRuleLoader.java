@@ -2,6 +2,7 @@ package com.awei.frt.core.builder;
 
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.StrategyStep;
 import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +36,7 @@ public class MatchRuleLoader {
 
             // 验证多策略组合链：每个步骤都必须注册
             if (rule.getStrategyChain() != null) {
-                for (com.awei.frt.model.MatchRule step : rule.getStrategyChain()) {
+                for (StrategyStep step : rule.getStrategyChain()) {
                     if (step == null || step.getStrategyType() == null
                             || !StrategyFactory.isSupported(step.getStrategyType())) {
                         throw new IllegalArgumentException("策略链步骤不合法: "
