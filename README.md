@@ -30,10 +30,11 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 
 ### 发布包（zip）首次使用
 
-发布包内含 jar + 启动脚本 + `runtime/`（无 JDK 也能运行），**无需 config.json**（程序有内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录）。解压后：
+发布包内含 jar + 启动脚本 + `runtime/`（无 JDK 也能运行），**无需自带 config.json**（程序有内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录）。解压后：
 
 1. 默认启动**图形界面**：双击 `start-frt.bat`（Windows）或运行 `./start-frt.sh`（Linux/macOS，若无可执行权限先 `chmod +x start-frt.sh`）；
-2. 首次使用建议先点顶部"**核心配置**"按钮，把 更新/目标/删除/备份 目录设到实际位置（或自行创建 `config.json` 覆盖默认值）；
+2. 首次使用建议先点顶部"**核心配置**"按钮，把 更新/目标/删除/备份 目录设到实际位置；
+3. 需要手动配置时，参照下方[配置文件](#配置文件)章节的 `config.json` 完整示例创建即可。
 
 > 注意：图形界面模式下黑色控制台窗口保持空白是**正常现象**（日志显示在程序窗口内）；如需控制台菜单模式，运行 `start-frt.bat --console`（Linux：`./start-frt.sh --console`）。
 
@@ -75,6 +76,20 @@ jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported 
 | `logLevel` | 日志级别（DEBUG/INFO/WARN/ERROR） | `INFO` |
 
 相对路径基于 `baseDirectory` 解析；未知键（如 `logPath`）静默忽略，核心配置向导写入时保留。
+
+**config.json 完整示例**（放到程序根目录；省略则全部用默认值）：
+
+```json
+{
+  "updatePath": "update",
+  "targetPath": "THtest",
+  "deletePath": "delete",
+  "backupPath": "backup",
+  "logLevel": "INFO"
+}
+```
+
+> 程序根目录没有 `config.json` 时使用内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录；需要自定义路径时按上面示例创建即可（也可用顶部"核心配置"功能生成）。
 
 ### 规则文件（replace.json / add.json / delete.json / matching-rules.json，作用相同）
 
