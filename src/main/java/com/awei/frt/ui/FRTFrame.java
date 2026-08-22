@@ -74,7 +74,11 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         logArea.setBackground(UITheme.PANEL_BG);
         logArea.setForeground(UITheme.TEXT);
         logArea.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        add(new JScrollPane(logArea), BorderLayout.CENTER);
+        // 加大滚轮步长：Swing 默认 unitIncrement 偏小，鼠标滚轮滚动日志区很慢
+        JScrollPane logScroll = new JScrollPane(logArea);
+        logScroll.getVerticalScrollBar().setUnitIncrement(24);
+        logScroll.getHorizontalScrollBar().setUnitIncrement(24);
+        add(logScroll, BorderLayout.CENTER);
 
         // 顶部功能按钮
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));

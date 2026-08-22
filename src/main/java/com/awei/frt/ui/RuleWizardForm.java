@@ -158,6 +158,9 @@ public class RuleWizardForm extends JDialog {
         JScrollPane chainScroll = new JScrollPane(chainPanel);
         chainScroll.setBorder(BorderFactory.createTitledBorder("链步骤"));
         chainScroll.setPreferredSize(new Dimension(640, 140));
+        // 加大滚轮步长：Swing 默认 unitIncrement 偏小，鼠标滚轮滚动很慢
+        chainScroll.getVerticalScrollBar().setUnitIncrement(24);
+        chainScroll.getHorizontalScrollBar().setUnitIncrement(24);
         c.gridy = row++;
         form.add(chainScroll, c);
 
@@ -188,7 +191,11 @@ public class RuleWizardForm extends JDialog {
         form.add(buttons, c);
 
         getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(new JScrollPane(form), BorderLayout.CENTER);
+        // 加大滚轮步长（Swing 默认 unitIncrement 偏小，鼠标滚轮滚动很慢）
+        JScrollPane formScroll = new JScrollPane(form);
+        formScroll.getVerticalScrollBar().setUnitIncrement(24);
+        formScroll.getHorizontalScrollBar().setUnitIncrement(24);
+        getContentPane().add(formScroll, BorderLayout.CENTER);
 
         // 策略下拉：注册表全部类型（内置 + 外部插件）
         for (String type : StrategyFactory.getSupportedTypes()) {
