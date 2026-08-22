@@ -8,16 +8,16 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * 快捷按钮生成逻辑测试：
+ * 快捷按钮生成逻辑测试（QuickOptions 独立封装后）：
  * - 恢复备份菜单必须生成 1..N、0、-1、取消 全部按钮
  * - 独立 0/-1 只按"独立选项"识别，避免 1-10 等数字被误判
- * - y/n 提示只生成 是/否
+ * - y/n 提示只生成 是/否/取消（覆盖全部真实 y/n 确认场景）
  */
 class FRTFrameQuickOptionsTest {
 
     private static List<String> labels(String prompt) {
-        return FRTFrame.buildQuickOptions(prompt).stream()
-                .map(FRTFrame.QuickOption::label)
+        return QuickOptions.build(prompt).stream()
+                .map(QuickOptions.Option::label)
                 .collect(Collectors.toList());
     }
 
@@ -72,5 +72,35 @@ class FRTFrameQuickOptionsTest {
     @Test
     void plainInputPromptOnlyCancel() {
         assertEquals(List.of("取消"), labels("请输入文件名: "));
+    }
+
+    // ---------------- y/n 确认全场景覆盖（避免"某处确认没有快捷按钮"） ----------------
+
+    @Test
+    void allYesNoConfirmPromptsGetYesNoButtons() {
+        String[] prompts = {
+                // 更新预览确认（FileUpdateServiceNew）
+                "是否执行以上 8 个更新操作？(y/n): ",
+                // 删除预览确认（FileDeleteService）
+                "确认要执行以上 3 个删除操作吗？此操作不可逆！(y/n): ",
+                // 规则生成写入确认（RuleConfigWizard.writeRuleFile）
+                "[确认] 写入 matching-rules.json ? (y/n, 回车=n): ",
+                // 核心配置保存确认（CoreConfigWizard）
+                "[确认] 保存 config.json ? (y/n, 回车=n): ",
+                // 恢复会话确认（Main）
+                "是否立即恢复该会话，将系统恢复到操作前的状态？(y/n): ",
+                // 恢复备份确认（RestoreService）
+                "确认要从此备份恢复系统吗？(y/n): ",
+                // 删除备份记录确认（RestoreService）
+                "确认要删除这 2 个备份记录吗？此操作不可逆！(y/n): ",
+                // 规则生成参数 4 继承开关（RuleConfigWizard.inputRule）
+                "请输入 (y/n, 回车=默认 false): ",
+                // 规则生成参数 6 策略链（RuleConfigWizard.inputRule）
+                "是否配置策略链? (y/n, 回车=n): ",
+        };
+        for (String prompt : prompts) {
+            assertEquals(List.of("是", "否", "取消"), labels(prompt),
+                    "y/n 确认提示应生成 是/否/取消: " + prompt);
+        }
     }
 }
