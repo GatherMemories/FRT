@@ -25,7 +25,12 @@ public final class QuickOptions {
     }
 
     private static final int MAX_NUMERIC_BUTTONS = 20;
-    private static final Pattern OPTION_RANGE = Pattern.compile("1\\s*-\\s*(\\d+)");
+    /**
+     * 数字范围 "1-N"：前导必须是非字母数字（排除 backup-20260301-005358.json 中
+     * "1-005358" 这类文件名误判，实测曾把恢复菜单解析成 1-20）；后随不能是字母数字。
+     * group(2) 为范围上限。
+     */
+    private static final Pattern OPTION_RANGE = Pattern.compile("(^|[^0-9A-Za-z])1\\s*-\\s*(\\d+)(?![0-9A-Za-z])");
     /** 独立选项 "0"（排除 10/20 等数字中的 0，也排除 1.0 版本号里的 0） */
     private static final Pattern OPTION_ZERO = Pattern.compile("(^|[^0-9.])0([^0-9]|$)");
     /** 独立选项 "-1"（排除 1-10 等范围里的 "-1"） */
@@ -76,7 +81,7 @@ public final class QuickOptions {
         Matcher m = OPTION_RANGE.matcher(prompt);
         while (m.find()) {
             try {
-                int v = Integer.parseInt(m.group(1));
+                int v = Integer.parseInt(m.group(2));
                 if (v > max) {
                     max = v;
                 }
