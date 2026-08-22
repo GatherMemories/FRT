@@ -12,11 +12,16 @@ chcp 65001 >nul
 title 多层级文件夹更新工具
 cd /d "%~dp0"
 
-set JAR=target\FRT-0.1.0-SNAPSHOT.jar
+rem 兼容两种布局：发布包内 jar 与脚本同目录；开发目录 target\
+if exist "FRT-0.1.0-SNAPSHOT.jar" (
+    set JAR=FRT-0.1.0-SNAPSHOT.jar
+) else (
+    set JAR=target\FRT-0.1.0-SNAPSHOT.jar
+)
 
 if not exist "%JAR%" (
-    echo [ERROR] jar not found: %JAR%
-    echo Please run: mvn -o package -DskipTests first.
+    echo [ERROR] jar not found: FRT-0.1.0-SNAPSHOT.jar
+    echo Please run: mvn -o package -DskipTests first, or use release package.
     pause
     exit /b 1
 )
