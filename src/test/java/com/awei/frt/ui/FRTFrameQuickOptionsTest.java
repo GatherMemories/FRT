@@ -118,4 +118,19 @@ class FRTFrameQuickOptionsTest {
                         "13", "14", "15", "16", "17", "18", "19", "0", "-1", "取消"),
                 labels(prompt), "文件名中的 1-数字 不应影响范围解析");
     }
+
+    @Test
+    void moreThanTwentyRecordsAreNotTruncated() {
+        // 回归：恢复菜单 22 条记录时，旧上限 20 截断 → 21/22 无快捷按钮（用户实测多轮测试后暴露）
+        String prompt = "0. 返回主菜单\n-1. 删除备份记录\n1-22. 恢复备份记录\n"
+                + "\n请输入选项 (0：返回, -1：删除, 1-22：恢复): ";
+        List<String> expected = new java.util.ArrayList<>();
+        for (int i = 1; i <= 22; i++) {
+            expected.add(String.valueOf(i));
+        }
+        expected.add("0");
+        expected.add("-1");
+        expected.add("取消");
+        assertEquals(expected, labels(prompt), "数字按钮不应被 20 上限截断");
+    }
 }

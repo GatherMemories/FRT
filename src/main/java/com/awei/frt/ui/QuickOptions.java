@@ -24,7 +24,11 @@ public final class QuickOptions {
     public record Option(String label, String value) {
     }
 
-    private static final int MAX_NUMERIC_BUTTONS = 20;
+    /**
+     * 数字按钮数量上限：不截断真实选项数（恢复菜单 20+ 条备份记录也须全部可点选），
+     * 只是防御异常大的解析值（如正则误匹配出的超大数），滚动区可滚动查看全部按钮。
+     */
+    private static final int MAX_NUMERIC_BUTTONS = 200;
     /**
      * 数字范围 "1-N"：前导必须是非字母数字（排除 backup-20260301-005358.json 中
      * "1-005358" 这类文件名误判，实测曾把恢复菜单解析成 1-20）；后随不能是字母数字。
