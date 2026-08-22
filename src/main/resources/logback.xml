@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 控制台输出：简洁格式（时间+级别+消息），不使用 ANSI 颜色（Windows GBK 控制台不兼容） -->
+    <!-- 控制台输出：简洁格式（时间+级别+消息）。%nopex 显式禁止异常堆栈——
+         logback 在 pattern 无 %ex 时仍会默认追加 throwable 堆栈到控制台/UI，
+         用户界面只应显示简洁消息，完整堆栈仅进日志文件（FILE appender 的 %ex） -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder charset="UTF-8">
-            <pattern>%d{HH:mm:ss.SSS} %-5level %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %msg%nopex%n</pattern>
         </encoder>
     </appender>
 
