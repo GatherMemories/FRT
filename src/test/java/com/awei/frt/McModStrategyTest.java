@@ -1,8 +1,10 @@
 package com.awei.frt;
 
 import com.awei.frt.core.builder.ConfigLoader;
+import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.context.RuleInheritanceContext;
+import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.core.strategy.McModStrategy;
 import com.awei.frt.model.Config;
@@ -83,6 +85,49 @@ class McModStrategyTest {
                     "MD5 不同时应执行替换");
             assertTrue(ctx.getProcessingResult().getOperationRecords().get(0).isSuccess());
         } finally {
+            deleteRecursively(base);
+        }
+    }
+
+    @Test
+    void chainFileSameNameDoesNotReprocessModJars() throws IOException {
+        // 回归：McMod（目录级）+ 链 FileSameName（空 patterns 匹配所有）时，
+        // mod.jar 只应被 McMod 按 modId 处理一次，文件级 FileSameName 不得再复制同一 jar
+        Path base = Files.createTempDirectory("mcmod-chain-dedup");
+        try {
+            TestSupport.isolateBackup(base);
+            Path updateDir = Files.createDirectories(base.resolve("update"));
+            Path targetDir = Files.createDirectories(base.resolve("target"));
+            createJar(updateDir, "mod.jar", Map.of("META-INF/mods.toml", MODS_TOML));
+            Files.writeString(updateDir.resolve("notes.txt"), "hi", StandardCharsets.UTF_8);
+
+            String ruleJson = """
+                    {
+                      "strategyType": "McMod",
+                      "patterns": ["*.jar"],
+                      "strategyChain": [
+                        {"strategyType": "FileSameName", "patterns": [], "excludePatterns": ["*.md"]}
+                      ],
+                      "inheritToSubfolders": false
+                    }
+                    """;
+            Files.writeString(updateDir.resolve("matching-rules.json"), ruleJson, StandardCharsets.UTF_8);
+
+            Config config = ConfigLoader.getConfig();
+            config.setUpdatePath(updateDir.toAbsolutePath());
+            config.setTargetPath(targetDir.toAbsolutePath());
+            OperationContext ctx = new OperationContext(config);
+            FileNode tree = FileTreeBuilder.buildTree(updateDir);
+            tree.process(null, ctx, FileNode.UPDATE_OPERATION);
+
+            // 修复前：mod.jar 被 McMod 新增 + FileSameName 再替换（重复）；修复后只出现一次
+            java.util.List<String> targets = ctx.getProcessingResult().getOperationRecords().stream()
+                    .map(r -> r.getTargetPath() != null ? r.getTargetPath().getFileName().toString() : "?")
+                    .toList();
+            assertEquals(java.util.List.of("mod.jar", "notes.txt"), targets,
+                    "mod.jar 不应被链中文件级策略重复处理");
+        } finally {
+            TestSupport.restoreBackupPath();
             deleteRecursively(base);
         }
     }
