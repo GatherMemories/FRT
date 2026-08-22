@@ -14,9 +14,12 @@ public class MainUI {
             try {
                 new FRTFrame().setVisible(true);
             } catch (Throwable t) {
-                // 无图形环境（headless）时给出一致提示，避免静默失败
-                System.err.println("[失败] 无法启动图形界面: " + t.getMessage());
-                System.err.println("[提示] 请在有图形界面的环境运行，或使用控制台模式（不带 --ui 参数）");
+                // 用户可见提示保持友好简洁：简短异常类型+消息（完整堆栈只进 logs/frt.log）
+                String brief = t.getClass().getSimpleName()
+                        + (t.getMessage() != null ? ": " + t.getMessage() : "");
+                System.err.println("[失败] 无法启动图形界面: " + brief);
+                System.err.println("[提示] 请检查 config.json 中的 更新/目标/删除/备份 目录配置，");
+                System.err.println("       或使用控制台模式运行：start-frt.bat --console");
             }
         });
     }

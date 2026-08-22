@@ -232,12 +232,19 @@ public class ConfigLoader {
             }
 
             if (!Files.exists(actualPath)) {
-                logError("[警告] 配置错误: " + folderName + "不存在: " + actualPath);
-                throw new IllegalArgumentException(folderName + "不存在");
+                // 目录不存在：自动创建（发布包/新环境首次启动时 update/THtest/delete/backup 尚不存在，
+                // 抛异常会导致启动失败——用户实测 Windows 上启动即报"目标目录不存在"）
+                try {
+                    Files.createDirectories(actualPath);
+                    logInfo("[创建] " + folderName + "不存在，已自动创建: " + actualPath);
+                } catch (IOException e) {
+                    logError("[警告] 配置错误: " + folderName + "无法自动创建: " + actualPath + " - " + e.getMessage());
+                    throw new IllegalArgumentException(folderName + "无法自动创建: " + actualPath);
+                }
             } else if (!Files.isDirectory(actualPath)) {
                 // 存在但不是文件夹
                 logError("[警告] 配置错误: " + folderName + "不是有效文件夹: " + actualPath);
-                throw new IllegalArgumentException(folderName + "不是有效文件夹");
+                throw new IllegalArgumentException(folderName + "不是有效文件夹: " + actualPath);
             } else {
                 logInfo("[成功] " + folderName + "有效: " + actualPath);
             }
