@@ -3,9 +3,12 @@ package com.awei.frt;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.model.ProcessingResult;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -14,11 +17,52 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class BackupFileLoaderTest {
 
+    @TempDir
+    Path tempDir;
+
+    @AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
+
     @Test
     public void loadMissingRecordReturnsNull() {
         // 容错：加载不存在的备份记录应返回 null 而不是抛异常（原测试硬编码了 Windows 绝对路径，Linux 上形同虚设）
         ProcessingResult processingResult = BackupFileLoader.loadOperationRecord("backup-not-exist-00000000-000000");
         assertNull(processingResult, "加载不存在的备份记录应返回 null");
+    }
+
+    /**
+     * 回归测试：更新/删除产生新备份后，getOperationRecordFiles 必须刷新看到新记录
+     * （原实现缓存非空后不再重新加载，新备份在恢复菜单中查找不到——用户实测反馈）
+     */
+    @Test
+    public void newBackupRecordAppearsOnRefresh() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path recordDir = ConfigLoader.getBackupPath().resolve("record");
+            Files.createDirectories(recordDir);
+            // 先放一条旧记录并加载（让缓存非空）
+            Files.writeString(recordDir.resolve("backup-old.json"),
+                    recordJson("2026-08-22T10:00:00"), StandardCharsets.UTF_8);
+            assertTrue(BackupFileLoader.getOperationRecordFiles().containsKey("backup-old.json"),
+                    "旧记录应能加载");
+
+            // 模拟更新/删除后产生的新备份记录
+            Files.writeString(recordDir.resolve("backup-new-test.json"),
+                    recordJson("2026-08-22T13:00:00"), StandardCharsets.UTF_8);
+
+            Map<String, ProcessingResult> refreshed = BackupFileLoader.getOperationRecordFiles();
+            assertTrue(refreshed.containsKey("backup-new-test.json"),
+                    "新备份记录应在再次获取时可见（备份功能列表需刷新，而非返回旧缓存）");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    private String recordJson(String resultTime) {
+        return "{\"resultTime\":\"" + resultTime + "\",\"successCount\":1,\"skipCount\":0,\"errorCount\":0,"
+                + "\"operationRecords\":[],\"success\":true,\"resultPath\":null}";
     }
 
     /**

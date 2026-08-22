@@ -90,14 +90,13 @@ public class BackupFileLoader {
     // 会话记录共享 JSON 序列化器（同 BACKUP_MAPPER，别名语义更清晰）
     private static final ObjectMapper SESSION_MAPPER = BACKUP_MAPPER;
 
-    // 获取操作记录集文件列表
+    /**
+     * 获取操作记录集文件列表（每次都重新扫描 record 目录，保证最新）：
+     * 更新/删除操作产生新备份后，备份功能列表应能立即看到；
+     * 原实现缓存非空后不再刷新，用户实测新备份在恢复菜单中查找不到。
+     */
     public static Map<String, ProcessingResult> getOperationRecordFiles() {
-        if (operationRecordFiles == null || operationRecordFiles.isEmpty()) {
-            // 如果缓存为空，则加载数据
-            return loadOperationRecordsFiles();
-        }
-        // 返回缓存数据
-        return operationRecordFiles;
+        return loadOperationRecordsFiles();
     }
 
 
