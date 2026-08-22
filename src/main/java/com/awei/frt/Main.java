@@ -16,7 +16,7 @@ import java.util.Scanner;
 
 /**
  * 主程序入口
- * 演示多层级文件夹更新系统的使用
+ * 多层级文件夹更新工具：控制台模式（默认）与图形界面模式（--ui）
  */
 public class Main {
 
@@ -45,7 +45,7 @@ public class Main {
             }
 
             LoggerUtil.logInfo("=========================================");
-            LoggerUtil.logInfo("FRT - 多层级文件夹更新系统启动");
+            LoggerUtil.logInfo("多层级文件夹更新工具启动");
             LoggerUtil.logInfo("=========================================");
 
             scanner = new Scanner(System.in);

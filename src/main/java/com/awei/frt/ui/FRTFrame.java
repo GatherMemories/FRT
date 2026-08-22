@@ -62,7 +62,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private SwingPrompter prompter;
 
     public FRTFrame() throws HeadlessException {
-        super("FRT - 多层级文件夹更新系统");
+        super("多层级文件夹更新工具");
         UITheme.apply(); // 全局主题：统一字体/颜色/间距
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(860, 600);
