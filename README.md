@@ -1,250 +1,241 @@
-# 多层级文件夹更新系统 (FRT)
+# 多层级文件夹更新工具
 
-## 系统概述
+基于 Java 17 的多层级文件夹更新工具：按规则文件（`matching-rules.json` 等）将**更新目录**的文件新增/替换到**目标目录**，或按**删除目录**匹配删除目标文件，全程自动备份、可恢复。特别适用于 Minecraft 模组管理等需要精细化文件操作的场景。
 
-这是一个基于Java实现的多层级文件夹更新系统，专为处理复杂的文件更新场景设计。系统采用灵活的规则配置机制，支持多层级文件夹结构的规则继承，特别适用于Minecraft模组管理等需要精细化文件操作的应用场景。
+## 功能一览
 
-## 核心特性
+| 功能 | 作用 |
+|------|------|
+| 更新文件 | 扫描更新目录，按规则对目标目录执行新增/替换，自动备份可恢复 |
+| 删除文件 | 扫描删除目录，按规则匹配删除目标目录中对应的文件（带备份） |
+| 恢复操作 | 从备份恢复最近一次操作前的状态；启动时检测到未完成会话（异常中断遗留）会提示恢复 |
+| 规则生成 | 交互式向导生成/编辑规则文件（控制台逐步向导；UI 为表单弹窗，支持策略链） |
+| 清理残留备份 | 删除备份目录中未被任何操作记录引用的文件（无记录保护的跳过），残留 ≥5 个时启动提醒 |
+| 核心配置 | 设置更新/目标/删除/备份目录与日志级别，写入 config.json |
+| 双界面 | Swing 图形界面（默认）或控制台菜单（7 项，`--console`）；更新/删除前均有 dry-run 预览二次确认 |
 
-- **智能规则继承**：子文件夹自动继承父文件夹规则，本地规则优先
-- **多策略支持**：支持多种文件处理策略，包括Minecraft模组识别、同名文件处理等
-- **操作类型完备**：支持替换、新增、删除三种文件操作模式
-- **安全备份机制**：自动备份与恢复功能，确保操作安全
-- **用户交互确认**：关键操作前进行用户确认，避免误操作
-
-## 系统架构
-
-### 设计模式应用
-
-系统采用多种设计模式构建，确保架构的灵活性和可扩展性：
-
-1. **组合模式**：`FileNode`抽象基类统一管理文件和文件夹节点
-2. **策略模式**：`OperationStrategy`接口定义统一的操作策略规范
-3. **责任链模式**：`RuleInheritanceContext`实现多层级的规则继承
-4. **工厂模式**：`StrategyFactory`统一创建策略对象
-
-### 当前实现状态
-
-#### 已实现的策略类
-- **`McModStrategy`**：Minecraft模组文件处理策略
-  - 自动识别.jar文件中的模组信息（自研 `ModMetadataParser` 解析）
-  - 支持模组ID、版本号等元数据匹配
-  - 兼容 NeoForge / Forge / Fabric / Quilt / 旧版Forge(mcmod.info) 平台
-  - 版本占位符（如 `${file.jarVersion}`）自动兜底：MANIFEST.MF → 文件名
-  - 智能处理Forge、Fabric等不同平台的模组
-
-- **`FileSameNameStrategy`**：同名文件处理策略
-  - 基于文件名进行文件匹配和操作
-  - 支持通配符模式的文件筛选（统一 `GlobMatcher`，正则元字符安全转义）
-
-> 策略基类 `AbstractOperationStrategy` 提供模板方法（统一 null/类型校验 + add/replace/delete 钩子分派），
-> 新增策略只需实现三个钩子；`StrategyFactory` 采用**注册表**（策略类自报 `getStrategyType()`），
-> 不再依赖枚举。动态代理 `StrategyProxy` 自动为每次策略执行提供日志、异常兜底与失败统计。
->
-> 旧的 Zip 空壳策略类已删除（规划功能可随时以插件方式接入，见"外部策略插件"）。
-
-## 配置文件参数说明
-
-### 1. config.json - 系统全局配置
-
-| 参数名 | 作用说明 | 是否必填 | 数据类型 | 默认值 | 示例 |
-|--------|----------|------|----------|---------|------|
-| `updatePath` | 更新文件目录 | 否    | String | `"update"` | `"./testDic/update"` |
-| `targetPath` | 目标处理目录 | 否    | String | `"THtest"` | `"./testDic/THtest"` |
-| `deletePath` | 删除文件目录 | 否    | String | `"delete"` | `"./testDic/delete"` |
-| `backupPath` | 备份目录 | 否    | String | `"backup"` | `"./testDic/backup"` |
-| `logLevel` | 日志级别 | 否    | String | `"INFO"` | `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"` |
-
-### 2. 规则配置文件（replace.json / add.json / delete.json / matching-rules.json）
-
-| 参数名 | 作用说明 | 是否必填  | 数据类型 | 默认值 | 示例 |
-|--------|----------|-------|----------|---------|------|
-| `strategyType` | **策略类型**（单策略时使用） | 是/否 | String | 无 | `"McMod"`, `"FileSameName"` |
-| `patterns` | **匹配文件模式** | 否     | List\<String\> | 空列表 | `["*.jar"]`, `["*.txt", "*.doc"]` |
-| `excludePatterns` | 排除文件模式 | 否     | List\<String\> | 空列表 | `["*backup*", "*Test*"]` |
-| `strategyChain` | **多策略组合链**（可选）：依次执行各策略，后续策略只处理前序**剩余**的文件 | 否     | List\<规则对象\> | 空 | 见下方示例 |
-| `inheritToSubfolders` | 是否应用到子文件夹 | 否     | Boolean | `false` | `true`, `false` |
-| `replacements` | **策略扩展参数**（键值对，供策略读取自定义配置） | 否     | Map\<String, String\> | 空 Map | `{"onlyIfVersionChanged": "true"}` |
-
-### 3. 重要说明
-
-#### config.json 特点：
-- 所有路径参数支持相对路径和绝对路径
-- 相对路径会自动基于 `baseDirectory` 解析为绝对路径
-- 所有参数都有默认值，配置文件可省略不写，实际使用**目标文件夹路径**必填
-
-#### 规则配置文件特点：
-- **必填参数**：`strategyType`（策略类型）
-- **策略类型说明**：
-  - `"McMod"`：Minecraft模组文件处理策略（只检测jar文件，patterns、excludePatterns 参数无效）
-  - `"FileSameName"`：同名文件处理策略
-- **⚠️ 重要提醒**：`replacements` 是**策略扩展参数**（键值对），只对支持它的策略生效，未配置或策略不支持时无任何副作用。当前已支持：
-  - `McMod` 策略：`{"onlyIfVersionChanged": "true"}` — 目标已存在**相同版本**的模组时跳过替换
-  - `McMod` 策略：`{"onlyIfContentSame": "true"}` — 目标文件与源文件**内容（MD5）相同**时跳过替换（比版本判断更准确，能识别同版本重新打包的内容变化）
-  - `FileSameName` 策略：`{"caseSensitive": "false"}` — 文件名/通配符匹配忽略大小写（默认区分）
-
-#### 规则文件命名规范（任选其一作用都是相同的）：
-- `replace.json` - 文件替换操作规则
-- `add.json` - 文件新增操作规则  
-- `delete.json` - 文件删除操作规则
-- `matching-rules.json` - 通用匹配规则（新版）
-
-### 4. 配置示例
-
-#### config.json 示例：
-```json
-{
-   "updatePath": "./update", 
-   "targetPath": "./target",
-   "backupPath": "./backup",
-   "deletePath": "./delete",
-   "logLevel": "INFO"
-}
-```
-
-#### matching-rules.json 示例（单策略）：
-```json
-{
-  "strategyType": "McMod",
-  "inheritToSubfolders": true
-}
-```
-
-#### matching-rules.json 示例（多策略组合链）：
-先处理 `*.txt`，剩余文件再交给第二个策略处理 `*.json`：
-```json
-{
-  "strategyChain": [
-    {"strategyType": "FileSameName", "patterns": ["*.txt"]},
-    {"strategyType": "FileSameName", "patterns": ["*.json"]}
-  ],
-  "inheritToSubfolders": false
-}
-```
-> 链中每个步骤都是独立的规则对象（可各自配置 patterns / excludePatterns / replacements）；
-> 某个文件被前序策略**成功处理**后，后续策略自动跳过它（"剩余文件"语义）。
-> 配置了 `strategyChain` 时忽略顶层 `strategyType`；也可在交互向导（菜单 4）中选择"是否配置策略链"按提示生成。
-
-### 规则继承机制
-
-系统采用智能的规则继承策略：
-
-1. **本地优先**：每个文件夹优先使用自己的规则配置文件
-2. **自动继承**：当文件夹没有本地规则时，自动继承父文件夹的规则
-3. **多层支持**：支持任意层级的规则继承链
-4. **策略隔离**：不同策略类型的规则独立继承
-
-## 项目结构
-
-```
-src/main/java/com/awei/frt/
-├── core/                                  # 核心框架层
-│   ├── context/                           # 上下文管理
-│   │   ├── OperationContext.java          # 操作上下文
-│   │   └── RuleInheritanceContext.java    # 规则继承上下文
-│   ├── node/                              # 文件节点
-│   │   ├── FileNode.java                  # 文件节点抽象基类
-│   │   ├── FolderNode.java                # 文件夹节点
-│   │   └── FileLeaf.java                  # 文件叶子节点
-│   ├── strategy/                          # 策略实现层
-│   │   ├── OperationStrategy.java         # 策略接口（策略自报 getStrategyType）
-│   │   ├── AbstractOperationStrategy.java # 模板方法基类（add/replace/delete 钩子）
-│   │   ├── McModStrategy.java             # Minecraft模组策略
-│   │   ├── FileSameNameStrategy.java      # 同名文件策略
-│   │   └── StrategyProxy.java             # 策略动态代理（日志/异常兜底/统计）
-│   ├── mod/                               # 模组元数据（自研解析，替代第三方库）
-│   │   ├── ModInfo.java                   # 模组元数据模型
-│   │   └── ModMetadataParser.java         # 模组元数据解析器
-│   ├── uitls/                             # 工具类（GlobMatcher / FileUtil / FileSignUtil）
-│   └── builder/                           # 构建器（文件树/规则加载/备份/配置）
-├── factory/                               # 策略工厂 + 外部插件加载
-│   ├── StrategyFactory.java               # 策略注册表（取代旧枚举）
-│   └── StrategyLoader.java                # 外部策略动态加载（plugins/ + SPI）
-├── service/                               # 业务服务层
-│   ├── FileUpdateServiceNew.java          # 文件更新服务
-│   ├── FileDeleteService.java             # 文件删除服务
-│   ├── RestoreService.java                # 恢复服务
-│   └── RuleConfigWizard.java              # 规则配置交互向导（支持策略链）
-├── model/                                 # 数据模型层
-│   ├── Config.java                        # 配置模型
-│   ├── MatchRule.java                     # 匹配规则模型（支持 strategyChain）
-│   ├── OperationRecord.java               # 操作记录模型
-│   └── ProcessingResult.java              # 处理结果模型
-└── util/                                  # LoggerUtil（slf4j + logback）
-```
-
-## 使用指南
-
-### 快速开始
-
-1. **准备配置文件**：在目标目录创建相应的规则配置文件（或使用交互式向导生成，见下）
-2. **启动系统**：运行以下命令启动文件处理流程
+## 快速开始
 
 ```bash
-mvn compile exec:java -Dexec.mainClass="com.awei.frt.Main"
+mvn -o package -DskipTests            # 构建可执行 jar（首次可去掉 -o）
+./start-frt.sh                        # Linux/macOS：默认启动图形界面
+./start-frt.sh --console              # Linux/macOS：切换控制台模式（-c 等价）
+start-frt.bat                         # Windows：默认启动图形界面
+start-frt.bat --console               # Windows：切换控制台模式（-c 等价）
+java -jar target/FRT-0.1.0-SNAPSHOT.jar --ui   # 直接运行 jar（图形界面）
+java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 ```
 
-### 交互式生成规则配置文件
+要求 JDK 17+。跨平台注意：config.json 的 `baseDirectory` 若是 Windows 路径，在 Linux 上需改为对应绝对路径。
 
-主菜单选择 **4. 生成/编辑匹配规则配置文件**，向导会：
+## 配置文件
 
-1. 选择规则作用目录（更新目录 / 删除目录）
-2. 显示目录文件结构图，输入**文件夹编号**选择要在哪一层生成规则
-3. 逐个输入参数，每个参数均提示**数据类型、必填性、默认值、可选值**
-4. 生成前**预览 JSON 内容**，确认后写入 `matching-rules.json`，并自动校验格式
+### config.json（全局配置，均可省略）
 
-向导会提示：已存在规则文件的层、McMod 策略下不生效的参数（`patterns`/`excludePatterns`）、策略扩展参数示例等。
+| 参数 | 作用 | 默认值 |
+|------|------|--------|
+| `updatePath` | 更新文件目录 | `update` |
+| `targetPath` | 目标处理目录 | `THtest` |
+| `deletePath` | 删除文件目录 | `delete` |
+| `backupPath` | 备份目录 | `backup` |
+| `logLevel` | 日志级别（DEBUG/INFO/WARN/ERROR） | `INFO` |
 
-### 目录结构示例
+相对路径基于 `baseDirectory` 解析；未知键（如 `logPath`）静默忽略，核心配置向导写入时保留。
 
+### 规则文件（replace.json / add.json / delete.json / matching-rules.json，作用相同）
+
+| 参数 | 说明 |
+|------|------|
+| `strategyType` | 策略类型（单策略必填；配置了 `strategyChain` 时忽略顶层该项） |
+| `patterns` | 匹配模式列表（支持 `*`/`?` 通配符），留空表示匹配全部 |
+| `excludePatterns` | 排除模式列表，命中则跳过 |
+| `strategyChain` | 多策略组合链：依次执行各策略，后续策略只处理前序**剩余**（未被处理）的文件 |
+| `inheritToSubfolders` | 规则是否继承到子文件夹（子层无本地规则时生效） |
+| `replacements` | 策略额外参数（键值对），各策略支持项见下表 |
+
+## 内置策略与额外参数（replacements）
+
+> 通用规则：`patterns`/`excludePatterns` 支持 `*`/`?` 通配符；`caseSensitive=false` 忽略大小写。
+
+### McMod —— Minecraft 模组策略（按 modId 匹配 jar）
+- **作用**：以目录为单位，自动解析 jar 内模组元数据（兼容 NeoForge / Forge / Fabric / Quilt / 旧版 mcmod.info），按模组 **modId** 增/删/改；不识别元数据的 jar 跳过。`patterns`/`excludePatterns` **无效**。
+- **额外参数**：
+  | 参数 | 作用 |
+  |------|------|
+  | `onlyIfVersionChanged=true` | 目标已存在**相同版本**模组时跳过替换 |
+  | `onlyIfContentSame=true` | 源与目标文件**内容（MD5）相同**时跳过替换（比版本判断更准，能识别同版本重新打包的变化） |
+
+### FileSameName —— 同名文件策略（按文件名匹配）
+- **作用**：按文件名/通配符匹配普通文件，执行新增/替换/删除。
+- **额外参数**：
+  | 参数 | 作用 |
+  |------|------|
+  | `caseSensitive=false` | 文件名匹配忽略大小写（默认区分） |
+  | `onlyIfContentSame=true` | 替换时源与目标文件**内容（MD5）相同**则跳过（避免无谓写入，计入"跳过"） |
+
+### ZipEntryName —— 压缩包内文件名匹配（zip/jar）
+- **作用**：仅处理 .zip/.jar；打开包检查**内部条目名**，包内**任意一个**条目名匹配 `patterns`（且不匹配 `excludePatterns`）即命中，命中后整包参与操作（新增/替换/删除，**不解压**内部文件）。`patterns` 留空 = 匹配所有压缩包。例：`["META-INF/*.toml"]` 只处理含 mods.toml 的包。
+- **额外参数**：
+  | 参数 | 作用 |
+  |------|------|
+  | `caseSensitive=false` | 条目名匹配忽略大小写（默认区分） |
+
+### ZipEntryContent —— 压缩包内文件内容匹配（zip/jar）
+- **作用**：在 ZipEntryName 的基础上，还要求命中条目（大小 ≤1MB）的**文本内容**包含 `contentContains` 任一关键词。例：`patterns:["config/*.properties"]` + `contentContains:"port=8080"` 只处理包内配置写了 `port=8080` 的包。
+- **额外参数**：
+  | 参数 | 作用 |
+  |------|------|
+  | `contentContains=关键词1,关键词2` | **必填**；条目文本包含**任一**关键词即命中（英文逗号分隔多个） |
+  | `caseSensitive=false` | 内容匹配忽略大小写（默认区分） |
+
+### 压缩包策略选型
+- `ZipEntryContent` 已内含条目名匹配条件，**与 `ZipEntryName` 二选一即可**：只看"包内有什么文件"用 `ZipEntryName`（快，不读内容）；须看"文件内容写了什么"用 `ZipEntryContent`（慢，读文本）。
+- 所有 jar 无差别全收 → 用 `FileSameName` + `patterns:["*.jar"]` 即可，无需压缩包策略。
+- 一条规则覆盖多种文件类型时，用 `strategyChain` 串多个策略，例如先 `McMod` 处理模组 jar、剩余文件交给 `ZipEntryName`。
+
+## 规则继承机制
+
+1. **本地优先**：每个文件夹优先使用自己的规则文件；
+2. **自动继承**：文件夹无本地规则时继承父文件夹规则；
+3. **多层支持**：任意层级的规则继承链；
+4. **策略隔离**：不同策略类型的规则独立继承。
+
+## 外部策略插件
+
+按规范编写策略类打成 jar 放入程序工作目录的 `plugins/`，启动时自动加载，规则文件 `strategyType` 直接填插件类型标识；与内置类型冲突时插件被跳过（内置优先）。向导的策略列表会自动包含插件策略。
+
+**推荐方式：继承 `AbstractOperationStrategy`**（模板方法已统一 null 校验、节点过滤与 add/replace/delete 分派，只需实现钩子）：
+
+```java
+package com.example;
+
+import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.node.FileNode;
+import com.awei.frt.core.strategy.AbstractOperationStrategy;
+import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.model.OperationRecord;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+/** 自定义策略：只处理 .dat 文件 */
+public class MyStrategy extends AbstractOperationStrategy {
+    @Override
+    public String getStrategyType() { return "MyStrategy"; }   // 规则文件 strategyType 填这个
+
+    @Override
+    public String getDescription() { return "示例策略（按扩展名处理 .dat）"; }
+
+    /** 节点筛选：决定哪些文件/目录进入本策略 */
+    @Override
+    protected boolean accepts(FileNode node, OperationContext context) {
+        return !node.isDirectory() && node.getName().endsWith(".dat");
+    }
+
+    /** 新增钩子：返回 true = 已处理该节点（链中后续策略跳过） */
+    @Override
+    protected boolean doAdd(FileNode node, OperationContext context) {
+        Path target = context.getTargetPath(node.getRelativePath()); // 目标位置
+        if (Files.exists(target)) {
+            return false;                       // 目标已存在，交给 replace 钩子
+        }
+        OperationRecord record = newRecord(context);                // 创建操作记录（已带策略类型；FileUtil 会自动写入操作类型）
+        boolean ok = FileUtil.addFile(node.getPath(), target, record, context.isDryRun()); // 复制+备份+记录
+        context.recordOperation(record);        // 提交记录（预览模式不落盘）
+        if (ok) {
+            node.setHandled(true);              // 标记已处理（策略链后续策略跳过）
+        }
+        return ok;
+    }
+
+    @Override
+    protected boolean doReplace(FileNode node, OperationContext context) {
+        Path target = context.getTargetPath(node.getRelativePath());
+        if (!Files.exists(target)) {
+            return false;
+        }
+        // 读取规则额外参数：context.getRuleParam("key")，如 {"caseSensitive": "false"}
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.replaceFile(node.getPath(), target, record, context.isDryRun());
+        context.recordOperation(record);
+        if (ok) {
+            node.setHandled(true);
+        }
+        return ok;
+    }
+
+    @Override
+    protected boolean doDelete(FileNode node, OperationContext context) {
+        Path target = context.getTargetPath(node.getRelativePath());
+        OperationRecord record = newRecord(context);
+        boolean ok = FileUtil.deleteFile(target, record, context.isDryRun());
+        context.recordOperation(record);
+        if (ok) {
+            node.setHandled(true);
+        }
+        return ok;
+    }
+}
 ```
-项目根目录/
-├── config.json              # 全局配置（可选）
-├── update/                  # 更新文件目录
-│   ├── matching-rules.json         # 根级替换规则（使用mcmod策略）
-│   ├── mod1.jar             # Minecraft模组文件
-│   └── subfolder/
-│       ├── matching-rules.json         # 子目录新增规则（使用filesame策略）
-│       ├── file2.new        # 新增文件
-│       └── subsubfolder/    # 无本地规则，继承父目录规则（需要父目录规则参数 inheritToSubfolders：true）
-│           └── file3.class   # 继承处理
-├── target/                  # 目标处理目录
-├── backup/                  # 自动备份目录
-└── logs/                    # 操作日志目录
+
+> 上述写法与内置策略（如 `ZipEntryBaseStrategy`）完全一致，可直接参考其源码；`accepts` 只做筛选，真正的文件操作统一走 `FileUtil` + `OperationRecord` 流程，即可自动获得备份、操作记录与会话恢复能力。
+
+**简单方式：直接实现 `OperationStrategy` 接口**（需自行处理一切，适合极简场景）：
+
+```java
+public class MyStrategy implements OperationStrategy {
+    public String getStrategyType() { return "MyStrategy"; }
+    public String getDescription() { return "说明"; }
+    public void execute(FileNode node, OperationContext context, String[] operationType) {
+        // 自行判断操作类型（与 OperationContext.OPERATION_ADD / OPERATION_REPLACE / OPERATION_DELETE 常量比较）与节点筛选
+    }
+}
 ```
 
-## 扩展性设计
+**方法参数对象参考**：
 
-### 策略扩展
-系统采用策略模式 + 注册表设计，新增策略有两种方式：
+`FileNode node` —— 当前被处理的文件/目录节点：
 
-**方式一：源码内注册（内置策略）**
-1. 实现 `OperationStrategy` 接口（推荐继承 `AbstractOperationStrategy` 模板基类，只实现 add/replace/delete 三个钩子）
-2. 类内声明 `getStrategyType()` 返回唯一类型标识
-3. 在 `StrategyFactory` 静态块中 `register("类型", 类::new, "说明")`
+| 方法 | 返回 | 作用 |
+|------|------|------|
+| `getPath()` | `Path` | 节点完整路径（源文件路径） |
+| `getRelativePath()` | `String` | 相对路径，传给 `context.getTargetPath()` 计算目标位置 |
+| `getName()` | `String` | 节点名称 |
+| `isDirectory()` | `boolean` | 是否目录 |
+| `isHandled()` / `setHandled(true)` | `boolean`/`void` | 策略链"已处理"标记：处理成功后 `setHandled(true)`，后续策略跳过该节点 |
 
-**方式二：外部策略插件（无需改源码，动态加载）**
-1. 按上述规范编写策略类，打成 jar 放入程序工作目录的 `plugins/` 文件夹
-2. 加载方式二选一：
-   - 标准 SPI：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容为策略类全限定名
-   - 自动扫描：未提供 services 文件时，自动扫描 jar 内所有实现 `OperationStrategy` 的具体类（需公开无参构造）
-3. 启动程序即可，规则文件的 `strategyType` 直接填插件策略的类型标识；类型与内置策略冲突时插件会被跳过（内置优先）
+`OperationContext context` —— 操作上下文：
 
-### 规则扩展
-规则模型采用灵活的JSON配置，支持：
-- 新增规则参数（通过 `replacements` 键值对给策略传参）
-- 自定义策略配置
-- 动态规则加载
+| 方法 | 返回 | 作用 |
+|------|------|------|
+| `getTargetPath(relativePath)` | `Path` | 目标目录下对应路径（操作目标位置） |
+| `getRuleParam(key)` | `String` | 读取规则文件 `replacements` 中的参数，未配置返回 `null` |
+| `isDryRun()` | `boolean` | 是否预览模式（true 时不应真正改动文件；FileUtil 带 dryRun 参数的重载已自动处理） |
+| `recordOperation(record)` | `void` | 记录一次操作（预览模式不落盘会话记录） |
+| `getConfig()` | `Config` | 全局配置（目录/日志级别等） |
+| `OPERATION_ADD` / `OPERATION_REPLACE` / `OPERATION_DELETE` | `String` 常量 | 操作类型值（`"operation_add"` 等），记录或判断操作类型用 |
 
-## 测试与验证
+`com.awei.frt.core.uitls.FileUtil` —— 文件操作工具（自动备份 + 写操作记录，三个方法均有带 `dryRun` 的重载）：
 
-系统包含完整的 JUnit5 测试用例（`mvn test`，surefire 3.2.5 保证真实运行）：
-- 策略注册表 / 模板方法 / 动态代理 / 多策略链 / 外部插件加载测试
-- 模组元数据解析测试（NeoForge/Forge/Fabric/Quilt/旧版 + 版本占位符兜底）
-- 备份恢复与规则链集成测试
+| 方法 | 返回 | 作用 |
+|------|------|------|
+| `addFile(source, target, record[, dryRun])` | `boolean` | 复制新增源文件到目标 |
+| `replaceFile(source, target, record[, dryRun])` | `boolean` | 用源文件替换目标文件（自动备份） |
+| `deleteFile(file, record[, dryRun])` | `boolean` | 删除目标文件（自动备份） |
 
-## 总结
+> FileUtil 三个方法内部会自动写入 `record` 的操作类型（`OPERATION_ADD`/`OPERATION_REPLACE`/`OPERATION_DELETE`）与源/目标路径、MD5 特征码，无需手动设置。
 
-FRT系统通过精心设计的架构和灵活的规则配置机制，为复杂的文件更新场景提供了强大的解决方案。系统当前专注于Minecraft模组管理和通用文件操作，同时为未来的功能扩展预留了充分的空间。
+`OperationRecord` —— 操作记录（继承 `AbstractOperationStrategy` 时用 `newRecord(context)` 创建，已填好策略类型；常规流程中 FileUtil 会自动填写操作类型/路径/MD5，**无需手动设置**）。手动场景可用 setter：`setOperationType(OperationContext.OPERATION_ADD 等)`、`setSourcePath`/`setTargetPath`、`setSuccess`、`setErrorMessage`；最后 `context.recordOperation(record)` 提交。
 
-**特别提醒**：`replacements`参数是策略扩展参数（键值对），仅对支持它的策略生效；新增策略时可通过 `OperationContext.getRuleParam(key)` 读取，实现自定义配置。
+**加载方式**（启动时自动执行，无需额外配置）：
+
+1. **classpath SPI**：读取应用 classpath 上的 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 描述符（适合策略类与主程序同 classpath 部署）；
+2. **plugins/ 目录 jar**（每个 jar 二选一）：
+   - **标准 SPI**：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容写策略类全限定名（如 `com.example.MyStrategy`，一行一个）；
+   - **自动扫描**：jar 内无 services 文件时，自动扫描 jar 内所有实现 `OperationStrategy` 的具体类（需公开无参构造）。仅当 SPI 实际注册数为 0 时才启用该兜底。
+
+> 注册时若 `strategyType` 与已注册类型（含内置策略）冲突，外部策略被跳过（内置优先），并输出告警。
+
+## 测试
+
+`mvn test`（surefire 3.2.5，JUnit5 真实运行）：当前 **58 个测试全绿**，覆盖策略注册表/模板方法/动态代理/多策略链/外部插件加载、压缩包策略、模组元数据解析、备份恢复/残留清理/会话记录、进度回调等。

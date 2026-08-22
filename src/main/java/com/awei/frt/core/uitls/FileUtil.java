@@ -3,66 +3,19 @@ package com.awei.frt.core.uitls;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.OperationRecord;
-import com.awei.frt.model.ProcessingResult;
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.List;
 
 /**
  * 文件工具类
  * 提供基础的文件操作功能，包括复制、移动、删除等
  * 所有操作都会生成操作记录，并返回处理结果
+ * 三个文件操作方法均支持 dryRun 预览模式：只校验并标记"可执行"，不真正改动文件/备份
  *
  * @Author: mou_ren
  * @Date: 2026/1/18 21:09
  */
 public class FileUtil {
-
-    /**
-     * 根据 OperationRecord-->operationType->执行对应的文件操作
-     *
-     * @param record 操作记录
-     * @return 是否成功
-     */
-    public static boolean executeOperation(OperationRecord record) {
-        if (record == null) {
-            return false;
-        }
-
-        String operationType = record.getOperationType();
-        Path sourcePath = record.getSourcePath();
-        Path targetPath = record.getTargetPath();
-
-        switch (operationType) {
-            case OperationContext.OPERATION_ADD:
-                return addFile(sourcePath, targetPath, record);
-            case OperationContext.OPERATION_DELETE:
-                return deleteFile(sourcePath, record);
-            case OperationContext.OPERATION_REPLACE:
-                return replaceFile(sourcePath, targetPath, record);
-            default:
-                record.setSuccess(false);
-                record.setErrorMessage("不支持的操作类型: " + operationType);
-                return false;
-        }
-    }
-
-    /**
-     * 批量执行操作记录
-     *
-     * @param records 操作记录列表
-     * @return 处理结果
-     */
-    public static ProcessingResult executeOperations(List<OperationRecord> records) {
-        ProcessingResult result = new ProcessingResult();
-
-        for (OperationRecord record : records) {
-            boolean success = executeOperation(record);
-            result.addOperationRecord(record);
-        }
-
-        return result;
-    }
 
     /**
      * 增加文件
@@ -73,6 +26,14 @@ public class FileUtil {
      * @return 是否成功
      */
     public static boolean addFile(Path sourcePath, Path targetPath, OperationRecord record) {
+        return addFile(sourcePath, targetPath, record, false);
+    }
+
+    /**
+     * 增加文件（支持预览模式）
+     * @param dryRun true=只校验并标记可执行，不执行文件 IO
+     */
+    public static boolean addFile(Path sourcePath, Path targetPath, OperationRecord record, boolean dryRun) {
         try {
             record.setOperationType(OperationContext.OPERATION_ADD);
             record.setSourcePath(sourcePath);
@@ -99,6 +60,11 @@ public class FileUtil {
                 record.setSuccess(false);
                 record.setErrorMessage("目标文件已存在--新增操作失败");
                 return false;
+            }
+            if (dryRun) {
+                // 预览模式：校验通过即视为可执行，不落盘
+                record.setSuccess(true);
+                return true;
             }
             // 确保目标父目录存在（update 中的子目录结构在目标侧可能不存在）
             Path parentDir = targetPath.getParent();
@@ -129,6 +95,14 @@ public class FileUtil {
      * @return 是否成功
      */
     public static boolean replaceFile(Path sourcePath, Path targetPath, OperationRecord record) {
+        return replaceFile(sourcePath, targetPath, record, false);
+    }
+
+    /**
+     * 替换文件（支持预览模式）
+     * @param dryRun true=只校验并标记可执行，不执行文件 IO / 备份
+     */
+    public static boolean replaceFile(Path sourcePath, Path targetPath, OperationRecord record, boolean dryRun) {
         try {
             record.setOperationType(OperationContext.OPERATION_REPLACE);
             record.setSourcePath(sourcePath);
@@ -149,6 +123,12 @@ public class FileUtil {
             // 参数校验通过后再计算文件特征码（避免空参数NPE）
             record.setSourceFileSign(FileSignUtil.getFileMd5(sourcePath));
             record.setTargetFileSign(FileSignUtil.getFileMd5(targetPath));
+
+            if (dryRun) {
+                // 预览模式：校验通过即视为可执行，不落盘
+                record.setSuccess(true);
+                return true;
+            }
 
             // 替换备份文件
             BackupFileLoader.addBackupFile(targetPath);
@@ -172,6 +152,14 @@ public class FileUtil {
      * @return 是否成功
      */
     public static boolean deleteFile(Path filePath, OperationRecord record) {
+        return deleteFile(filePath, record, false);
+    }
+
+    /**
+     * 删除文件（支持预览模式）
+     * @param dryRun true=只校验并标记可执行，不执行文件 IO / 备份
+     */
+    public static boolean deleteFile(Path filePath, OperationRecord record, boolean dryRun) {
         try {
             record.setOperationType(OperationContext.OPERATION_DELETE);
             record.setSourcePath(filePath);
@@ -187,6 +175,12 @@ public class FileUtil {
             record.setSourceFileSign(FileSignUtil.getFileMd5(filePath));
             record.setTargetFileSign(FileSignUtil.getFileMd5(filePath));
 
+            if (dryRun) {
+                // 预览模式：校验通过即视为可执行，不落盘
+                record.setSuccess(true);
+                return true;
+            }
+
             // 添加备份文件
             BackupFileLoader.addBackupFile(filePath);
 
@@ -200,26 +194,4 @@ public class FileUtil {
         }
     }
 
-
-
-
-
-    /**
-     * 创建操作记录
-     *
-     * @param strategyType 策略类型
-     * @param operationType 操作类型
-     * @param sourcePath 源路径
-     * @param targetPath 目标路径
-     * @return 操作记录
-     */
-    public static OperationRecord createRecord(String strategyType, String operationType,
-                                                 Path sourcePath, Path targetPath) {
-        OperationRecord record = new OperationRecord();
-        record.setStrategyType(strategyType);
-        record.setOperationType(operationType);
-        record.setSourcePath(sourcePath);
-        record.setTargetPath(targetPath);
-        return record;
-    }
 }

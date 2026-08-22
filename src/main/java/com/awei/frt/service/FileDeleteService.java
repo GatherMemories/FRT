@@ -3,15 +3,16 @@ package com.awei.frt.service;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.awei.frt.util.PreviewUtil;
 
 import java.nio.file.Path;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.Scanner;
 
 /**
@@ -21,11 +22,15 @@ import java.util.Scanner;
 public class FileDeleteService {
 
     private final Config config;
-    private final Scanner scanner;
+    private final UserPrompter prompter;
 
     public FileDeleteService(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner));
+    }
+
+    public FileDeleteService(Config config, UserPrompter prompter) {
         this.config = config;
-        this.scanner = scanner;
+        this.prompter = prompter;
     }
 
     /**
@@ -33,43 +38,55 @@ public class FileDeleteService {
      * @return 处理结果
      */
     public ProcessingResult deleteExecute() {
+        return deleteExecute(null);
+    }
+
+    /**
+     * 执行文件删除操作（带进度回调）
+     * @param progress 进度回调（真实执行阶段逐文件上报；null 不上报）
+     * @return 处理结果
+     */
+    public ProcessingResult deleteExecute(ProgressCallback progress) {
         try {
             LoggerUtil.logInfo("[执行] 开始执行文件删除操作...");
 
             // 构建操作上下文
             Path basePath = config.getBaseDirectory();
-            OperationContext context = new OperationContext(config);
-
-            // 构建删除目录的文件树
             Path deletePath = basePath.resolve(config.getDeletePath()).normalize();
             LoggerUtil.logInfo("[FOLDER] 扫描删除目录: " + deletePath);
 
-            FileNode deleteTree = FileTreeBuilder.buildTree(deletePath);
-
-            // 检查是否有文件要删除
-            if (!hasFilesToDelete(deleteTree)) {
+            // ===== 预览阶段（dryRun）：列出将被删除的文件 =====
+            OperationContext previewContext = new OperationContext(config);
+            previewContext.setDryRun(true);
+            FileNode previewTree = FileTreeBuilder.buildTree(deletePath);
+            previewTree.process(null, previewContext, FileNode.DELETE_OPERATION);
+            ProcessingResult preview = previewContext.getProcessingResult();
+            int planCount = PreviewUtil.printPreview(preview, "删除");
+            if (planCount == 0) {
                 LoggerUtil.logInfo("[信息] 删除目录中没有文件需要处理");
-                ProcessingResult emptyResult = new ProcessingResult();
-                emptyResult.setSuccess(true);
-                return emptyResult;
+                return preview;
             }
 
+            // 预览确认（替代原"确认要执行删除操作吗"二次确认，预览已列出具体文件）
+            System.out.print("确认要执行以上 " + planCount + " 个删除操作吗？此操作不可逆！(y/n): ");
+            String confirm = prompter.readLine().toLowerCase();
+            if (!confirm.equals("y") && !confirm.equals("yes")) {
+                LoggerUtil.logInfo("[信息] 已取消删除操作（未执行任何操作）");
+                preview.setCancelled(true); // 标记取消：预览的"成功数"只是计划，不是已执行
+                return preview;
+            }
+
+            // ===== 真实执行阶段 =====
+            OperationContext context = new OperationContext(config);
+            FileNode deleteTree = FileTreeBuilder.buildTree(deletePath);
             // 打印文件树结构（仅控制台）
             System.out.println("[FILE] 文件树结构:");
             FileTreeBuilder.printTree(deleteTree, 0);
             System.out.println();
-            LoggerUtil.logInfo("[FILE] 文件数量: " + countFiles(deleteTree));
-
-            // 二次确认
-            System.out.println("-----------------------------------------");
-            System.out.print("确认要执行删除操作吗？此操作不可逆！(y/n): ");
-            String confirm = scanner.nextLine().trim().toLowerCase();
-
-            if (!confirm.equals("y") && !confirm.equals("yes")) {
-                LoggerUtil.logInfo("[信息] 已取消删除操作");
-                ProcessingResult cancelResult = new ProcessingResult();
-                cancelResult.setSuccess(false);
-                return cancelResult;
+            int totalFiles = FileTreeBuilder.countFiles(deleteTree);
+            LoggerUtil.logInfo("[FILE] 文件数量: " + totalFiles);
+            if (progress != null) {
+                context.setProgressCallback(progress, totalFiles);
             }
 
             // 执行删除处理
@@ -84,7 +101,7 @@ public class FileDeleteService {
             if(processingResult.getSuccessCount() > 0){
                 LoggerUtil.logInfo("[成功] 文件删除操作完成！");
                 // 备份操作记录 + 失败恢复询问（公共流程，见 BackupFileLoader.finishOperationSession）
-                BackupFileLoader.finishOperationSession(processingResult, scanner);
+                BackupFileLoader.finishOperationSession(processingResult, prompter);
             }else{
                 LoggerUtil.logError("[失败] 文件删除操作失败！");
             }
@@ -100,54 +117,4 @@ public class FileDeleteService {
         }
     }
 
-    /**
-     * 检查文件树是否有文件要删除（栈迭代，避免深目录递归栈溢出）
-     * @param node 文件节点
-     * @return 是否有文件
-     */
-    private boolean hasFilesToDelete(FileNode node) {
-        if (node == null) {
-            return false;
-        }
-        Deque<FileNode> stack = new ArrayDeque<>();
-        stack.push(node);
-        while (!stack.isEmpty()) {
-            FileNode current = stack.pop();
-            if (!current.isDirectory()) {
-                return true;
-            }
-            if (current instanceof FolderNode folderNode) {
-                for (FileNode child : folderNode.getChildren()) {
-                    stack.push(child);
-                }
-            }
-        }
-        return false;
-    }
-
-
-    /**
-     * 统计文件数量（栈迭代，避免深目录递归栈溢出）
-     * @param node 文件节点
-     * @return 文件数量
-     */
-    private int countFiles(FileNode node) {
-        if (node == null) {
-            return 0;
-        }
-        int count = 0;
-        Deque<FileNode> stack = new ArrayDeque<>();
-        stack.push(node);
-        while (!stack.isEmpty()) {
-            FileNode current = stack.pop();
-            if (!current.isDirectory()) {
-                count++;
-            } else if (current instanceof FolderNode folderNode) {
-                for (FileNode child : folderNode.getChildren()) {
-                    stack.push(child);
-                }
-            }
-        }
-        return count;
-    }
 }

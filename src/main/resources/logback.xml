@@ -25,8 +25,9 @@
         <appender-ref ref="FILE"/>
     </root>
 
-    <!-- FRT 包日志配置 -->
-    <logger name="com.awei.frt" level="DEBUG" additivity="false">
+    <!-- FRT 包日志配置：INFO 级别——DEBUG 细碎日志（如单文件被白名单过滤跳过）默认不显示，
+         避免执行时逐文件刷屏；需要排查时再临时改 DEBUG -->
+    <logger name="com.awei.frt" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>

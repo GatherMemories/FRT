@@ -2,12 +2,10 @@ package com.awei.frt.core.builder;
 
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.StrategyStep;
 import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * @Author: mou_ren
@@ -38,7 +36,7 @@ public class MatchRuleLoader {
 
             // 验证多策略组合链：每个步骤都必须注册
             if (rule.getStrategyChain() != null) {
-                for (com.awei.frt.model.MatchRule step : rule.getStrategyChain()) {
+                for (StrategyStep step : rule.getStrategyChain()) {
                     if (step == null || step.getStrategyType() == null
                             || !StrategyFactory.isSupported(step.getStrategyType())) {
                         throw new IllegalArgumentException("策略链步骤不合法: "
@@ -50,7 +48,7 @@ public class MatchRuleLoader {
             return rule;
         } catch (IllegalArgumentException e) {
             // 策略类型验证失败
-            System.err.println("解析规则失败: " + e.getMessage());
+            LoggerUtil.logErrorMsg("解析规则失败: " + e.getMessage());
             return null;
         } catch (Exception e) {
             // JSON 解析失败
@@ -59,20 +57,5 @@ public class MatchRuleLoader {
         }
     }
 
-    /**
-     * 检查文件名是否匹配规则（统一走 GlobMatcher，正则元字符安全）
-     */
-    public static boolean matches(String fileName, MatchRule rule) {
-        if (rule == null) {
-            return false;
-        }
-        // 黑名单：匹配任一排除模式则不匹配（空列表 = 不排除任何文件）
-        if (rule.getExcludePatterns() != null && !rule.getExcludePatterns().isEmpty()
-                && com.awei.frt.core.uitls.GlobMatcher.matchesAny(fileName, rule.getExcludePatterns(), true)) {
-            return false;
-        }
-
-        // 白名单：没有指定模式则匹配所有文件
-        return com.awei.frt.core.uitls.GlobMatcher.matchesAny(fileName, rule.getPatterns(), true);
-    }
+    // 注：文件名匹配统一由 GlobMatcher 提供（策略内使用），不再保留本类中的重复实现
 }

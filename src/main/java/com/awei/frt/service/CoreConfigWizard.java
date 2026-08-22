@@ -1,0 +1,236 @@
+package com.awei.frt.service;
+
+import com.awei.frt.model.Config;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.util.LoggerUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Scanner;
+import java.util.Set;
+
+/**
+ * 核心配置编写向导
+ * 编辑 config.json：更新目录 / 目标目录 / 删除目录 / 备份目录 / 日志级别。
+ * 控制台逐步输入 与 UI 表单（ConfigFormDialog）共用 writeFromValues：
+ * 预览 → 确认 → 自动创建缺失目录 → 写入 → 自校验。
+ * 写入采用"合并"策略：保留原文件中本向导不管理的键（baseDirectory / logPath 等），
+ * 避免覆盖用户既有配置。修改在下次启动时生效。
+ */
+public class CoreConfigWizard {
+
+    private static final List<String> LOG_LEVELS = List.of("INFO", "DEBUG", "WARN", "ERROR");
+
+    private final Config config;
+    private final UserPrompter prompter;
+    private final Path configFile; // null = 工作目录 config.json（外部配置，优先级最高）
+
+    public CoreConfigWizard(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner), null);
+    }
+
+    public CoreConfigWizard(Config config, UserPrompter prompter) {
+        this(config, prompter, null);
+    }
+
+    public CoreConfigWizard(Config config, UserPrompter prompter, Path configFile) {
+        this.config = config;
+        this.prompter = prompter;
+        this.configFile = configFile;
+    }
+
+    /**
+     * 控制台逐步向导入口
+     */
+    public void start() {
+        try {
+            System.out.println("\n=========================================");
+            System.out.println("[核心配置] 核心配置编写向导 (config.json)");
+            System.out.println("=========================================");
+            System.out.println("[说明] 设置 更新/目标/删除/备份目录 与日志级别");
+            System.out.println("       目录支持相对路径（基于基准目录）或绝对路径");
+            System.out.println("       回车 = 保留当前值；修改在下次启动时生效");
+            System.out.println("-----------------------------------------");
+            System.out.println("[信息] 当前配置:");
+            System.out.println("   基准目录: " + config.getBaseDirectory());
+            System.out.println("   更新目录: " + config.getUpdatePath());
+            System.out.println("   目标目录: " + config.getTargetPath());
+            System.out.println("   删除目录: " + config.getDeletePath());
+            System.out.println("   备份目录: " + config.getBackupPath());
+            System.out.println("   日志级别: " + config.getLogLevel());
+            System.out.println("-----------------------------------------");
+
+            Path updatePath = inputPath("更新目录", config.getUpdatePath());
+            Path targetPath = inputPath("目标目录", config.getTargetPath());
+            Path deletePath = inputPath("删除目录", config.getDeletePath());
+            Path backupPath = inputPath("备份目录", config.getBackupPath());
+            String logLevel = inputLogLevel(config.getLogLevel());
+
+            writeFromValues(updatePath, targetPath, deletePath, backupPath, logLevel);
+        } catch (Exception e) {
+            LoggerUtil.logException("核心配置向导执行出错", e);
+        }
+    }
+
+    /**
+     * 保存核心配置（控制台 / UI 表单共用）
+     * @param updatePath 更新目录（空 = 保留原值）
+     * @param targetPath 目标目录
+     * @param deletePath 删除目录
+     * @param backupPath 备份目录
+     * @param logLevel   日志级别（INFO/DEBUG/WARN/ERROR；非法值回退 INFO）
+     * @return 是否成功写入（取消或失败返回 false）
+     */
+    public boolean writeFromValues(Path updatePath, Path targetPath, Path deletePath,
+                                   Path backupPath, String logLevel) {
+        Path configPath = resolveConfigFile();
+        try {
+            String level = normalizeLogLevel(logLevel);
+            // 1. 合并写入 JSON：保留本向导不管理的键
+            ObjectMapper mapper = new ObjectMapper();
+            ObjectNode root = mapper.createObjectNode();
+            if (Files.exists(configPath)) {
+                String existingText = Files.readString(configPath);
+                if (existingText.startsWith("\uFEFF")) {
+                    existingText = existingText.substring(1);
+                }
+                JsonNode existing = mapper.readTree(existingText);
+                if (existing != null && existing.isObject()) {
+                    root = (ObjectNode) existing;
+                }
+            }
+            root.put("updatePath", updatePath == null ? null : updatePath.toString());
+            root.put("targetPath", targetPath == null ? null : targetPath.toString());
+            root.put("deletePath", deletePath == null ? null : deletePath.toString());
+            root.put("backupPath", backupPath == null ? null : backupPath.toString());
+            root.put("logLevel", level);
+
+            // 2. 缺失目录提示（确认后自动创建）
+            Set<Path> missing = collectMissingDirs(updatePath, targetPath, deletePath, backupPath);
+            if (!missing.isEmpty()) {
+                System.out.println("[警告] 以下目录不存在，确认后会自动创建:");
+                for (Path p : missing) {
+                    System.out.println("        - " + p);
+                }
+            }
+
+            // 3. 预览
+            String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+            System.out.println("\n[预览] 即将保存的核心配置 (config.json):");
+            System.out.println("-----------------------------------------");
+            System.out.println(json);
+            System.out.println("-----------------------------------------");
+
+            // 4. 确认
+            System.out.print("[确认] 保存 " + configPath.getFileName() + " ? (y/n, 回车=n): ");
+            if (!parseBoolean(prompter.readLine(), false)) {
+                System.out.println("[取消] 未写入任何文件");
+                return false;
+            }
+
+            // 5. 创建缺失目录 + 写入
+            for (Path p : missing) {
+                Files.createDirectories(p);
+                System.out.println("[创建] 自动创建目录: " + p);
+            }
+            Files.writeString(configPath, json, StandardCharsets.UTF_8);
+            System.out.println("[成功] 已保存核心配置: " + configPath);
+
+            // 6. 自校验（仅 JSON 解析，不做目录校验——避免新配置目录尚未就绪时报错）
+            String readBack = Files.readString(configPath);
+            JsonNode parsed = mapper.readTree(readBack);
+            if (parsed != null && parsed.has("targetPath") && parsed.has("logLevel")) {
+                System.out.println("[校验] 配置解析校验通过 [OK]");
+            } else {
+                System.out.println("[警告] 配置解析校验失败，请检查内容");
+                return false;
+            }
+            System.out.println("[提示] 修改将在下次启动时生效");
+            return true;
+        } catch (IOException e) {
+            LoggerUtil.logException("保存核心配置失败", e);
+            return false;
+        }
+    }
+
+    // ---------------- 控制台输入 ----------------
+
+    private Path inputPath(String label, Path current) {
+        System.out.print("[输入] " + label + " [当前: " + current + "] (回车=保留, 相对/绝对路径均可): ");
+        String input = prompter.readLine();
+        if (input == null || input.trim().isEmpty()) {
+            System.out.println("  >> " + label + " = " + current);
+            return current;
+        }
+        Path path = Paths.get(input.trim());
+        System.out.println("  >> " + label + " = " + path);
+        return path;
+    }
+
+    private String inputLogLevel(String current) {
+        System.out.print("[输入] 日志级别 [当前: " + current + "] (INFO/DEBUG/WARN/ERROR, 回车=保留): ");
+        String input = prompter.readLine();
+        if (input == null || input.trim().isEmpty()) {
+            System.out.println("  >> 日志级别 = " + current);
+            return current;
+        }
+        String level = normalizeLogLevel(input);
+        System.out.println("  >> 日志级别 = " + level);
+        return level;
+    }
+
+    // ---------------- 工具 ----------------
+
+    private Path resolveConfigFile() {
+        return configFile != null ? configFile : Paths.get("config.json");
+    }
+
+    /** 收集不存在的目录（相对路径基于基准目录解析），确认后由向导自动创建 */
+    private Set<Path> collectMissingDirs(Path... paths) {
+        Set<Path> missing = new LinkedHashSet<>();
+        if (paths == null) {
+            return missing;
+        }
+        Path base = config != null ? config.getBaseDirectory() : Paths.get(".");
+        for (Path p : paths) {
+            if (p == null || p.toString().isEmpty()) {
+                continue;
+            }
+            Path resolved = Config.isAbsolutePath(p) ? p : base.resolve(p).normalize();
+            if (!Files.isDirectory(resolved)) {
+                missing.add(resolved);
+            }
+        }
+        return missing;
+    }
+
+    /** 规范化日志级别：大写 + 白名单，非法值回退 INFO */
+    private static String normalizeLogLevel(String level) {
+        if (level == null || level.trim().isEmpty()) {
+            return "INFO";
+        }
+        String upper = level.trim().toUpperCase();
+        if (LOG_LEVELS.contains(upper)) {
+            return upper;
+        }
+        LoggerUtil.logWarn("[警告] 无效的日志级别: " + level + "，已回退为 INFO");
+        return "INFO";
+    }
+
+    private static boolean parseBoolean(String input, boolean defaultValue) {
+        if (input == null || input.trim().isEmpty()) {
+            return defaultValue;
+        }
+        String lower = input.trim().toLowerCase();
+        return lower.equals("y") || lower.equals("yes") || lower.equals("true");
+    }
+}

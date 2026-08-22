@@ -21,6 +21,10 @@ public class OperationContext {
 
     private RuleInheritanceContext ruleInheritanceContext; // 规则继承上下文，管理规则继承关系
     private final ProcessingResult processingResult;       // 处理结果对象，汇总处理结果
+    private boolean dryRun = false;                        // 预览模式：只收集操作计划，不执行文件 IO、不落盘会话记录
+    private ProgressCallback progressCallback;             // 进度回调（null = 不上报）
+    private int progressTotal = 0;                         // 总文件数
+    private int progressDone = 0;                          // 已处理文件数
 
     // 操作类型（用于 ProcessingResult-->OperationRecord-->operationType）
     public static final String OPERATION_RENAME = "operation_rename";
@@ -122,8 +126,47 @@ public class OperationContext {
      */
     public void recordOperation(OperationRecord record) {
         processingResult.addOperationRecord(record);
-        // 每次操作后实时写入会话记录，防止异常中断导致记录丢失
-        BackupFileLoader.saveSessionRecord(processingResult);
+        // 每次操作后增量追加会话记录（JSON Lines 一行一条，防止异常中断导致记录丢失）
+        // 预览模式（dryRun）不落盘，避免把"计划"当成"已执行"写入恢复记录
+        if (!dryRun) {
+            BackupFileLoader.appendSessionRecord(record);
+        }
+    }
+
+    /**
+     * 是否预览模式（只收集操作计划，不真正改动文件）
+     */
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    /**
+     * 设置预览模式
+     */
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
+    }
+
+    /**
+     * 绑定进度回调（真实执行阶段使用；预览阶段不绑定）
+     * @param callback 回调，null 表示不上报
+     * @param total    总文件数
+     */
+    public void setProgressCallback(ProgressCallback callback, int total) {
+        this.progressCallback = callback;
+        this.progressTotal = Math.max(0, total);
+        this.progressDone = 0;
+    }
+
+    /**
+     * 上报一次进度（每个文件叶子节点处理时调用一次）
+     * @param current 当前处理的文件相对路径
+     */
+    public void reportProgress(String current) {
+        progressDone++;
+        if (progressCallback != null) {
+            progressCallback.onProgress(progressDone, progressTotal, current == null ? "" : current);
+        }
     }
 
     /**
@@ -138,6 +181,13 @@ public class OperationContext {
         }
         Map<String, String> replacements = ric.getRuleChain().getReplacements();
         return replacements == null ? null : replacements.get(key);
+    }
+
+    /**
+     * 记录一次"跳过"（如源与目标内容相同无需更新），计入跳过统计
+     */
+    public void recordSkip() {
+        processingResult.setSkipCount(processingResult.getSkipCount() + 1);
     }
 
     /**

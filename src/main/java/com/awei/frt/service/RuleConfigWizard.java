@@ -8,13 +8,18 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.StrategyStep;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,12 +35,16 @@ import java.util.Scanner;
 public class RuleConfigWizard {
 
     private final Config config;
-    private final Scanner scanner;
+    private final UserPrompter prompter;
     private int folderCounter = 0; // 文件夹编号计数器
 
     public RuleConfigWizard(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner));
+    }
+
+    public RuleConfigWizard(Config config, UserPrompter prompter) {
         this.config = config;
-        this.scanner = scanner;
+        this.prompter = prompter;
     }
 
     /**
@@ -44,7 +53,7 @@ public class RuleConfigWizard {
     public void start() {
         try {
             System.out.println("\n=========================================");
-            System.out.println("[向导] 生成/编辑匹配规则配置文件 (matching-rules.json)");
+            System.out.println("[规则生成] 生成/编辑匹配规则配置文件 (matching-rules.json)");
             System.out.println("=========================================");
             System.out.println("[说明] 规则文件控制所在层文件夹的 增/删/改 操作");
             System.out.println("       查找优先级: matching-rules.json > replace.json > add.json > delete.json");
@@ -68,8 +77,13 @@ public class RuleConfigWizard {
 
             System.out.print("\n[选择] 请选择要在哪一层生成规则文件 (输入文件夹编号, 0=返回): ");
             int choice;
+            String choiceInput = readLine();
+            if (choiceInput.isEmpty()) {
+                System.out.println("[取消] 已返回主菜单");
+                return;
+            }
             try {
-                choice = Integer.parseInt(readLine());
+                choice = Integer.parseInt(choiceInput);
             } catch (NumberFormatException e) {
                 System.out.println("[失败] 无效编号");
                 return;
@@ -108,8 +122,12 @@ public class RuleConfigWizard {
         System.out.println("[选择] 规则文件作用目录:");
         System.out.println("       1. 更新目录: " + config.getUpdatePath());
         System.out.println("       2. 删除目录: " + config.getDeletePath());
-        System.out.print("请输入 (1-2, 回车=1): ");
+        System.out.print("请输入 (1-2, 回车/取消=返回): ");
         String input = readLine();
+        if (input.isEmpty()) {
+            System.out.println("[取消] 已返回主菜单");
+            return null;
+        }
         Path basePath;
         if (input.equals("2")) {
             basePath = config.getBaseDirectory().resolve(config.getDeletePath()).normalize();
@@ -131,37 +149,84 @@ public class RuleConfigWizard {
     private Map<Integer, Path> printIndexedTree(FileNode root) {
         Map<Integer, Path> folderIndex = new LinkedHashMap<>();
         folderCounter = 0;
-        printNode(root, "", true, true, folderIndex);
+        // 栈迭代打印（替代原 printNode/printChildren 相互递归，避免超深目录栈溢出）
+        Deque<PrintTask> stack = new ArrayDeque<>();
+        stack.push(new PrintTask(root, "", true, true, false));
+        while (!stack.isEmpty()) {
+            PrintTask task = stack.pop();
+            if (task.isRoot) {
+                if (task.node.isDirectory()) {
+                    int index = ++folderCounter;
+                    folderIndex.put(index, task.node.getPath());
+                    String ruleFile = ruleFileAt(task.node.getPath());
+                    System.out.println("[" + index + "] [+] " + task.node.getName() + "/"
+                            + (ruleFile != null ? "  [规则: " + ruleFile + "]" : ""));
+                    pushChildTasks((FolderNode) task.node, "", stack, ruleFile != null);
+                } else {
+                    System.out.println("[-] " + task.node.getName());
+                }
+                continue;
+            }
+            String connector = task.isLast ? "└── " : "├── ";
+            if (task.node.isDirectory()) {
+                int index = ++folderCounter;
+                folderIndex.put(index, task.node.getPath());
+                String ruleFile = ruleFileAt(task.node.getPath());
+                System.out.println(task.prefix + connector + "[" + index + "] [+] " + task.node.getName() + "/"
+                        + (ruleFile != null ? "  [规则: " + ruleFile + "]" : ""));
+                pushChildTasks((FolderNode) task.node, task.prefix + (task.isLast ? "    " : "│   "), stack,
+                        ruleFile != null);
+            } else {
+                // 文件行：若所在层有规则文件，标注"受规则影响"（便于预览该层配置的作用范围）
+                String affected = task.affectedByRule ? "  [受规则影响]" : "";
+                System.out.println(task.prefix + connector + "[-] " + task.node.getName() + affected);
+            }
+        }
         return folderIndex;
     }
 
-    private void printNode(FileNode node, String prefix, boolean isLast, boolean isRoot, Map<Integer, Path> folderIndex) {
-        if (isRoot) {
-            if (node.isDirectory()) {
-                int index = ++folderCounter;
-                folderIndex.put(index, node.getPath());
-                System.out.println("[" + index + "] [+] " + node.getName() + "/");
-                printChildren((FolderNode) node, "", folderIndex);
-            } else {
-                System.out.println("[-] " + node.getName());
-            }
-            return;
+    /**
+     * 返回目录下已存在的规则文件名（按查找优先级），无则 null
+     */
+    private String ruleFileAt(Path dir) {
+        if (dir == null) {
+            return null;
         }
-        String connector = isLast ? "└── " : "├── ";
-        if (node.isDirectory()) {
-            int index = ++folderCounter;
-            folderIndex.put(index, node.getPath());
-            System.out.println(prefix + connector + "[" + index + "] [+] " + node.getName() + "/");
-            printChildren((FolderNode) node, prefix + (isLast ? "    " : "│   "), folderIndex);
-        } else {
-            System.out.println(prefix + connector + "[-] " + node.getName());
+        for (String ruleType : RulesConstants.FileNames.ALL_RULE_FILES) {
+            if (Files.exists(dir.resolve(ruleType))) {
+                return ruleType;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 将子节点倒序压栈，保证正序弹出（输出顺序与原递归实现一致）
+     * @param parentHasRule 父目录是否含规则文件（决定直属文件是否标注"受规则影响"）
+     */
+    private void pushChildTasks(FolderNode folder, String childPrefix, Deque<PrintTask> stack, boolean parentHasRule) {
+        List<FileNode> children = folder.getChildren();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            stack.push(new PrintTask(children.get(i), childPrefix, i == children.size() - 1, false, parentHasRule));
         }
     }
 
-    private void printChildren(FolderNode folder, String childPrefix, Map<Integer, Path> folderIndex) {
-        List<FileNode> children = folder.getChildren();
-        for (int i = 0; i < children.size(); i++) {
-            printNode(children.get(i), childPrefix, i == children.size() - 1, false, folderIndex);
+    /**
+     * 打印任务（迭代遍历用）
+     */
+    private static class PrintTask {
+        final FileNode node;
+        final String prefix;
+        final boolean isLast;
+        final boolean isRoot;
+        final boolean affectedByRule; // 文件是否处于含规则文件的层（受规则影响）
+
+        PrintTask(FileNode node, String prefix, boolean isLast, boolean isRoot, boolean affectedByRule) {
+            this.node = node;
+            this.prefix = prefix;
+            this.isLast = isLast;
+            this.isRoot = isRoot;
+            this.affectedByRule = affectedByRule;
         }
     }
 
@@ -187,9 +252,9 @@ public class RuleConfigWizard {
         System.out.println("  可选值: " + listStrategies());
         String strategyType = null;
         while (strategyType == null) {
-            System.out.print("  请输入 (编号或策略名, 0=取消): ");
+            System.out.print("  请输入 (编号或策略名, 回车/0=取消): ");
             String input = readLine();
-            if (input.equals("0")) {
+            if (input.isEmpty() || input.equals("0")) {
                 System.out.println("[取消] 已取消生成");
                 return null;
             }
@@ -247,12 +312,11 @@ public class RuleConfigWizard {
         // 6. 多策略组合链（可选）：链中后续策略只处理前序策略"剩余"的文件
         System.out.println("\n[参数 6/6] 多策略组合链 (可选)");
         System.out.println("  说明: 配置策略链后, 本层按链顺序依次执行各策略,");
-        System.out.println("        后续策略只处理前序策略未处理(剩余)的文件");
+        System.out.println("        第 1 步 = 上面配置的主策略, 后续策略只处理前序策略未处理(剩余)的文件");
         System.out.print("  是否配置策略链? (y/n, 回车=n): ");
         if (parseBoolean(readLine(), false)) {
-            List<MatchRule> chain = new ArrayList<>();
-            chain.add(rule); // 第一步 = 上面配置的策略
-            System.out.println("  [链] 步骤1: " + rule.getStrategyType() + " patterns=" + rule.getPatterns());
+            List<StrategyStep> chain = new ArrayList<>();
+            System.out.println("  [链] 步骤1: " + rule.getStrategyType() + " patterns=" + rule.getPatterns() + "（主策略）");
             while (true) {
                 System.out.println("\n  [链] 新增步骤 (策略名留空或输入 0 结束):");
                 System.out.println("        可选策略: " + listStrategies());
@@ -272,17 +336,17 @@ public class RuleConfigWizard {
                 List<String> stepExcludes = parseList(readLine());
                 System.out.print("        replacements (key=value, 逗号分隔, 回车=空): ");
                 Map<String, String> stepReplacements = parseMap(readLine());
-                MatchRule step = new MatchRule();
+                StrategyStep step = new StrategyStep();
                 step.setStrategyType(stepType);
                 step.setPatterns(stepPatterns);
                 step.setExcludePatterns(stepExcludes);
                 step.setReplacements(stepReplacements);
                 chain.add(step);
-                System.out.println("  [链] 步骤" + chain.size() + ": " + stepType + " patterns=" + stepPatterns);
+                System.out.println("  [链] 步骤" + (chain.size() + 1) + ": " + stepType + " patterns=" + stepPatterns);
             }
-            if (chain.size() > 1) {
+            if (!chain.isEmpty()) {
                 rule.setStrategyChain(chain);
-                System.out.println("  [链] 策略链共 " + chain.size() + " 步");
+                System.out.println("  [链] 策略链共 " + (chain.size() + 1) + " 步");
             } else {
                 System.out.println("  [链] 未新增步骤，保持单一策略");
             }
@@ -292,10 +356,11 @@ public class RuleConfigWizard {
 
     /**
      * 生成规则文件并写入（预览 + 确认 + 自校验）
+     * 供控制台向导（inputRule 组装规则后调用）与 UI 表单（RuleWizardForm 一次填完参数后调用）共用
      * @param rule 规则对象
      * @param targetDir 目标目录
      */
-    private void writeRuleFile(MatchRule rule, Path targetDir) {
+    public void writeRuleFile(MatchRule rule, Path targetDir) {
         try {
             Path ruleFile = targetDir.resolve(RulesConstants.FileNames.MATCHING_RULES_JSON).normalize();
 
@@ -447,6 +512,6 @@ public class RuleConfigWizard {
      * 读取一行输入
      */
     private String readLine() {
-        return scanner.hasNextLine() ? scanner.nextLine().trim() : "";
+        return prompter.readLine();
     }
 }

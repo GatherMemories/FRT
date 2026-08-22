@@ -134,13 +134,6 @@ public class LoggerUtil {
     }
 
     /**
-     * 记录调试级别日志（控制台+文件）
-     */
-    public void logDebug(String message) {
-        logger.debug(message);
-    }
-
-    /**
      * 记录调试级别日志（仅文件）
      */
     public void logDebugFileOnly(String message) {
@@ -196,6 +189,18 @@ public class LoggerUtil {
             return;
         }
         getInstance(null).logger.info(message);
+    }
+
+    /**
+     * 统一记录调试级别日志（控制台+文件）
+     * 细碎过程日志（如单文件被白名单过滤跳过）使用本方法，默认不显示，
+     * 需在配置/日志中开 DEBUG 级别才可见，避免正常操作刷屏。
+     */
+    public static void logDebug(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        getInstance(null).logger.debug(message);
     }
 
     /**

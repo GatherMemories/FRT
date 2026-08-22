@@ -4,6 +4,7 @@ import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.service.CoreConfigWizard;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.RestoreService;
@@ -15,11 +16,17 @@ import java.util.Scanner;
 
 /**
  * 主程序入口
- * 演示多层级文件夹更新系统的使用
+ * 多层级文件夹更新工具：控制台模式（默认）与图形界面模式（--ui）
  */
 public class Main {
 
     public static void main(String[] args) {
+        // UI 模式入口：java -jar FRT.jar --ui（或 java -cp ... com.awei.frt.ui.MainUI）
+        if (args.length > 0 && "--ui".equals(args[0])) {
+            com.awei.frt.ui.MainUI.main(args);
+            return;
+        }
+
         LoggerUtil logger = null;// 日志工具类
         Scanner scanner = null;
 
@@ -38,13 +45,16 @@ public class Main {
             }
 
             LoggerUtil.logInfo("=========================================");
-            LoggerUtil.logInfo("FRT - 多层级文件夹更新系统启动");
+            LoggerUtil.logInfo("多层级文件夹更新工具启动");
             LoggerUtil.logInfo("=========================================");
 
             scanner = new Scanner(System.in);
 
             // 检测是否有未完成的操作会话（上次异常中断遗留），提示用户恢复
             checkInterruptedSession(scanner);
+
+            // 残留备份过多时提醒清理（不影响启动）
+            BackupFileLoader.warnOrphanBackupsIfNeeded();
 
             // 创建服务实例
             FileUpdateServiceNew updateService = new FileUpdateServiceNew(config, scanner);
@@ -59,9 +69,11 @@ public class Main {
                 System.out.println("1. 更新文件");
                 System.out.println("2. 删除文件");
                 System.out.println("3. 执行恢复操作");
-                System.out.println("4. 生成/编辑匹配规则配置文件");
-                System.out.println("5. 退出");
-                System.out.print("请输入选项 (1-5): ");
+                System.out.println("4. 规则生成（生成/编辑匹配规则配置文件）");
+                System.out.println("5. 清理残留备份");
+                System.out.println("6. 核心配置（设置目标/更新/删除/备份路径、日志级别）");
+                System.out.println("7. 退出");
+                System.out.print("请输入选项 (1-7): ");
 
                 String choice = scanner.nextLine().trim();
 
@@ -79,10 +91,18 @@ public class Main {
                         restoreService.executeRestore();
                         break;
                     case "4":
-                        LoggerUtil.logInfo("[向导] 生成/编辑匹配规则配置文件...");
+                        LoggerUtil.logInfo("[规则生成] 生成/编辑匹配规则配置文件...");
                         new RuleConfigWizard(config, scanner).start();
                         break;
                     case "5":
+                        LoggerUtil.logInfo("[清理] 执行残留备份文件清理...");
+                        BackupFileLoader.cleanupOrphanBackupFiles(scanner);
+                        break;
+                    case "6":
+                        LoggerUtil.logInfo("[配置] 执行核心配置编写向导...");
+                        new CoreConfigWizard(config, scanner).start();
+                        break;
+                    case "7":
                         LoggerUtil.logInfo("程序退出");
                         return;
                     default:

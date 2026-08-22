@@ -44,16 +44,14 @@ public class StrategyProxy implements InvocationHandler {
 
         FileNode node = (FileNode) args[0];
         OperationContext context = (OperationContext) args[1];
-        String kind = (node != null && node.isDirectory()) ? "目录" : "文件";
         String rel = node == null ? "null" : node.getRelativePath();
         String type = target.getStrategyType();
 
-        long start = System.nanoTime();
         try {
-            LoggerUtil.logInfo("[策略] " + type + " 处理" + kind + ": " + rel);
+            // 不打印"处理/完成"配对日志：链中每个策略对每个节点都会执行一次，
+            // 大量 no-op（accepts 拒绝）会造成刷屏噪音；实质进度由策略内部
+            // （+ 成功/= 成功/- 成功）与 UI 进度条体现。
             method.invoke(target, args);
-            LoggerUtil.logInfo("[策略] " + type + " 完成 " + kind + ": " + rel
-                    + "（耗时 " + (System.nanoTime() - start) / 1_000_000 + "ms）");
         } catch (InvocationTargetException e) {
             // 目标方法抛出的异常在这里被拦截：记录日志与失败统计，不中断整个更新流程
             Throwable cause = e.getCause() != null ? e.getCause() : e;

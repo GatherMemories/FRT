@@ -62,6 +62,14 @@ public class ConfigLoader {
     }
 
     /**
+     * 测试用：覆盖静态备份路径（隔离测试对真实 testDic/backup 的写入污染）
+     * 仅测试代码调用；生产流程不要使用
+     */
+    public static void setBackupPathForTesting(Path path) {
+        backupPath = path;
+    }
+
+    /**
      * 记录信息级别日志
      */
     private static void logInfo(String message) {

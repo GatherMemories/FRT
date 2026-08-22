@@ -36,8 +36,9 @@ class StrategyChainTest {
 
             String ruleJson = """
                 {
+                  "strategyType": "FileSameName",
+                  "patterns": ["*.txt"],
                   "strategyChain": [
-                    {"strategyType": "FileSameName", "patterns": ["*.txt"]},
                     {"strategyType": "FileSameName", "patterns": ["*.json"]}
                   ],
                   "inheritToSubfolders": false
@@ -66,8 +67,9 @@ class StrategyChainTest {
             // 两个步骤模式重叠：第二步不应重复处理已被第一步处理的 a.txt
             String ruleJson = """
                 {
+                  "strategyType": "FileSameName",
+                  "patterns": ["*.txt"],
                   "strategyChain": [
-                    {"strategyType": "FileSameName", "patterns": ["*.txt"]},
                     {"strategyType": "FileSameName", "patterns": ["*.txt"]}
                   ],
                   "inheritToSubfolders": false

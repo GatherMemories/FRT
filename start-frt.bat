@@ -1,11 +1,15 @@
 @echo off
 rem ============================================================
-rem  FRT - Multi-level Folder Update Tool (launcher)
-rem  Sets UTF-8 codepage for CJK display, then runs shaded jar.
-rem  Requires JDK 17+ (tested on 21)
+rem  多层级文件夹更新工具 - 启动脚本 (Windows)
+rem  设置 UTF-8 代码页保证中文显示，默认启动图形界面
+rem  用法:
+rem    start-frt.bat                默认启动图形界面 (UI)
+rem    start-frt.bat --console      切换为控制台模式（-c 等价）
+rem    start-frt.bat --ui           显式指定图形界面（默认即此）
+rem  要求: JDK 17+（实测 21 可用）
 rem ============================================================
 chcp 65001 >nul
-title FRT - Multi-level Folder Update System
+title 多层级文件夹更新工具
 cd /d "%~dp0"
 
 set JAR=target\FRT-0.1.0-SNAPSHOT.jar
@@ -17,7 +21,25 @@ if not exist "%JAR%" (
     exit /b 1
 )
 
-java -Dfile.encoding=UTF-8 -jar "%JAR%"
+rem 默认启动图形界面；--console / -c 切换控制台；其余参数透传（开关参数不转发给程序）
+set USE_UI=1
+set FORWARD=
+:parse_args
+if "%~1"=="" goto run
+if /i "%~1"=="--ui" goto skip_arg
+if /i "%~1"=="--console" set USE_UI=0 & goto skip_arg
+if /i "%~1"=="-c" set USE_UI=0 & goto skip_arg
+set FORWARD=%FORWARD% "%~1"
+:skip_arg
+shift
+goto parse_args
+
+:run
+if "%USE_UI%"=="1" (
+    java -Dfile.encoding=UTF-8 -jar "%JAR%" --ui %FORWARD%
+) else (
+    java -Dfile.encoding=UTF-8 -jar "%JAR%" %FORWARD%
+)
 
 echo.
 pause

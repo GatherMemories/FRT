@@ -4,6 +4,8 @@ import com.awei.frt.core.strategy.FileSameNameStrategy;
 import com.awei.frt.core.strategy.McModStrategy;
 import com.awei.frt.core.strategy.OperationStrategy;
 import com.awei.frt.core.strategy.StrategyProxy;
+import com.awei.frt.core.strategy.ZipEntryContentStrategy;
+import com.awei.frt.core.strategy.ZipEntryNameStrategy;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,6 +33,8 @@ public class StrategyFactory {
     static {
         register("FileSameName", FileSameNameStrategy::new, "同名文件处理策略（按文件名匹配，支持通配符）");
         register("McMod", McModStrategy::new, "Minecraft 模组策略（按 modId 匹配 jar）");
+        register("ZipEntryName", ZipEntryNameStrategy::new, "压缩包内文件名匹配策略（zip/jar 内部条目名，支持通配符）");
+        register("ZipEntryContent", ZipEntryContentStrategy::new, "压缩包内文件内容匹配策略（读取 zip/jar 条目文本，contentContains 参数）");
         // 动态加载外部策略插件（plugins/ 目录 + classpath SPI，见 StrategyLoader）
         StrategyLoader.loadExternalStrategies();
     }

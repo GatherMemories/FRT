@@ -4,6 +4,7 @@ import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.mod.ModInfo;
 import com.awei.frt.core.mod.ModMetadataParser;
 import com.awei.frt.core.node.FileNode;
+import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.core.uitls.FileSignUtil;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
@@ -73,9 +74,16 @@ public class McModStrategy extends AbstractOperationStrategy {
             OperationRecord record = newRecord(context);
             Path targetFilePath = context.getTargetPath(node.getRelativePath())
                     .resolve(currentModInfo.getPath().getFileName()).normalize();
-            boolean ok = FileUtil.addFile(currentModInfo.getPath(), targetFilePath, record);
+            boolean ok = FileUtil.addFile(currentModInfo.getPath(), targetFilePath, record, context.isDryRun());
             context.recordOperation(record);
-            LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            if (!context.isDryRun()) {
+                LoggerUtil.logInfo("+ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            }
+            if (ok) {
+                // 标记源 jar 文件节点已处理：链中后续文件级策略（如 FileSameName 空 patterns）
+                // 不应再按文件名复制同一 jar（否则同一文件被新增+替换两次）
+                markModFilesHandled(node, currentModInfo.getPath());
+            }
             any = true;
         }
         if (any) {
@@ -106,6 +114,11 @@ public class McModStrategy extends AbstractOperationStrategy {
             if (targetModInfo == null) {
                 continue;
             }
+            // 跳过 doAdd 刚新增的 mod（同一 UPDATE 操作里 doAdd 先执行：
+            // 目标原本无该 mod → 新增落盘后，doReplace 再看到"目标已有"→ 先增后替重复写入）
+            if (isModFileHandled(node, currentModInfo.getPath())) {
+                continue;
+            }
 
             Path sourceFilePath = currentModInfo.getPath();
             Path targetFilePath = entryTargetPath.resolve(currentModInfo.getPath().getFileName()).normalize();
@@ -113,19 +126,27 @@ public class McModStrategy extends AbstractOperationStrategy {
             // 参数 onlyIfContentSame=true：源与目标文件 MD5 相同则跳过替换（内容一致无需更新）
             if (onlyIfContentSame && isFileContentSame(sourceFilePath, targetFilePath)) {
                 LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 内容相同(MD5)，跳过替换");
+                // McMod 已判定该 mod 无需更新（消费），链中后续策略同样不应再按文件名处理
+                markModFilesHandled(node, sourceFilePath);
                 continue;
             }
             // 参数 onlyIfVersionChanged=true：目标已是相同版本则跳过替换
             if (onlyIfVersionChanged && currentModInfo.getVersion().equals(targetModInfo.getVersion())) {
                 LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") 版本相同，跳过替换");
+                markModFilesHandled(node, sourceFilePath);
                 continue;
             }
 
             OperationRecord record = newRecord(context);
-            boolean ok = FileUtil.replaceFile(sourceFilePath, targetFilePath, record);
+            boolean ok = FileUtil.replaceFile(sourceFilePath, targetFilePath, record, context.isDryRun());
             context.recordOperation(record);
-            LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
-                    "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            if (!context.isDryRun()) {
+                LoggerUtil.logInfo("= " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion() + ") " +
+                        "--> " + targetModInfo.getPath().getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            }
+            if (ok) {
+                markModFilesHandled(node, sourceFilePath);
+            }
             any = true;
         }
         if (any) {
@@ -143,15 +164,27 @@ public class McModStrategy extends AbstractOperationStrategy {
         Map<String, ModInfo> currentModInfoMap = getModInfo(node.getPath());
         Map<String, ModInfo> targetModInfoMap = getModInfo(context.getTargetPath(node.getRelativePath()));
         for (String modId : currentModInfoMap.keySet()) {
+            ModInfo currentModInfo = currentModInfoMap.get(modId);
             ModInfo targetModInfo = targetModInfoMap.get(modId);
             if (targetModInfo == null) {
+                // 目标无对应 mod：无需删除（可能已被删过/从未同步），提示原因避免用户误以为没生效
+                if (!context.isDryRun()) {
+                    LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion()
+                            + ") 目标无对应 mod，无需删除");
+                }
                 continue;
             }
             OperationRecord record = newRecord(context);
             Path deleteFilePath = targetModInfo.getPath();
-            boolean ok = FileUtil.deleteFile(deleteFilePath, record);
+            boolean ok = FileUtil.deleteFile(deleteFilePath, record, context.isDryRun());
             context.recordOperation(record);
-            LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            if (!context.isDryRun()) {
+                LoggerUtil.logInfo("- " + deleteFilePath.getFileName() + " (" + targetModInfo.getVersion() + ") " + (ok ? "成功" : "失败"));
+            }
+            if (ok) {
+                // 删除目标侧 mod 后，update 侧同名 jar 也不应被文件级策略重新复制回去
+                markModFilesHandled(node, currentModInfo.getPath());
+            }
             any = true;
         }
         if (any) {
@@ -170,6 +203,52 @@ public class McModStrategy extends AbstractOperationStrategy {
         return sourceMd5 != null && sourceMd5.equals(targetMd5);
     }
 
+    /**
+     * 标记目录下与 mod jar 同名的文件节点为已处理（handled）。
+     * 目的：McMod 是目录级策略，已按 modId 对该 jar 执行了增/删/改；
+     * 若不标记，链中后续文件级策略（如 FileSameName 空 patterns 匹配所有）
+     * 会在文件级再次按文件名处理同一 jar（预览显示同一文件两次操作，
+     * 真实执行变为"新增+替换"的重复写入）。无效 mod 的 jar（如 app.jar）
+     * 不被 McMod 处理，不会被标记，仍由文件级策略正常处理。
+     */
+    /**
+     * 判断目录下与 mod jar 同名的文件节点是否已被标记为已处理（doAdd 刚新增时标记）。
+     * 用于 doReplace 跳过"同一 UPDATE 操作里 doAdd 刚新增"的 mod，避免先增后替重复写入。
+     */
+    private boolean isModFileHandled(FileNode node, Path modJarPath) {
+        if (!(node instanceof FolderNode) || modJarPath == null) {
+            return false;
+        }
+        String fileName = modJarPath.getFileName().toString();
+        for (FileNode child : ((FolderNode) node).getChildren()) {
+            if (!child.isDirectory() && child.getName().equals(fileName)) {
+                return child.isHandled();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 标记目录下与 mod jar 同名的文件节点为已处理（handled）。
+     * 目的：McMod 是目录级策略，已按 modId 对该 jar 执行了增/删/改；
+     * 若不标记，链中后续文件级策略（如 FileSameName 空 patterns 匹配所有）
+     * 会在文件级再次按文件名处理同一 jar（预览显示同一文件两次操作，
+     * 真实执行变为"新增+替换"的重复写入）。无效 mod 的 jar（如 app.jar）
+     * 不被 McMod 处理，不会被标记，仍由文件级策略正常处理。
+     */
+    private void markModFilesHandled(FileNode node, Path modJarPath) {
+        if (!(node instanceof FolderNode) || modJarPath == null) {
+            return;
+        }
+        String fileName = modJarPath.getFileName().toString();
+        for (FileNode child : ((FolderNode) node).getChildren()) {
+            if (!child.isDirectory() && child.getName().equals(fileName)) {
+                child.setHandled(true);
+                return;
+            }
+        }
+    }
+
     // 获取文件夹里的所有mod信息
     private Map<String, ModInfo> getModInfo(Path entryPath) {
         Map<String, ModInfo> modInfoMap = new HashMap<>();
@@ -186,9 +265,14 @@ public class McModStrategy extends AbstractOperationStrategy {
                         // 版本占位符自动兜底（MANIFEST.MF -> 文件名）
                         modInfos = ModMetadataParser.parseJar(file);
                         MOD_INFO_CACHE.put(cacheKey, modInfos);
-                    }
-                    if (modInfos.isEmpty()) {
-                        LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file.getFileName());
+                        if (modInfos.isEmpty()) {
+                            // 首次解析失败：警告一次（带完整路径，区分 update/target 同名 jar）
+                            LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file);
+                            return;
+                        }
+                    } else if (modInfos.isEmpty()) {
+                        // 缓存命中的空结果（同文件本会话已解析过）：
+                        // 静默跳过，避免 doAdd/doReplace 多个钩子重复扫同一 jar 时反复警告
                         return;
                     }
                     for (ModInfo modInfo : modInfos) {
@@ -198,7 +282,7 @@ public class McModStrategy extends AbstractOperationStrategy {
                 catch (Throwable e) {
                     // 兜底：单个 jar 解析失败只跳过该 jar，不影响整个更新流程
                     if(!(e instanceof ZipException)){
-                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file.getFileName() + " - " + e);
+                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file + " - " + e);
                     }
                 }
             });

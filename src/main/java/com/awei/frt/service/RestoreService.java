@@ -5,6 +5,8 @@ import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
+import com.awei.frt.ui.ConsoleUserPrompter;
+import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 
 import java.io.IOException;
@@ -24,11 +26,15 @@ import java.util.Scanner;
  */
 public class RestoreService {
     private final Config config;
-    private final Scanner scanner;
+    private final UserPrompter prompter;
 
     public RestoreService(Config config, Scanner scanner) {
+        this(config, new ConsoleUserPrompter(scanner));
+    }
+
+    public RestoreService(Config config, UserPrompter prompter) {
         this.config = config;
-        this.scanner = scanner;
+        this.prompter = prompter;
     }
 
     /**
@@ -71,8 +77,13 @@ public class RestoreService {
                 System.out.println("1-" + fileNames.size() + ". 恢复备份记录");
                 System.out.print("\n请输入选项 (0：返回, -1：删除, 1-" + fileNames.size() + "：恢复): ");
 
-                // 3. 用户选择
-                String choice = scanner.nextLine().trim();
+                // 3. 用户选择（空输入=取消，直接退出恢复功能）
+                String choice = prompter.readLine();
+
+                if (choice.isEmpty()) {
+                    System.out.println("[信息] 已取消恢复操作");
+                    return;
+                }
 
                 if (choice.equals("0")) {
                     System.out.println("[返回] 已返回主菜单");
@@ -82,7 +93,11 @@ public class RestoreService {
                 if (choice.equals("-1")) {
                     // 删除备份记录
                     System.out.print("\n请输入要删除的备份记录编号，支持单个编号或范围 (如 3 或 1-5) (1-" + fileNames.size() + "): ");
-                    String deleteChoice = scanner.nextLine().trim();
+                    String deleteChoice = prompter.readLine();
+                    if (deleteChoice.isEmpty()) {
+                        System.out.println("[信息] 已取消删除备份记录");
+                        continue; // 回到恢复菜单
+                    }
 
                     try {
                         List<Integer> deleteIndexes = new ArrayList<>();
@@ -135,7 +150,7 @@ public class RestoreService {
 
                         // 确认删除
                         System.out.print("\n确认要删除这 " + deleteIndexes.size() + " 个备份记录吗？此操作不可逆！(y/n): ");
-                        String confirmDelete = scanner.nextLine().trim().toLowerCase();
+                        String confirmDelete = prompter.readLine().toLowerCase();
 
                         if (!confirmDelete.equals("y") && !confirmDelete.equals("yes")) {
                             LoggerUtil.logInfo("[信息] 已取消删除操作");
@@ -216,7 +231,7 @@ public class RestoreService {
 
                     // 6. 确认恢复
                     System.out.print("\n确认要从此备份恢复系统吗？(y/n): ");
-                    String confirm = scanner.nextLine().trim().toLowerCase();
+                    String confirm = prompter.readLine().toLowerCase();
 
                     if (!confirm.equals("y") && !confirm.equals("yes")) {
                         LoggerUtil.logInfo("[信息] 已取消恢复操作");
@@ -225,7 +240,7 @@ public class RestoreService {
 
                     // 7. 执行恢复
                     LoggerUtil.logInfo("[执行] 开始执行恢复操作...");
-                    RestoreResult restoreResult = BackupFileLoader.restoreFromResult(selectedResult, scanner);
+                    RestoreResult restoreResult = BackupFileLoader.restoreFromResult(selectedResult, prompter);
 
                     // 8. 显示恢复结果
                     System.out.println("\n=========================================");
@@ -255,7 +270,7 @@ public class RestoreService {
 
                     // 按任意键继续
                     System.out.println("\n请按任意键继续...");
-                    scanner.nextLine();
+                    prompter.readLine();
 
                 } catch (NumberFormatException e) {
                     System.out.println("[失败] 无效的输入，请输入数字");
