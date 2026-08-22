@@ -46,7 +46,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private final JTextArea logArea;
     private final JLabel statusLabel;
     private final JProgressBar progressBar;
-    private final JPanel quickPanel;
+    private final QuickButtonPanel quickPanel;
     private final JScrollPane quickScroll;   // 快捷按钮滚动区（最多显示约 3 行，超出滚动）
     private final JPanel inputArea;          // 快捷按钮 + 输入行（等待输入时显示）
     private final JTextField inputField;
@@ -390,25 +390,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     }
 
     /**
-     * 按提示生成快捷按钮（选项识别逻辑见 QuickOptions）：
-     * 含 (y/n) → 是/否；含 "1-N" → 数字按钮；含 编号/选项 → 1..9；
-     * 含独立 0/-1 → 对应按钮；始终附 取消。
+     * 按提示重建快捷按钮（清空 + 生成 + 绑定提交回调，封装在 QuickButtonPanel.show）
      */
     private void rebuildQuickButtons(String prompt) {
-        quickPanel.removeAll();
-        for (QuickOptions.Option option : QuickOptions.build(prompt)) {
-            addQuick(option.label(), option.value());
-        }
-        quickPanel.revalidate();
-        quickPanel.repaint();
+        quickPanel.show(prompt, value -> prompter.submit(value));
         quickScroll.revalidate();
         quickScroll.repaint();
-    }
-
-    private void addQuick(String label, String value) {
-        JButton b = new JButton(label);
-        b.addActionListener(e -> prompter.submit(value));
-        quickPanel.add(b);
     }
 
     // ---------------- 日志区输出与提示捕获 ----------------
