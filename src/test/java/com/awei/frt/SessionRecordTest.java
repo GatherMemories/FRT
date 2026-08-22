@@ -100,6 +100,53 @@ class SessionRecordTest {
         assertNull(BackupFileLoader.loadSessionRecord(), "无会话记录时应返回 null");
     }
 
+    @Test
+    void pathWithChineseAndSpecialCharsRoundTripsAsPlainPath() {
+        BackupFileLoader.clearSessionRecord();
+        try {
+            // 回归：中文 + 方括号/空格路径，序列化必须是普通路径而非 file:/... URI 编码
+            Path p = Path.of("/home/aaa/桌面/项目/FRT/testDic/THtest/2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar");
+            OperationRecord r = new OperationRecord();
+            r.setStrategyType("Test");
+            r.setOperationType(OperationContext.OPERATION_DELETE);
+            r.setSuccess(true);
+            r.setTargetPath(p);
+            assertTrue(BackupFileLoader.appendSessionRecord(r));
+
+            ProcessingResult loaded = BackupFileLoader.loadSessionRecord();
+            assertNotNull(loaded);
+            Path loadedPath = loaded.getOperationRecords().get(0).getTargetPath();
+            assertNotNull(loadedPath);
+            assertEquals(p.toString(), loadedPath.toString(),
+                    "路径应原样往返，不应变成 file:/...%E6%A1%8C URI 编码");
+        } finally {
+            BackupFileLoader.clearSessionRecord();
+        }
+    }
+
+    @Test
+    void legacyUriFormatPathStillLoads() throws Exception {
+        BackupFileLoader.clearSessionRecord();
+        try {
+            // 兼容旧版本：Path 曾被 Jackson 默认序列化成 file:/... URI 编码格式
+            String legacy = "{\"strategyType\":\"Test\",\"operationType\":\"operation_delete\","
+                    + "\"success\":true,"
+                    + "\"targetPath\":\"file:/home/aaa/%E6%A1%8C%E9%9D%A2/FRT/2-FZ%5Btest%5D.jar\"}";
+            Path sessionFile = ConfigLoader.getBackupPath().resolve("record").resolve("session-current.json");
+            Files.createDirectories(sessionFile.getParent());
+            Files.writeString(sessionFile, legacy, StandardCharsets.UTF_8);
+
+            ProcessingResult loaded = BackupFileLoader.loadSessionRecord();
+            assertNotNull(loaded, "旧 URI 格式应兼容读取");
+            Path p = loaded.getOperationRecords().get(0).getTargetPath();
+            assertNotNull(p);
+            assertEquals("/home/aaa/桌面/FRT/2-FZ[test].jar", p.toString(),
+                    "URI 编码路径应被解码为普通路径");
+        } finally {
+            BackupFileLoader.clearSessionRecord();
+        }
+    }
+
     private OperationRecord record(String type, boolean success) {
         OperationRecord r = new OperationRecord();
         r.setStrategyType("TestStrategy");

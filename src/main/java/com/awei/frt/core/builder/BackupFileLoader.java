@@ -9,12 +9,15 @@ import com.awei.frt.model.RestoreResult;
 import com.awei.frt.ui.ConsoleUserPrompter;
 import com.awei.frt.ui.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -46,15 +49,25 @@ public class BackupFileLoader {
     /**
      * 备份体系共享 JSON 序列化器（线程安全可复用）：
      * - JSR310 时间支持 + 禁用时间戳
-     * - 自定义 Path 反序列化：直接 Paths.get(字符串)，兼容 Windows 历史记录里的反斜杠路径
+     * - 自定义 Path 序列化/反序列化：
+     *   序列化输出普通路径字符串（Jackson 默认 NioPathSerializer 会输出 file:/... URI 编码格式，
+     *   中文/特殊字符被 % 编码，恢复详情显示为乱码路径——用户实测反馈）
+     *   反序列化直接 Paths.get(字符串)，兼容 Windows 历史记录里的反斜杠路径
      *   （Jackson 默认 NioPathDeserializer 按 URI 解析，遇到 "C:\Users\..." 会抛 Bad escape，
-     *    导致 Windows 上生成的旧备份记录在恢复菜单中全部加载失败）
+     *   导致 Windows 上生成的旧备份记录在恢复菜单中全部加载失败）；
+     *   旧备份记录里存过 file:/... URI 编码路径，以 "file:" 开头时按 URI 解析以正确解码
      */
     private static final ObjectMapper BACKUP_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
             .registerModule(new SimpleModule()
+                    .addSerializer(Path.class, new JsonSerializer<Path>() {
+                        @Override
+                        public void serialize(Path value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+                            gen.writeString(value == null ? null : value.toString());
+                        }
+                    })
                     .addDeserializer(Path.class, new JsonDeserializer<Path>() {
                         @Override
                         public Path deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
@@ -63,6 +76,10 @@ public class BackupFileLoader {
                                 return null;
                             }
                             try {
+                                // 兼容旧记录：历史上 Path 被序列化成 file:/... URI 编码格式
+                                if (pathString.startsWith("file:")) {
+                                    return java.nio.file.Paths.get(java.net.URI.create(pathString));
+                                }
                                 return java.nio.file.Paths.get(pathString);
                             } catch (Exception e) {
                                 // 非法路径字符串不崩反序列化，恢复时按"文件不存在"处理
