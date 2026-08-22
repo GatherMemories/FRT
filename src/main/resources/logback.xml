@@ -7,7 +7,7 @@
         </encoder>
     </appender>
 
-    <!-- 文件输出：完整格式（日期+线程+级别+来源+消息），异常堆栈自动追加 -->
+    <!-- 文件输出：完整格式（日期+线程+级别+来源+消息），%ex 记录完整异常堆栈供排查 -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/frt.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -15,7 +15,7 @@
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder charset="UTF-8">
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{30} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{30} - %msg%n%ex</pattern>
         </encoder>
     </appender>
 

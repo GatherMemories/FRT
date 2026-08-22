@@ -153,11 +153,14 @@ public class LoggerUtil {
             return;
         }
         LoggerUtil util = getInstance(null);
-        if (message == null || message.isBlank()) {
-            util.logger.error(throwable.toString(), throwable);
-        } else {
-            util.logger.error(message, throwable);
-        }
+        // 控制台/UI 只输出简洁提示：优先调用方给的中文上下文；
+        // 否则用简短异常类名+消息（不用 toString() 的全限定名，避免 java.lang.xxx 刷屏）。
+        // 完整堆栈由 logback FILE appender 的 %ex 记录到日志文件，供排查使用。
+        String brief = (message != null && !message.isBlank())
+                ? message
+                : throwable.getClass().getSimpleName()
+                        + (throwable.getMessage() != null ? ": " + throwable.getMessage() : "");
+        util.logger.error(brief, throwable);
     }
 
     /**
