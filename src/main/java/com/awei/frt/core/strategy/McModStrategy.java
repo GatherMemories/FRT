@@ -252,6 +252,10 @@ public class McModStrategy extends AbstractOperationStrategy {
     // 获取文件夹里的所有mod信息
     private Map<String, ModInfo> getModInfo(Path entryPath) {
         Map<String, ModInfo> modInfoMap = new HashMap<>();
+        if (entryPath == null || !Files.isDirectory(entryPath)) {
+            // 目录不存在（如首次更新/目标被清理）：视为无 mod，不报 ERROR 噪音
+            return modInfoMap;
+        }
         try (Stream<Path> fileStream = Files.list(entryPath)) {
             fileStream
                     .filter(file -> file.toString().endsWith(".jar"))
