@@ -20,13 +20,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-JAR="target/FRT-0.1.0-SNAPSHOT.jar"
-
-# 1. 检查可执行 jar 是否存在
-if [[ ! -f "$JAR" ]]; then
-    echo "[ERROR] jar 不存在: $JAR" >&2
-    echo "请先构建: mvn -o package -DskipTests" >&2
-    echo "（首次构建如缺依赖可去掉 -o 联网下载）" >&2
+# 兼容两种布局：发布包内 jar 与脚本同目录；开发目录 target/
+if [[ -f "FRT-0.1.0-SNAPSHOT.jar" ]]; then
+    JAR="FRT-0.1.0-SNAPSHOT.jar"
+elif [[ -f "target/FRT-0.1.0-SNAPSHOT.jar" ]]; then
+    JAR="target/FRT-0.1.0-SNAPSHOT.jar"
+else
+    echo "[ERROR] 未找到可执行 jar（FRT-0.1.0-SNAPSHOT.jar）" >&2
+    echo "请先构建: mvn -o package -DskipTests，或使用发布包（jar 与脚本同目录）" >&2
     exit 1
 fi
 
