@@ -167,6 +167,11 @@ public class McModStrategy extends AbstractOperationStrategy {
             ModInfo currentModInfo = currentModInfoMap.get(modId);
             ModInfo targetModInfo = targetModInfoMap.get(modId);
             if (targetModInfo == null) {
+                // 目标无对应 mod：无需删除（可能已被删过/从未同步），提示原因避免用户误以为没生效
+                if (!context.isDryRun()) {
+                    LoggerUtil.logInfo("~ " + currentModInfo.getPath().getFileName() + " (" + currentModInfo.getVersion()
+                            + ") 目标无对应 mod，无需删除");
+                }
                 continue;
             }
             OperationRecord record = newRecord(context);
