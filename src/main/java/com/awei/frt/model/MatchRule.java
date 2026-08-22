@@ -1,5 +1,6 @@
 package com.awei.frt.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.nio.file.Path;
@@ -42,7 +43,27 @@ public class MatchRule {
         this.path = path;
     }
 
-
+    /**
+     * 深拷贝规则对象（含嵌套策略链、列表与 Map 均复制，path 为 transient 不复制）。
+     * 用于向导组装策略链时把主策略作为"步骤1"放入链中——必须拷贝而非引用原对象，
+     * 否则 rule.strategyChain 会引用 rule 自身，Jackson 序列化时无限递归导致 StackOverflowError。
+     * @return 字段值相同、无共享可变引用的新规则
+     */
+    public MatchRule copy() {
+        MatchRule copy = new MatchRule();
+        copy.strategyType = this.strategyType;
+        copy.replacements = this.replacements != null ? new LinkedHashMap<>(this.replacements) : new LinkedHashMap<>();
+        copy.patterns = this.patterns != null ? new ArrayList<>(this.patterns) : new ArrayList<>();
+        copy.excludePatterns = this.excludePatterns != null ? new ArrayList<>(this.excludePatterns) : new ArrayList<>();
+        copy.inheritToSubfolders = this.inheritToSubfolders;
+        if (this.strategyChain != null) {
+            copy.strategyChain = new ArrayList<>();
+            for (MatchRule step : this.strategyChain) {
+                copy.strategyChain.add(step == null ? null : step.copy());
+            }
+        }
+        return copy;
+    }
 
     // Getter 和 Setter 方法
     public String getStrategyType() {
@@ -89,8 +110,11 @@ public class MatchRule {
      * 获取实际生效的策略步骤列表（展开嵌套链，带深度保护）：
      * - 配置了 strategyChain 时按链顺序展开
      * - 未配置时退化为 [this]（保持旧版单策略行为）
+     * 仅作运行时计算用，不参与 JSON 序列化：
+     * 未配置链时本方法返回 [this]，若被序列化会与自身无限递归（StackOverflowError）。
      * @return 有序策略步骤列表（至少含 strategyType 的规则）
      */
+    @JsonIgnore
     public List<MatchRule> getEffectiveStrategies() {
         List<MatchRule> steps = new ArrayList<>();
         collectStrategies(this, steps, 0);

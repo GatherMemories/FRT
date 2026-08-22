@@ -498,7 +498,7 @@ public class RuleWizardForm extends JDialog {
 
         if (!chainRows.isEmpty()) {
             List<MatchRule> chain = new ArrayList<>();
-            chain.add(rule); // 第 1 步 = 主策略
+            chain.add(rule.copy()); // 第 1 步 = 主策略（拷贝，避免链引用自身导致序列化无限递归）
             for (ChainRow row : chainRows) {
                 chain.add(row.buildRule());
             }

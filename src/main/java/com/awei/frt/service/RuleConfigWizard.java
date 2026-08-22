@@ -315,7 +315,7 @@ public class RuleConfigWizard {
         System.out.print("  是否配置策略链? (y/n, 回车=n): ");
         if (parseBoolean(readLine(), false)) {
             List<MatchRule> chain = new ArrayList<>();
-            chain.add(rule); // 第一步 = 上面配置的策略
+            chain.add(rule.copy()); // 第一步 = 上面配置的策略（拷贝，避免链引用自身导致序列化无限递归）
             System.out.println("  [链] 步骤1: " + rule.getStrategyType() + " patterns=" + rule.getPatterns());
             while (true) {
                 System.out.println("\n  [链] 新增步骤 (策略名留空或输入 0 结束):");
