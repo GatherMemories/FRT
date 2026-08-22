@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # ============================================================
-#  FRT - Multi-level Folder Update Tool (Linux launcher)
+#  多层级文件夹更新工具 - 启动脚本 (Linux/macOS)
 #
 #  用法:
-#    ./start-frt.sh              普通交互模式（默认）
-#    ./start-frt.sh --ui        UI 图形界面模式
+#    ./start-frt.sh              默认启动图形界面 (UI)
+#    ./start-frt.sh --console    切换为控制台模式（-c 等价）
+#    ./start-frt.sh --ui         显式指定图形界面（默认即此）
 #    其他参数会原样透传给程序
 #
 #  要求: JDK 17+（与 start-frt.bat 一致，实测 21 可用）
@@ -38,8 +39,22 @@ fi
 # 3. 检查 Java 主版本是否 >= 17（仅警告，不阻止运行）
 JAVA_MAJOR="$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p')"
 if [[ -n "$JAVA_MAJOR" && "$JAVA_MAJOR" -lt 17 ]]; then
-    echo "[WARN] 检测到 Java $JAVA_MAJOR，FRT 要求 JDK 17+，可能无法运行" >&2
+    echo "[WARN] 检测到 Java $JAVA_MAJOR，本工具要求 JDK 17+，可能无法运行" >&2
 fi
 
-# 4. 启动（透传所有参数，例如 --ui）
-exec java -Dfile.encoding=UTF-8 -jar "$JAR" "$@"
+# 4. 默认启动图形界面；--console / -c 切换控制台；其余参数透传
+USE_UI=true
+FORWARD=()
+for arg in "$@"; do
+    case "$arg" in
+        --ui)        USE_UI=true ;;
+        --console|-c) USE_UI=false ;;
+        *)           FORWARD+=("$arg") ;;
+    esac
+done
+
+if [[ "$USE_UI" == true ]]; then
+    exec java -Dfile.encoding=UTF-8 -jar "$JAR" --ui "${FORWARD[@]}"
+else
+    exec java -Dfile.encoding=UTF-8 -jar "$JAR" "${FORWARD[@]}"
+fi

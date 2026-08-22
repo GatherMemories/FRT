@@ -12,16 +12,18 @@
 | 规则生成 | 交互式向导生成/编辑规则文件（控制台逐步向导；UI 为表单弹窗，支持策略链） |
 | 清理残留备份 | 删除备份目录中未被任何操作记录引用的文件（无记录保护的跳过），残留 ≥5 个时启动提醒 |
 | 核心配置 | 设置更新/目标/删除/备份目录与日志级别，写入 config.json |
-| 双界面 | 控制台菜单（7 项）或 Swing 图形界面（`--ui`）；更新/删除前均有 dry-run 预览二次确认 |
+| 双界面 | Swing 图形界面（默认）或控制台菜单（7 项，`--console`）；更新/删除前均有 dry-run 预览二次确认 |
 
 ## 快速开始
 
 ```bash
 mvn -o package -DskipTests            # 构建可执行 jar（首次可去掉 -o）
-./start-frt.sh                        # Linux/macOS：控制台模式
-./start-frt.sh --ui                   # Linux/macOS：图形界面模式
-start-frt.bat --ui                    # Windows：图形界面模式
-java -jar target/FRT-0.1.0-SNAPSHOT.jar --ui   # 直接运行 jar
+./start-frt.sh                        # Linux/macOS：默认启动图形界面
+./start-frt.sh --console              # Linux/macOS：切换控制台模式（-c 等价）
+start-frt.bat                         # Windows：默认启动图形界面
+start-frt.bat --console               # Windows：切换控制台模式（-c 等价）
+java -jar target/FRT-0.1.0-SNAPSHOT.jar --ui   # 直接运行 jar（图形界面）
+java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 ```
 
 要求 JDK 17+。跨平台注意：config.json 的 `baseDirectory` 若是 Windows 路径，在 Linux 上需改为对应绝对路径。
