@@ -192,11 +192,14 @@ public class McModStrategy extends AbstractOperationStrategy {
                         // 版本占位符自动兜底（MANIFEST.MF -> 文件名）
                         modInfos = ModMetadataParser.parseJar(file);
                         MOD_INFO_CACHE.put(cacheKey, modInfos);
-                    }
-                    if (modInfos.isEmpty()) {
-                        // 带完整路径：update 与 target 目录可能各有一个同名 jar（如 app.jar），
-                        // 只显示文件名会误以为"同一个文件被扫了两次"
-                        LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file);
+                        if (modInfos.isEmpty()) {
+                            // 首次解析失败：警告一次（带完整路径，区分 update/target 同名 jar）
+                            LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file);
+                            return;
+                        }
+                    } else if (modInfos.isEmpty()) {
+                        // 缓存命中的空结果（同文件本会话已解析过）：
+                        // 静默跳过，避免 doAdd/doReplace 多个钩子重复扫同一 jar 时反复警告
                         return;
                     }
                     for (ModInfo modInfo : modInfos) {
