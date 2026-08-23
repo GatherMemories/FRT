@@ -42,22 +42,25 @@ public class RestoreService {
      */
     public void executeRestore() {
         try {
-            // 1. 加载所有操作记录
-            Map<String, ProcessingResult> operationRecords = BackupFileLoader.getOperationRecordFiles();
-
-            if (operationRecords == null || operationRecords.isEmpty()) {
-                System.out.println("\n=========================================");
-                System.out.println("[执行] 恢复操作");
-                System.out.println("=========================================");
-                LoggerUtil.logWarn("[失败] 没有找到可用的备份记录，请先执行更新操作以创建备份");
-                return;
-            }
-
-            // 按时间排序备份记录（）
-            List<String> fileNames = new ArrayList<>(operationRecords.keySet());
-
             // 循环菜单，允许用户选择多个备份进行恢复
             while (true) {
+                // 每次循环都重新加载备份记录：loadOperationRecordsFiles() 每次都会替换静态
+                // operationRecordFiles 引用（读盘重建）。若只加载一次，固定/删除等写盘操作
+                // 修改的是"新 map"，而列表仍显示"旧 map"，导致同会话内固定后 [固定] 不刷新
+                // （用户实测：固定→删除→再固定另一个，列表无 [固定]，重进备份功能才显示）
+                Map<String, ProcessingResult> operationRecords = BackupFileLoader.getOperationRecordFiles();
+
+                if (operationRecords == null || operationRecords.isEmpty()) {
+                    System.out.println("\n=========================================");
+                    System.out.println("[执行] 恢复操作");
+                    System.out.println("=========================================");
+                    LoggerUtil.logWarn("[失败] 没有找到可用的备份记录，请先执行更新操作以创建备份");
+                    return;
+                }
+
+                // 按时间排序备份记录
+                List<String> fileNames = new ArrayList<>(operationRecords.keySet());
+
                 System.out.println("\n=========================================");
                 System.out.println("[执行] 恢复操作");
                 System.out.println("=========================================");
@@ -167,11 +170,10 @@ public class RestoreService {
                             boolean success = BackupFileLoader.deleteBackupRecord(deleteFileName);
                             if (success) {
                                 successCount++;
-                                operationRecords.remove(deleteFileName);
                             } else {
                                 failCount++;
                             }
-                            fileNames.remove(index);
+                            // 不手动维护本地列表：下一轮循环会重新加载，删除结果立即反映
                         }
 
                         LoggerUtil.logInfo("[成功] 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");

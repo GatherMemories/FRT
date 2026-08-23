@@ -5,16 +5,22 @@ import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.ui.UserPrompter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -132,6 +138,16 @@ class RestoreServiceFormatTest {
         }
     }
 
+    private int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = haystack.indexOf(needle, idx)) != -1) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
+    }
+
     private OperationRecord operationRecord(String path) {
         OperationRecord rec = new OperationRecord();
         rec.setStrategyType("Test");
@@ -139,5 +155,62 @@ class RestoreServiceFormatTest {
         rec.setTargetPath(Path.of("/tmp/" + path));
         rec.setSuccess(true);
         return rec;
+    }
+
+    // ---------- 端到端：同会话内固定/删除后列表实时刷新（用户实测场景） ----------
+
+    /**
+     * 回归测试：同一恢复会话内"固定 A → 删除 B → 固定 C（不是同一个）"，
+     * 列表文字输出必须立即显示 [固定]，无需重新进入备份功能。
+     * 根因：executeRestore 只在循环外加载一次记录，而 loadOperationRecordsFiles()
+     * 每次调用都重建静态 map；固定/删除写盘后列表仍读旧 map 引用 → [固定] 不刷新。
+     * 修复：每次循环重新加载。
+     */
+    @Test
+    void pinDeletePinSameSessionRefreshesList() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        PrintStream originalOut = System.out;
+        try {
+            // 三条记录：A(10:00) B(11:00) C(12:00)，倒序显示 C, B, A
+            ProcessingResult a = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 10, 0, 0));
+            a.addOperationRecord(operationRecord("a"));
+            ProcessingResult b = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 11, 0, 0));
+            b.addOperationRecord(operationRecord("b"));
+            ProcessingResult c = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 12, 0, 0));
+            c.addOperationRecord(operationRecord("c"));
+            assertTrue(BackupFileLoader.saveOperationRecord(a));
+            assertTrue(BackupFileLoader.saveOperationRecord(b));
+            assertTrue(BackupFileLoader.saveOperationRecord(c));
+
+            // 交互序列：固定 C(1) → 删除 B(-1, 删 2) → 固定 A(2) → 空输入退出
+            Queue<String> inputs = new ArrayDeque<>(List.of(
+                    "1", "p",   // 固定 C（12:00 最新，倒序第 1 条）
+                    "-1", "2", "y", // 删除 B（11:00，第 2 条）
+                    "2", "p",   // 固定 A（删除后剩 C,A；A 为第 2 条）
+                    ""          // 退出
+            ));
+            RestoreService service = new RestoreService(null, inputs::poll);
+
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            System.setOut(new PrintStream(buffer, true, StandardCharsets.UTF_8));
+            service.executeRestore();
+            System.setOut(originalOut);
+
+            String output = buffer.toString(StandardCharsets.UTF_8);
+            // B 的列表行（"[backup-...json] 时间 | ..."）应只出现 3 次：初始列表、固定C后列表、
+            // 删除确认列表；删除后不再出现（旧 bug 会在删除后的列表继续显示，且 [固定] 不刷新）。
+            long bCount = countOccurrences(output, "[backup-20260823-110000.json] 2026-08-23 11:00:00");
+            assertEquals(3, bCount,
+                    "B 删除后不应再出现在列表（初始列表+固定C后列表+删除确认应各 1 次）。实际列表次数 " + bCount + "，输出:\n" + output);
+            // C 固定后，后续列表输出应含 [固定]（同会话内立即刷新）
+            assertTrue(output.contains("backup-20260823-120000.json] [固定]"),
+                    "固定 C 后列表应实时显示 [固定]，无需重新进入备份功能。实际输出:\n" + output);
+            // A 固定后同样显示
+            assertTrue(output.contains("backup-20260823-100000.json] [固定]"),
+                    "固定 A 后列表应实时显示 [固定]。实际输出:\n" + output);
+        } finally {
+            System.setOut(originalOut);
+            TestSupport.restoreBackupPath();
+        }
     }
 }
