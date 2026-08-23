@@ -38,7 +38,7 @@ public final class PreviewUtil {
         System.out.println("-----------------------------------------");
         for (OperationRecord r : records) {
             if (!r.isSuccess()) {
-                System.out.println("  [!] " + r.getErrorMessage());
+                System.out.println(formatErrorLine(r));
                 continue;
             }
             String op;
@@ -54,5 +54,15 @@ public final class PreviewUtil {
         }
         System.out.println("-----------------------------------------");
         return planCount;
+    }
+
+    /**
+     * 格式化预览失败行（包内可见供测试）：明确告诉用户是哪个文件未找到，提示友好。
+     * 输出示例：  [!] 未找到目标文件: /path/THtest/a.txt（文件不存在、或不是文件）
+     */
+    static String formatErrorLine(OperationRecord r) {
+        String target = r.getTargetPath() != null ? r.getTargetPath().toString()
+                : (r.getSourcePath() != null ? r.getSourcePath().toString() : "未知文件");
+        return "  [!] 未找到目标文件: " + target + "（" + r.getErrorMessage() + "）";
     }
 }

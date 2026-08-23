@@ -554,6 +554,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
     /** 行内特殊标记：固定（永久保留，不受淘汰影响），紫色加粗凸显 */
     private static final String PINNED_TOKEN = "[固定]";
+    /** 行内错误标记：[!]（预览/恢复失败提示）只标记本身红色，路径与原因保持中性可读 */
+    private static final String ERROR_TOKEN = "[!]";
     /** JSON 键名："key" :（规则/配置预览里的参数名，如黑白名单 patterns/excludePatterns） */
     private static final Pattern JSON_KEY = Pattern.compile("\"([^\"]+)\"\\s*:");
     /** logback 时间戳+级别前缀（CONSOLE pattern：%d{HH:mm:ss.SSS} %-5level %msg） */
@@ -562,7 +564,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     /**
      * 把一行拆分为若干着色片段（包内可见供测试）：
      * 整行先按 styleForLine 取基础样式，再扫描行内特殊 token 单独着色——
-     * logback 时间戳前缀灰色、[固定] 紫色加粗、JSON 键名蓝色（预览里的参数名醒目）。
+     * logback 时间戳前缀灰色、[固定] 紫色加粗、[!] 红色、JSON 键名蓝色（预览里的参数名醒目）。
      */
     static List<LineSegment> segmentStyledLine(String line) {
         List<LineSegment> segments = new ArrayList<>();
@@ -580,6 +582,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         int n = content.length();
         while (idx < n) {
             int pin = content.indexOf(PINNED_TOKEN, idx);
+            int err = content.indexOf(ERROR_TOKEN, idx);
             Matcher m = JSON_KEY.matcher(content);
             int keyStart = -1;
             int keyEnd = -1;
@@ -590,14 +593,21 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             // 选最近的 token 起点
             int next = n;
             boolean isPinned = false;
+            boolean isError = false;
             boolean isKey = false;
             if (pin >= 0 && pin < next) {
                 next = pin;
                 isPinned = true;
             }
+            if (err >= 0 && err < next) {
+                next = err;
+                isPinned = false;
+                isError = true;
+            }
             if (keyStart >= 0 && keyStart < next) {
                 next = keyStart;
                 isPinned = false;
+                isError = false;
                 isKey = true;
             }
             if (next > idx) {
@@ -609,6 +619,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             if (isPinned) {
                 segments.add(new LineSegment(PINNED_TOKEN, pinnedStyle()));
                 idx = pin + PINNED_TOKEN.length();
+            } else if (isError) {
+                segments.add(new LineSegment(ERROR_TOKEN, errorStyle()));
+                idx = err + ERROR_TOKEN.length();
             } else {
                 segments.add(new LineSegment(content.substring(keyStart, keyEnd), keyStyle()));
                 idx = keyEnd;
@@ -621,6 +634,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         SimpleAttributeSet s = new SimpleAttributeSet();
         StyleConstants.setForeground(s, UITheme.LOG_PINNED);
         StyleConstants.setBold(s, true);
+        return s;
+    }
+
+    private static SimpleAttributeSet errorStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, UITheme.LOG_ERROR);
         return s;
     }
 
@@ -675,11 +694,11 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             StyleConstants.setForeground(s, UITheme.LOG_ACCENT);
             return s;
         }
-        // 6. 预览操作类型（重点动作）：新增=绿、删除=橙、[!]错误=红；替换等常态操作保持中性
+        // 6. 预览操作类型（重点动作）：新增=绿、删除=橙；替换等常态操作保持中性
         //    （预览行格式 "[+] 新增: path"，动词后带冒号，避免误伤选项文本里的"删除"字样）
+        //    [!] 错误行整行不上红：由 segmentStyledLine 只给 [!] 标记分段上红，路径/原因保持中性可读
         if (line.contains("新增:")) { StyleConstants.setForeground(s, UITheme.LOG_SUCCESS); return s; }
         if (line.contains("删除:")) { StyleConstants.setForeground(s, UITheme.LOG_WARN); return s; }
-        if (line.contains("[!]")) { StyleConstants.setForeground(s, UITheme.LOG_ERROR); return s; }
         // 7. 输入回显：灰（次要信息）
         if (trimmed.startsWith(">>")) {
             StyleConstants.setForeground(s, UITheme.LOG_MUTED);

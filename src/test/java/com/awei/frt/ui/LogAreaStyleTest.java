@@ -150,11 +150,29 @@ class LogAreaStyleTest {
 
     @Test
     void previewOperationTypesAreColored() {
-        // 只有重点动作上色：新增绿 / 删除橙 / 错误红；替换是常态操作保持中性
+        // 只有重点动作上色：新增绿 / 删除橙；替换是常态操作保持中性
         assertSuccess("  [+] 新增: /path/THtest/app.jar\n");
         assertText("  [=] 替换: /path/THtest/config/app.properties\n");
         assertWarn("  [=] 删除: /path/THtest/old.jar\n");
-        assertError("  [!] 文件不存在，无法处理\n");
+        // [!] 行整行不上红（分段后仅 [!] 标记红，见 errorTokenGetsRedSegment）
+        assertText("  [!] 文件不存在，无法处理\n");
+    }
+
+    @Test
+    void errorTokenGetsRedSegment() {
+        // [!] 错误提示：只标记本身红色，路径/原因保持中性可读（用户要求未找到提示用颜色区分，不要整行红）
+        String line = "  [!] 未找到目标文件: /path/THtest/a.txt（文件不存在、或不是文件）\n";
+        java.util.List<FRTFrame.LineSegment> segments = FRTFrame.segmentStyledLine(line);
+        FRTFrame.LineSegment error = segments.stream()
+                .filter(seg -> seg.text().equals("[!]"))
+                .findFirst().orElseThrow();
+        assertEquals(UITheme.LOG_ERROR, StyleConstants.getForeground(error.style()));
+
+        // 路径/原因内容段保持中性浅色
+        FRTFrame.LineSegment content = segments.stream()
+                .filter(seg -> seg.text().contains("a.txt"))
+                .findFirst().orElseThrow();
+        assertEquals(UITheme.LOG_TEXT, StyleConstants.getForeground(content.style()));
     }
 
     @Test

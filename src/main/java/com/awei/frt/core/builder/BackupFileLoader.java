@@ -168,12 +168,17 @@ public class BackupFileLoader {
             }
             // 检查文件是否已存在于备份文件列表中（存在更改为新路径）
             String fileMd5 = FileSignUtil.getFileMd5(filePath);
-            Path backupFilePath = getBackupFilePath(filePath);
-            if (backupFiles.containsKey(fileMd5)) {
+            Path backupFilePath = getBackupFilePath(filePath, fileMd5);
+            // 同内容已备份且备份文件仍在磁盘上：只更新索引，不重复拷贝（MD5 去重合并）。
+            // 恢复时按 MD5 找到备份、拷贝到记录的目标路径（目标原名），备份文件名不影响恢复，
+            // 因此不同文件名的同内容文件（如 config.txt 与 config (副本).md）共用一个备份即可。
+            Path existing = backupFiles.get(fileMd5);
+            if (existing != null && Files.isRegularFile(existing)) {
                 backupFiles.put(fileMd5, backupFilePath);
                 return true;
             }
-
+            // 索引缺失或磁盘备份已丢失（被清理/误删等）：重新拷贝重建——
+            // 若只看索引就跳过拷贝，备份文件丢失后后续更新永远不再落盘，恢复时会提示找不到备份
             // 备份文件（按相对路径镜像存储，避免不同目录下同名文件互相覆盖）
             Path parentDir = backupFilePath.getParent();
             if (parentDir != null && !Files.exists(parentDir)) {
@@ -189,30 +194,30 @@ public class BackupFileLoader {
     }
 
     /**
-     * 计算备份文件路径：以基准目录为根镜像原始文件的相对路径，
-     * 避免不同目录下同名文件互相覆盖；无法相对化时退回文件名方案
+     * 计算备份文件路径：平铺存储（直接以原文件名放在 backup/ 下，便于备份目录一眼看清所有备份）。
+     * 同名但内容不同（MD5 不同）的文件加短哈希后缀区分，避免互相覆盖；
+     * 内容相同（MD5 相同）的文件由 addBackupFile 按 MD5 去重自动合并为一份。
+     * （恢复/清理均按 MD5 索引查找，命名不影响；旧版层级备份仍在 backup/ 下会被递归扫描到，自动兼容）
      * @param filePath 原始文件路径
+     * @param fileMd5 文件内容 MD5（用于同名不同内容时区分）
      * @return 备份文件路径
      */
-    private static Path getBackupFilePath(Path filePath) {
+    private static Path getBackupFilePath(Path filePath, String fileMd5) {
         Path backupPath = ConfigLoader.getBackupPath();
-        Config config = ConfigLoader.getConfig();
-        if (config == null || filePath == null) {
-            return backupPath.resolve(filePath != null ? filePath.getFileName() : Path.of("unknown")).normalize();
+        if (backupPath == null || filePath == null) {
+            return backupPath != null ? backupPath.resolve("unknown") : Path.of("unknown");
         }
-
-        Path basePath = config.getBaseDirectory();
-        Path relative;
-        try {
-            relative = basePath.relativize(filePath);
-        } catch (Exception e) {
-            // 无法相对化（如不同盘符），退回文件名
-            relative = Path.of(filePath.getFileName().toString());
+        String name = filePath.getFileName().toString();
+        Path candidate = backupPath.resolve(name).normalize();
+        // 同名但内容不同：加短哈希后缀，避免互相覆盖
+        if (Files.exists(candidate) && fileMd5 != null && !fileMd5.isEmpty()) {
+            String existingMd5 = FileSignUtil.getFileMd5(candidate);
+            if (!fileMd5.equals(existingMd5)) {
+                String shortMd5 = fileMd5.length() > 8 ? fileMd5.substring(0, 8) : fileMd5;
+                candidate = backupPath.resolve(name + "-" + shortMd5).normalize();
+            }
         }
-
-        // 防止路径穿越：丢弃 .. 片段
-        String rel = relative.toString().replace("..", "_");
-        return backupPath.resolve(rel).normalize();
+        return candidate;
     }
 
     /**
