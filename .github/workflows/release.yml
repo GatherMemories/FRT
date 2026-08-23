@@ -19,6 +19,9 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          # 拉全量历史（含 tags）：发布说明需用 git log 对比上一 tag 生成"本次更新"列表
+          fetch-depth: 0
 
       - name: 安装 JDK 21
         uses: actions/setup-java@v5
@@ -71,6 +74,18 @@ jobs:
         run: |
           # 确保 Release 存在（首个平台创建，其余平台复用）；zip 在 release/ 下
           cd release
+          # 发布说明：自动对比上一 tag 生成"本次更新"提交列表（--no-merges 只列实际改动，首版无上一 tag 时列最近 20 条）
+          PREV_TAG="$(git describe --tags --abbrev=0 "${{ github.ref_name }}"^ 2>/dev/null || true)"
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES="$(git log --no-merges --pretty=format:'- %s' "$PREV_TAG".."${{ github.ref_name }}")"
+          else
+            CHANGES="$(git log --no-merges --pretty=format:'- %s' -20 "${{ github.ref_name }}")"
+          fi
+          NOTES="## 本次更新
+$CHANGES
+
+---
+三平台自动构建发布包（各含精简运行时，无需安装 JDK）"
           gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" \
-            --notes "三平台自动构建发布包（各含精简运行时，无需安装 JDK）" --target main || true
+            --notes "$NOTES" --target main || true
           gh release upload "${{ github.ref_name }}" "${{ env.ZIP_FILE }}" --clobber
