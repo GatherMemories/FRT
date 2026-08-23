@@ -286,10 +286,7 @@ public class RestoreService {
                     } else {
                         LoggerUtil.logError("[失败] 系统恢复失败，可能处于不一致状态");
                     }
-
-                    // 按任意键继续
-                    System.out.println("\n请按任意键继续...");
-                    prompter.readLine();
+                    // 无"请按任意键继续"停顿（用户要求去掉所有此类无效确认），直接回到恢复菜单
 
                 } catch (NumberFormatException e) {
                     System.out.println("[失败] 无效的输入，请输入数字");
