@@ -730,6 +730,27 @@ public class BackupFileLoader {
         return choice.equals("y") || choice.equals("yes");
     }
 
+    /**
+     * 在目录中查找 MD5 与指定签名匹配的文件（排除 excludePath）。
+     * 用于恢复时检测"目标文件被改名"（内容相同但文件名不同）。
+     * @return 匹配的文件路径，未找到返回 null
+     */
+    private static Path findFileWithMd5InDir(Path dir, String md5, Path excludePath) {
+        if (dir == null || md5 == null || !Files.isDirectory(dir)) {
+            return null;
+        }
+        try (java.util.stream.Stream<Path> stream = Files.list(dir)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(p -> !p.equals(excludePath))
+                    .filter(p -> md5.equals(FileSignUtil.getFileMd5(p)))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            LoggerUtil.logException("扫描目录查找同名内容文件失败: " + dir, e);
+            return null;
+        }
+    }
+
     private static boolean restoreSingleRecord(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             String operationType = record.getOperationType();
@@ -771,6 +792,25 @@ public class BackupFileLoader {
 
             // 检查文件是否存在
             if (!Files.exists(targetPath)) {
+                // 目标按记录名不存在：可能是被改名/移动——若父目录存在 MD5 相同的文件，
+                // 提示用户（y=跳过保留，回车=删除该改名文件）；确无则视为已删除，无需操作
+                String addedSign = record.getSourceFileSign();
+                Path renamed = (addedSign != null && targetPath.getParent() != null)
+                        ? findFileWithMd5InDir(targetPath.getParent(), addedSign, targetPath)
+                        : null;
+                if (renamed != null) {
+                    String renamedRel = targetPath.getParent().relativize(renamed).toString();
+                    if (askSkipOrProceed(prompter, "目标文件不存在，但发现内容相同（MD5 匹配）的文件（可能被改名）: "
+                            + renamedRel, "删除该改名文件")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未删除改名文件: " + renamed);
+                        restoreResult.incrementFailure("用户选择跳过改名文件: " + renamedRel);
+                        return true;
+                    }
+                    Files.delete(renamed);
+                    LoggerUtil.logInfo("[成功] 已删除改名文件: " + renamed);
+                    restoreResult.incrementSuccess();
+                    return true;
+                }
                 LoggerUtil.logInfo("[信息] 文件不存在，无需删除: " + targetPath);
                 restoreResult.incrementSuccess();
                 return true;

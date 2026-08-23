@@ -3,6 +3,7 @@ package com.awei.frt;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.core.uitls.FileSignUtil;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
@@ -194,6 +195,43 @@ public class BackupFileLoaderTest {
             RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "y"); // 回答"跳过"
             assertFalse(rr.isFullSuccess(), "目标被修改且用户选择跳过，不算全成功");
             assertTrue(Files.exists(targetFile), "被修改的文件应保留（用户选择跳过）");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    /**
+     * 回归：恢复 ADD 时目标按记录名不存在，但父目录存在 MD5 相同的文件（被改名）——
+     * 应检测并询问用户：y=跳过保留，回车=删除改名文件
+     */
+    @Test
+    public void restoreAddDetectsRenamedFileAndAsks() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path targetDir = Files.createDirectories(tempDir.resolve("THtest"));
+            Path targetFile = targetDir.resolve("a.txt"); // 记录名（不存在，被改名）
+            Path renamedFile = targetDir.resolve("b.txt"); // 改名后的文件（内容相同）
+            Files.writeString(renamedFile, "same content", StandardCharsets.UTF_8);
+            String md5 = FileSignUtil.getFileMd5(renamedFile);
+
+            ProcessingResult result = new ProcessingResult();
+            OperationRecord record = new OperationRecord();
+            record.setStrategyType("FileSameName");
+            record.setOperationType(OperationContext.OPERATION_ADD);
+            record.setTargetPath(targetFile);
+            record.setSourceFileSign(md5); // 与改名文件 MD5 相同
+            record.setSuccess(true);
+            result.addOperationRecord(record);
+
+            // 回答 y（跳过保留）→ 改名文件保留
+            RestoreResult rrSkip = BackupFileLoader.restoreFromResult(result, () -> "y");
+            assertFalse(rrSkip.isFullSuccess(), "发现改名文件且用户选择跳过，不算全成功");
+            assertTrue(Files.exists(renamedFile), "选择跳过时改名文件应保留");
+
+            // 回车（删除改名文件）→ b.txt 被删
+            RestoreResult rrDel = BackupFileLoader.restoreFromResult(result, () -> "");
+            assertTrue(rrDel.isFullSuccess(), "回车=删除改名文件，应全成功");
+            assertFalse(Files.exists(renamedFile), "回车时应删除改名文件");
         } finally {
             TestSupport.restoreBackupPath();
         }
