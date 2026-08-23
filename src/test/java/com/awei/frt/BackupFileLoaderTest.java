@@ -169,4 +169,33 @@ public class BackupFileLoaderTest {
             TestSupport.restoreBackupPath();
         }
     }
+
+    /**
+     * 回归：恢复 ADD 时目标文件已被用户修改（MD5 与操作记录不一致）→ 跳过删除，避免丢失改动
+     */
+    @Test
+    public void restoreAddSkipsModifiedTarget() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path targetDir = Files.createDirectories(tempDir.resolve("THtest"));
+            Path targetFile = targetDir.resolve("a.txt");
+            Files.writeString(targetFile, "user modified content", StandardCharsets.UTF_8);
+
+            ProcessingResult result = new ProcessingResult();
+            OperationRecord record = new OperationRecord();
+            record.setStrategyType("FileSameName");
+            record.setOperationType(OperationContext.OPERATION_ADD);
+            record.setTargetPath(targetFile);
+            // 模拟"当时新增"的源文件 MD5 与当前目标内容不同（用户改过）
+            record.setSourceFileSign("00000000000000000000000000000000");
+            record.setSuccess(true);
+            result.addOperationRecord(record);
+
+            RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "n");
+            assertFalse(rr.isFullSuccess(), "目标被修改应跳过，不算全成功");
+            assertTrue(Files.exists(targetFile), "被修改的文件不应被删除");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
 }

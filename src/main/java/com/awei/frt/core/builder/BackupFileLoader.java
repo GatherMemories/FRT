@@ -759,6 +759,17 @@ public class BackupFileLoader {
                 return true;
             }
 
+            // MD5 校验：确认目标还是"当时新增的文件"（未被用户修改），避免误删改动
+            String addedSign = record.getSourceFileSign();
+            if (addedSign != null) {
+                String currentMd5 = FileSignUtil.getFileMd5(targetPath);
+                if (currentMd5 != null && !addedSign.equals(currentMd5)) {
+                    LoggerUtil.logWarn("[跳过] 目标文件已被修改（MD5 不匹配），不删除以免丢失改动: " + targetPath);
+                    restoreResult.incrementFailure("文件已被修改，未删除: " + targetPath.getFileName());
+                    return true; // 跳过该文件，继续恢复其它
+                }
+            }
+
             // 删除文件
             Files.delete(targetPath);
             LoggerUtil.logInfo("[成功] 已删除文件: " + targetPath);
@@ -805,6 +816,17 @@ public class BackupFileLoader {
                 return false;
             }
 
+            // MD5 校验：确认目标还是"替换后的新内容"（未被用户修改），避免覆盖改动
+            String replacedSign = record.getSourceFileSign(); // REPLACE 的源 = 替换后的新内容
+            if (replacedSign != null && Files.exists(targetPath)) {
+                String currentMd5 = FileSignUtil.getFileMd5(targetPath);
+                if (currentMd5 != null && !replacedSign.equals(currentMd5)) {
+                    LoggerUtil.logWarn("[跳过] 目标文件已被修改（MD5 不匹配），不覆盖以免丢失改动: " + targetPath);
+                    restoreResult.incrementFailure("文件已被修改，未恢复: " + targetPath.getFileName());
+                    return true; // 跳过该文件，继续恢复其它
+                }
+            }
+
             // 确保目标目录存在
             Path parentDir = targetPath.getParent();
             if (parentDir != null && !Files.exists(parentDir)) {
@@ -843,6 +865,13 @@ public class BackupFileLoader {
 
             // 检查文件是否已存在
             if (Files.exists(targetPath)) {
+                // MD5 校验：已存在但内容与被删文件不同（用户重建/改过）→ 跳过，不覆盖
+                String currentMd5 = FileSignUtil.getFileMd5(targetPath);
+                if (currentMd5 != null && targetFileSign != null && !targetFileSign.equals(currentMd5)) {
+                    LoggerUtil.logWarn("[跳过] 目标文件已存在且内容不同（MD5 不匹配），不覆盖以免丢失改动: " + targetPath);
+                    restoreResult.incrementFailure("文件已存在且内容不同，未恢复: " + targetPath.getFileName());
+                    return true;
+                }
                 LoggerUtil.logInfo("[信息] 文件已存在，无需恢复: " + targetPath);
                 restoreResult.incrementSuccess();
                 return true;
