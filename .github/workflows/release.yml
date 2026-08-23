@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装 JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -50,14 +50,17 @@ jobs:
           esac
           cp ../target/FRT-0.1.0-SNAPSHOT.jar ../start-frt.sh ../start-frt.bat ../README.md . 
           # 不含 config.json：程序有内置默认配置，缺失时自动创建目录（首次启动即可用）
-          zip -q -r "$ZIP" runtime FRT-0.1.0-SNAPSHOT.jar start-frt.sh start-frt.bat README.md
+          # 统一用 python 打包（Windows runner 没有 zip 命令；Linux/macOS 有 python3）
+          if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+          "$PY" -m zipfile -c "$ZIP" runtime FRT-0.1.0-SNAPSHOT.jar start-frt.sh start-frt.bat README.md
           echo "ZIP_FILE=$ZIP" >> "$GITHUB_ENV"
 
       - name: 上传到 GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 确保 Release 存在（首个平台创建，其余平台复用）
+          # 确保 Release 存在（首个平台创建，其余平台复用）；zip 在 release/ 下
+          cd release
           gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" \
             --notes "三平台自动构建发布包（各含精简运行时，无需安装 JDK）" --target main || true
           gh release upload "${{ github.ref_name }}" "${{ env.ZIP_FILE }}" --clobber
