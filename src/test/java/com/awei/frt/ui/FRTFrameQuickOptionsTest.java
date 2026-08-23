@@ -120,6 +120,14 @@ class FRTFrameQuickOptionsTest {
     }
 
     @Test
+    void restoreOperationPromptGetsYPButtons() {
+        // 恢复操作提示：y=恢复 / p=固定 / 取消（描述截断括号内容）
+        String prompt = "\n操作：y=从此备份恢复, p=固定/取消固定（永久保留）, 其他=返回 (y/p/回车): ";
+        assertEquals(List.of("从此备份恢复", "固定/取消固定", "取消"), labels(prompt),
+                "恢复操作提示应生成 y/p 快捷按钮");
+    }
+
+    @Test
     void moreThanTwentyRecordsAreNotTruncated() {
         // 回归：恢复菜单 22 条记录时，旧上限 20 截断 → 21/22 无快捷按钮（用户实测多轮测试后暴露）
         String prompt = "0. 返回主菜单\n-1. 删除备份记录\n1-22. 恢复备份记录\n"

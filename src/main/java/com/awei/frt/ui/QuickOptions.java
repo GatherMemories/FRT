@@ -39,6 +39,8 @@ public final class QuickOptions {
     private static final Pattern OPTION_ZERO = Pattern.compile("(^|[^0-9.])0([^0-9]|$)");
     /** 独立选项 "-1"（排除 1-10 等范围里的 "-1"） */
     private static final Pattern OPTION_MINUS_ONE = Pattern.compile("(^|[^0-9.])-1([^0-9]|$)");
+    /** "字母=描述"（恢复操作的 y=恢复 / p=固定 等提示，如 "(y/p/回车)"） */
+    private static final Pattern OPTION_LETTER_EQ = Pattern.compile("([a-z])=([^,，\\n]+)");
 
     private QuickOptions() {
     }
@@ -49,6 +51,21 @@ public final class QuickOptions {
      */
     public static List<Option> build(String prompt) {
         List<Option> options = new ArrayList<>();
+        // 恢复操作提示："操作：y=从此备份恢复, p=固定/取消固定（永久保留）, 其他=返回 (y/p/回车): "
+        // → 生成"从此备份恢复"(y)、"固定/取消固定"(p) 按钮（描述截断到括号/逗号前）
+        if (prompt != null && prompt.contains("(y/p")) {
+            Matcher m = OPTION_LETTER_EQ.matcher(prompt);
+            while (m.find()) {
+                String letter = m.group(1);
+                String desc = m.group(2).replaceAll("[（(].*$", "").trim();
+                if (desc.isEmpty() || "其他".equals(desc)) {
+                    continue;
+                }
+                options.add(new Option(desc, letter));
+            }
+            options.add(new Option("取消", ""));
+            return options;
+        }
         // 注意用 "(y/n"（不含右括号）识别：真实提示既有 "(y/n): " 也有 "(y/n, 回车=n): "，
         // 后者 "(y/n" 后跟逗号，contains("(y/n)") 会漏掉 → 该确认就没有快捷按钮（实测踩坑）
         if (prompt != null && prompt.contains("(y/n")) {
