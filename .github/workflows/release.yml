@@ -1,0 +1,62 @@
+name: release
+
+# 打 tag（v*）时自动在 Windows / Linux / macOS 三平台构建：
+# 每个平台各自 jlink 生成对应 runtime，打出"带运行时、无 JDK 可运行"的发布包
+# 并上传到 GitHub Release——开发者无需为每个系统准备电脑
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 构建 jar（跳过测试）
+        run: mvn -B -q package -DskipTests
+
+      - name: 生成精简运行时 runtime/（无 JDK 环境可运行）
+        run: |
+          jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported \
+                --strip-debug --no-header-files --no-man-pages \
+                --output release/runtime
+
+      - name: 打包发布 zip（含 runtime + jar + 脚本 + 配置 + 文档）
+        shell: bash
+        run: |
+          set -e
+          cd release
+          chmod +x runtime/bin/java 2>/dev/null || true
+          PLATFORM="${{ matrix.os }}"
+          case "$PLATFORM" in
+            ubuntu*)  ZIP="多层级文件夹更新工具-0.1.0-linux.zip" ;;
+            windows*) ZIP="多层级文件夹更新工具-0.1.0-windows.zip" ;;
+            macos*)   ZIP="多层级文件夹更新工具-0.1.0-macos.zip" ;;
+          esac
+          cp ../target/FRT-0.1.0-SNAPSHOT.jar ../start-frt.sh ../start-frt.bat ../README.md . 
+          # 不含 config.json：程序有内置默认配置，缺失时自动创建目录（首次启动即可用）
+          zip -q -r "$ZIP" runtime FRT-0.1.0-SNAPSHOT.jar start-frt.sh start-frt.bat README.md
+          echo "ZIP_FILE=$ZIP" >> "$GITHUB_ENV"
+
+      - name: 上传到 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 确保 Release 存在（首个平台创建，其余平台复用）
+          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" \
+            --notes "三平台自动构建发布包（各含精简运行时，无需安装 JDK）" --target main || true
+          gh release upload "${{ github.ref_name }}" "${{ env.ZIP_FILE }}" --clobber

@@ -26,6 +26,13 @@ if not exist "%JAR%" (
     exit /b 1
 )
 
+rem 定位 java：优先发布包自带 runtime（无 JDK 环境可用），其次系统 PATH
+if exist "runtime\bin\java.exe" (
+    set JAVA=runtime\bin\java.exe
+) else (
+    set JAVA=java
+)
+
 rem 默认启动图形界面；--console / -c 切换控制台；其余参数透传（开关参数不转发给程序）
 set USE_UI=1
 set FORWARD=
@@ -43,9 +50,9 @@ goto parse_args
 if "%USE_UI%"=="1" (
     echo 正在启动图形界面（多层级文件夹更新工具）...
     echo 若未弹出窗口，请关闭本窗口后运行: start-frt.bat --console 进入控制台模式
-    java -Dfile.encoding=UTF-8 -jar "%JAR%" --ui %FORWARD%
+    "%JAVA%" -Dfile.encoding=UTF-8 -jar "%JAR%" --ui %FORWARD%
 ) else (
-    java -Dfile.encoding=UTF-8 -jar "%JAR%" %FORWARD%
+    "%JAVA%" -Dfile.encoding=UTF-8 -jar "%JAR%" %FORWARD%
 )
 
 echo.

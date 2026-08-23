@@ -30,14 +30,38 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 
 ### 发布包（zip）首次使用
 
-发布包内含 jar + 启动脚本 + `config.json` 模板（相对路径 `update/THtest/delete/backup`）。解压后：
+发布包内含 jar + 启动脚本 + `runtime/`（无 JDK 也能运行），**无需自带 config.json**（程序有内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录）。解压后：
 
-1. 确认 JDK 17+ 已安装且在 PATH；
-2. 默认启动**图形界面**：双击 `start-frt.bat`（Windows）或运行 `./start-frt.sh`（Linux/macOS，若无可执行权限先 `chmod +x start-frt.sh`）；
-3. 首次使用建议先点顶部"**核心配置**"按钮，把 更新/目标/删除/备份 目录设到实际位置（或直接编辑 `config.json`）；
-4. 更新/删除操作前会创建对应目录；无 `config.json` 时程序使用 jar 内置默认配置。
+1. 默认启动**图形界面**：双击 `start-frt.bat`（Windows）或运行 `./start-frt.sh`（Linux/macOS，若无可执行权限先 `chmod +x start-frt.sh`）；
+2. 首次使用建议先点顶部"**核心配置**"按钮，把 更新/目标/删除/备份 目录设到实际位置；
+3. 需要手动配置时，参照下方[配置文件](#配置文件)章节的 `config.json` 完整示例创建即可。
 
 > 注意：图形界面模式下黑色控制台窗口保持空白是**正常现象**（日志显示在程序窗口内）；如需控制台菜单模式，运行 `start-frt.bat --console`（Linux：`./start-frt.sh --console`）。
+
+## 无 JDK 环境运行（发布包自带精简运行时）
+
+发布包内的 `runtime/` 是 **jlink 生成的精简版 Java 运行时**（约 86MB，仅为完整 JDK 的三分之一），启动脚本**优先使用它**，目标机器**无需安装 JDK**。
+
+```
+工具包/
+├── runtime/            # 精简 Java 运行时（无 JDK 也能运行）
+├── FRT-0.1.0-SNAPSHOT.jar
+├── start-frt.sh        # Linux/macOS 启动脚本
+├── start-frt.bat       # Windows 启动脚本
+├── config.json         # 配置模板
+└── README.md
+```
+
+> **注意**：`runtime/` 与操作系统平台相关（Linux 的 runtime 不能在 Windows 用）。各平台发布包需在对应平台生成 runtime：
+
+```bash
+# 在有 JDK 17+ 的机器上（Windows 用户在 Windows 上执行，Linux 用户在 Linux 上执行）
+jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported \
+      --strip-debug --no-header-files --no-man-pages \
+      --output runtime
+```
+
+把生成的 `runtime/` 目录放进发布包即可；系统已装 JDK 时脚本自动回退用系统 java。
 
 ## 配置文件
 
@@ -52,6 +76,20 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 | `logLevel` | 日志级别（DEBUG/INFO/WARN/ERROR） | `INFO` |
 
 相对路径基于 `baseDirectory` 解析；未知键（如 `logPath`）静默忽略，核心配置向导写入时保留。
+
+**config.json 完整示例**（放到程序根目录；省略则全部用默认值）：
+
+```json
+{
+  "updatePath": "update",
+  "targetPath": "THtest",
+  "deletePath": "delete",
+  "backupPath": "backup",
+  "logLevel": "INFO"
+}
+```
+
+> 程序根目录没有 `config.json` 时使用内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录；需要自定义路径时按上面示例创建即可（也可用顶部"核心配置"功能生成）。
 
 ### 规则文件（replace.json / add.json / delete.json / matching-rules.json，作用相同）
 
