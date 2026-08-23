@@ -230,7 +230,9 @@ public class RestoreService {
                     System.out.println("-----------------------------------------");
 
                     // 6. 确认恢复 / 固定（永久保留，不受备份数量淘汰影响）
-                    System.out.print("\n操作：y=从此备份恢复, p=固定/取消固定（永久保留）, 其他=返回 (y/p/回车): ");
+                    // p 是"固定/取消固定"切换，提示按当前状态动态显示，避免误操作
+                    String pinAction = selectedResult.isPinned() ? "取消固定（当前已固定）" : "固定（永久保留）";
+                    System.out.print("\n操作：y=从此备份恢复, p=" + pinAction + ", 其他=返回 (y/p/回车): ");
                     String confirm = prompter.readLine().toLowerCase();
 
                     if (confirm.equals("p")) {
@@ -299,7 +301,7 @@ public class RestoreService {
         LocalDateTime time = result.getResultTime();
         String timeStr = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String pinned = result.isPinned() ? " [固定]" : "";
-        return String.format("[%s%s] %s | 成功:%d 失败:%d", fileName, pinned, timeStr,
+        return String.format("[%s]%s %s | 成功:%d 失败:%d", fileName, pinned, timeStr,
             result.getSuccessCount(), result.getErrorCount());
     }
 
