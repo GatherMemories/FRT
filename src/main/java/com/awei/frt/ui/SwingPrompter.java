@@ -13,6 +13,12 @@ public class SwingPrompter implements UserPrompter {
     /** 提示来源：取走"自上次输入以来"的完整提示文本（消费式） */
     public interface PromptSource {
         String takePrompt();
+
+        /**
+         * 若当前输出末尾没有换行（如 "…? (y/n): " 这类 print 提示），补一个换行，
+         * 避免用户提交输入后，后续日志直接拼在提示行后面（终端有回车换行，日志区没有）
+         */
+        void ensureLineBreak();
     }
 
     /** 输入区控制（由主窗口实现，EDT 调用） */
@@ -54,6 +60,7 @@ public class SwingPrompter implements UserPrompter {
      * 提交用户输入（主窗口在输入框回车 / 快捷按钮 / 取消时调用，EDT 线程）
      */
     public void submit(String text) {
+        promptSource.ensureLineBreak(); // 提示行未换行时先补换行，避免与后续日志拼接同行
         pendingResult = text == null ? "" : text.trim();
         if (latch.getCount() > 0) {
             latch.countDown();

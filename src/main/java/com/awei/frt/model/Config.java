@@ -26,6 +26,11 @@ public class Config implements Serializable {
     private Path backupPath;         // 备份目录（相对路径，默认：backup）
     private String logLevel;         // 日志级别（默认：INFO）
     private int maxBackupRecords = 20; // 备份记录保留上限（超出自动淘汰最旧，固定 pinned 除外；默认 20）
+    private int logFontSize = 13;    // 日志区字体大小（UI 顶部 A-/A+ 按钮调整，持久化到 config.json；默认 13）
+
+    /** 日志区字体大小可调范围（UI A-/A+ 按钮） */
+    public static final int MIN_LOG_FONT_SIZE = 10;
+    public static final int MAX_LOG_FONT_SIZE = 24;
 
     public Config() {
         this.baseDirectory = Path.of(".").normalize().toAbsolutePath();
@@ -35,6 +40,7 @@ public class Config implements Serializable {
         this.backupPath = Path.of("backup");
         this.logLevel = "INFO";
         this.maxBackupRecords = 20;
+        this.logFontSize = 13;
     }
 
     /**
@@ -202,6 +208,17 @@ public class Config implements Serializable {
 
     public void setLogLevel(String logLevel) {
         this.logLevel = logLevel;
+    }
+
+    /**
+     * 日志区字体大小（默认 13），返回已限制在可调范围内（10~24）的值
+     */
+    public int getLogFontSize() {
+        return logFontSize;
+    }
+
+    public void setLogFontSize(int logFontSize) {
+        this.logFontSize = Math.max(MIN_LOG_FONT_SIZE, Math.min(MAX_LOG_FONT_SIZE, logFontSize));
     }
 
     @Override
