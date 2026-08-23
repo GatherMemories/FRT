@@ -213,4 +213,93 @@ class RestoreServiceFormatTest {
             TestSupport.restoreBackupPath();
         }
     }
+
+    // ---------- 删除固定备份：确认提示显著标注（不增加确认次数，用户拍板） ----------
+
+    /**
+     * 用户决策：删除备份时【不】增加二次确认，而是在第一次确认提示的文字里
+     * 把已固定备份标注得显著、更友好。锁定行为：
+     * - 删除列表里固定备份带 [固定] 标记
+     * - 确认提示前有醒目的 >>> 警告 <<< 行，说明其中固定备份数量、删除不可恢复
+     * - 确认仍只有一次（y 即删），普通备份删除不出现警告
+     */
+    @Test
+    void deletePinnedShowsProminentWarningButSingleConfirm() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        PrintStream originalOut = System.out;
+        try {
+            // 两条记录：A(10:00) 固定，B(11:00) 不固定
+            ProcessingResult a = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 10, 0, 0));
+            a.addOperationRecord(operationRecord("a"));
+            ProcessingResult b = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 11, 0, 0));
+            b.addOperationRecord(operationRecord("b"));
+            assertTrue(BackupFileLoader.saveOperationRecord(a));
+            assertTrue(BackupFileLoader.saveOperationRecord(b));
+            Map<String, ProcessingResult> records = BackupFileLoader.getOperationRecordFiles();
+            String aName = records.keySet().stream().filter(n -> n.contains("100000")).findFirst().orElseThrow();
+            assertTrue(BackupFileLoader.updatePinnedFlag(aName, true), "应能固定 A");
+
+            // 倒序列表：1=B(11:00), 2=A(10:00 固定)
+            // 删除 B(普通，第 1 条)：不应出现固定警告
+            Queue<String> inputsB = new ArrayDeque<>(List.of("-1", "1", "y", ""));
+            RestoreService serviceB = new RestoreService(null, inputsB::poll);
+            ByteArrayOutputStream bufB = new ByteArrayOutputStream();
+            System.setOut(new PrintStream(bufB, true, StandardCharsets.UTF_8));
+            serviceB.executeRestore();
+            String outB = bufB.toString(StandardCharsets.UTF_8);
+            assertFalse(outB.contains(">>> 警告"), "删除普通备份不应出现固定警告");
+            assertTrue(outB.contains("已删除备份记录文件: backup-20260823-110000.json"),
+                    "普通备份一次 y 确认后应删除成功");
+
+            // 删除 A(固定，删后只剩 A 为第 1 条)：确认提示应有显著警告；仍只需一次 y
+            Queue<String> inputsA = new ArrayDeque<>(List.of("-1", "1", "y", ""));
+            RestoreService serviceA = new RestoreService(null, inputsA::poll);
+            ByteArrayOutputStream bufA = new ByteArrayOutputStream();
+            System.setOut(new PrintStream(bufA, true, StandardCharsets.UTF_8));
+            serviceA.executeRestore();
+            String outA = bufA.toString(StandardCharsets.UTF_8);
+            // 显著警告 + 列表行带 [固定] 标记
+            assertTrue(outA.contains(">>> 警告"), "删除固定备份应出现显著警告");
+            assertTrue(outA.contains("[backup-20260823-100000.json] [固定]"),
+                    "删除列表中的固定备份应带 [固定] 标记");
+            assertTrue(outA.contains("已删除备份记录文件: backup-20260823-100000.json"),
+                    "固定备份在单次 y 确认后应删除成功（不增加确认次数）");
+        } finally {
+            System.setOut(originalOut);
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    /**
+     * 删除固定备份时，警告行应包含固定数量与"不可恢复"提示（友好化文案）。
+     */
+    @Test
+    void pinnedDeleteWarningContainsCountAndIrreversibleHint() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        PrintStream originalOut = System.out;
+        try {
+            ProcessingResult a = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 10, 0, 0));
+            a.addOperationRecord(operationRecord("a"));
+            ProcessingResult b = result(false, 1, 0, LocalDateTime.of(2026, 8, 23, 11, 0, 0));
+            b.addOperationRecord(operationRecord("b"));
+            assertTrue(BackupFileLoader.saveOperationRecord(a));
+            assertTrue(BackupFileLoader.saveOperationRecord(b));
+            Map<String, ProcessingResult> records = BackupFileLoader.getOperationRecordFiles();
+            String aName = records.keySet().stream().filter(n -> n.contains("100000")).findFirst().orElseThrow();
+            assertTrue(BackupFileLoader.updatePinnedFlag(aName, true));
+
+            // 范围删除 1-2（包含固定+普通各 1 个）
+            Queue<String> inputs = new ArrayDeque<>(List.of("-1", "1-2", "y", ""));
+            RestoreService service = new RestoreService(null, inputs::poll);
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            System.setOut(new PrintStream(buffer, true, StandardCharsets.UTF_8));
+            service.executeRestore();
+            String out = buffer.toString(StandardCharsets.UTF_8);
+            assertTrue(out.contains("包含 1 个已固定备份"), "警告应说明固定备份数量");
+            assertTrue(out.contains("不可恢复"), "警告应说明固定备份删除后不可恢复");
+        } finally {
+            System.setOut(originalOut);
+            TestSupport.restoreBackupPath();
+        }
+    }
 }

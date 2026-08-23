@@ -137,21 +137,30 @@ public class RestoreService {
                             deleteIndexes.add(deleteIndex);
                         }
 
-                        // 显示要删除的备份列表
+                        // 显示要删除的备份列表（固定备份带 [固定] 标记，便于识别）
                         System.out.println("\n[FILE] 要删除的备份记录 (" + deleteIndexes.size() + "个):");
                         System.out.println("-----------------------------------------");
+                        int pinnedCount = 0;
                         for (int i = 0; i < deleteIndexes.size(); i++) {
                             int index = deleteIndexes.get(i);
                             String fileName = fileNames.get(index);
                             ProcessingResult result = operationRecords.get(fileName);
-                            System.out.printf("%d. [%s] %s | 成功:%d 失败:%d\n",
+                            if (result.isPinned()) {
+                                pinnedCount++;
+                            }
+                            System.out.printf("%d. [%s]%s %s | 成功:%d 失败:%d\n",
                                 (i + 1), fileName,
+                                result.isPinned() ? " [固定]" : "",
                                 result.getResultTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                                 result.getSuccessCount(), result.getErrorCount());
                         }
                         System.out.println("-----------------------------------------");
 
-                        // 确认删除
+                        // 确认删除：若列表包含已固定备份，提示文字中显著标注，提醒不可恢复
+                        if (pinnedCount > 0) {
+                            System.out.println(">>> 警告：待删除的备份中包含 " + pinnedCount + " 个已固定备份（[固定]），"
+                                    + "固定备份永久保留、删除后不可恢复！请谨慎操作 <<<");
+                        }
                         System.out.print("\n确认要删除这 " + deleteIndexes.size() + " 个备份记录吗？此操作不可逆！(y/n): ");
                         String confirmDelete = prompter.readLine().toLowerCase();
 
