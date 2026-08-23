@@ -658,13 +658,9 @@ public class BackupFileLoader {
                 return restoreResult;
             }
 
-            // 2. 确保备份文件已加载
-            getBackupFiles();
-            if (backupFiles == null || backupFiles.isEmpty()) {
-                LoggerUtil.logErrorMsg("恢复操作失败: 备份文件列表为空");
-                restoreResult.incrementFailure("备份文件列表为空");
-                return restoreResult;
-            }
+            // 2. 不预检"备份文件列表为空"（纯新增的备份——如第一次初始化场景——
+            //    恢复只需删除目标文件，不需要旧备份文件；REPLACE/DELETE 需要旧文件时
+            //    由 restoreSingleRecord 按需查找，找不到才单条失败并可回滚）
 
             // 3. 记录已恢复的操作，用于回滚
             List<OperationRecord> restoredRecords = new ArrayList<>();
