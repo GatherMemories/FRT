@@ -42,17 +42,20 @@ jobs:
           set -e
           cd release
           chmod +x runtime/bin/java 2>/dev/null || true
+          # 版本号跟随 tag（v0.1.1 -> 0.1.1），zip 名不再硬编码
+          VERSION="${GITHUB_REF_NAME#v}"
           PLATFORM="${{ matrix.os }}"
           case "$PLATFORM" in
-            ubuntu*)  ZIP="MultiLevelFolderUpdater-0.1.0-linux.zip" ;;
-            windows*) ZIP="MultiLevelFolderUpdater-0.1.0-windows.zip" ;;
-            macos*)   ZIP="MultiLevelFolderUpdater-0.1.0-macos.zip" ;;
+            ubuntu*)  ZIP="MultiLevelFolderUpdater-${VERSION}-linux.zip" ;;
+            windows*) ZIP="MultiLevelFolderUpdater-${VERSION}-windows.zip" ;;
+            macos*)   ZIP="MultiLevelFolderUpdater-${VERSION}-macos.zip" ;;
           esac
-          cp ../target/FRT-0.1.0-SNAPSHOT.jar ../start-frt.sh ../start-frt.bat ../README.md . 
+          # jar 名通配（target/FRT-*.jar，排除 shade 前的 original-*）
+          cp ../target/FRT-*.jar ../start-frt.sh ../start-frt.bat ../README.md . 
           # 不含 config.json：程序有内置默认配置，缺失时自动创建目录（首次启动即可用）
           # 统一用 python 打包（Windows runner 没有 zip 命令；Linux/macOS 有 python3）
           if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
-          "$PY" -m zipfile -c "$ZIP" runtime FRT-0.1.0-SNAPSHOT.jar start-frt.sh start-frt.bat README.md
+          "$PY" -m zipfile -c "$ZIP" runtime FRT-*.jar start-frt.sh start-frt.bat README.md
           echo "ZIP_FILE=$ZIP" >> "$GITHUB_ENV"
 
       - name: 上传到 GitHub Release

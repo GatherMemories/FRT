@@ -22,8 +22,8 @@ mvn -o package -DskipTests            # 构建可执行 jar（首次可去掉 -o
 ./start-frt.sh --console              # Linux/macOS：切换控制台模式（-c 等价）
 start-frt.bat                         # Windows：默认启动图形界面
 start-frt.bat --console               # Windows：切换控制台模式（-c 等价）
-java -jar target/FRT-0.1.0-SNAPSHOT.jar --ui   # 直接运行 jar（图形界面）
-java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
+java -jar target/FRT-*.jar --ui   # 直接运行 jar（图形界面）
+java -jar target/FRT-*.jar        # 直接运行 jar（控制台）
 ```
 
 要求 JDK 17+。跨平台注意：config.json 的 `baseDirectory` 若是 Windows 路径，在 Linux 上需改为对应绝对路径。
@@ -45,7 +45,7 @@ java -jar target/FRT-0.1.0-SNAPSHOT.jar        # 直接运行 jar（控制台）
 ```
 工具包/
 ├── runtime/            # 精简 Java 运行时（无 JDK 也能运行）
-├── FRT-0.1.0-SNAPSHOT.jar
+├── FRT-*.jar
 ├── start-frt.sh        # Linux/macOS 启动脚本
 ├── start-frt.bat       # Windows 启动脚本
 ├── config.json         # 配置模板

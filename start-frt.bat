@@ -13,14 +13,15 @@ title 多层级文件夹更新工具
 cd /d "%~dp0"
 
 rem 兼容两种布局：发布包内 jar 与脚本同目录；开发目录 target\
-if exist "FRT-0.1.0-SNAPSHOT.jar" (
-    set JAR=FRT-0.1.0-SNAPSHOT.jar
-) else (
-    set JAR=target\FRT-0.1.0-SNAPSHOT.jar
+rem jar 名用通配（FRT-*.jar），升版本无需改脚本
+set JAR=
+for /f "delims=" %%f in ('dir /b "FRT-*.jar" 2^>nul') do set JAR=%%f
+if not defined JAR (
+    for /f "delims=" %%f in ('dir /b "target\FRT-*.jar" 2^>nul') do set JAR=target\%%f
 )
 
-if not exist "%JAR%" (
-    echo [ERROR] jar not found: FRT-0.1.0-SNAPSHOT.jar
+if not defined JAR (
+    echo [ERROR] jar not found: FRT-*.jar
     echo Please run: mvn -o package -DskipTests first, or use release package.
     pause
     exit /b 1
