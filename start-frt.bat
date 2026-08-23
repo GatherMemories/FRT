@@ -1,15 +1,16 @@
 @echo off
-rem ============================================================
-rem  多层级文件夹更新工具 - 启动脚本 (Windows)
-rem  设置 UTF-8 代码页保证中文显示，默认启动图形界面
-rem  用法:
-rem    start-frt.bat                默认启动图形界面 (UI)
-rem    start-frt.bat --console      切换为控制台模式（-c 等价）
-rem    start-frt.bat --ui           显式指定图形界面（默认即此）
-rem  要求: JDK 17+（实测 21 可用）
-rem ============================================================
 chcp 65001 >nul
 title 多层级文件夹更新工具
+rem ============================================================
+rem  MultiLevel Folder Updater - launcher (Windows)
+rem  UTF-8 codepage set above BEFORE any Chinese text, so cmd
+rem  never parses UTF-8 bytes as GBK (that caused flash-close).
+rem  Usage:
+rem    start-frt.bat                 default: GUI (UI)
+rem    start-frt.bat --console       console mode (-c works too)
+rem    start-frt.bat --ui            explicit GUI mode
+rem  Requires: JDK 17+ (bundled runtime/ included in release)
+rem ============================================================
 cd /d "%~dp0"
 
 rem 兼容两种布局：发布包内 jar 与脚本同目录；开发目录 target\
@@ -49,11 +50,28 @@ shift
 goto parse_args
 
 :run
+rem 预检 java 可用性：不可用时报错并暂停，避免窗口一闪而过（用户看不到原因）
+"%JAVA%" -version >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo [ERROR] 未找到可用的 java！
+    echo 发布包缺少 runtime\bin\java.exe 且系统未安装 JDK 17+。
+    echo 请重新下载完整发布包（zip 内应含 runtime 目录），或安装 JDK 17+ 后重试。
+    pause
+    exit /b 1
+)
+
 if "%USE_UI%"=="1" (
     echo 正在启动图形界面（多层级文件夹更新工具）...
     echo 若未弹出窗口，请关闭本窗口后运行: start-frt.bat --console 进入控制台模式
     "%JAVA%" -Dfile.encoding=UTF-8 -jar "%JAR%" --ui %FORWARD%
-    rem UI 关闭后程序退出，终端窗口随之自动关闭
+    if errorlevel 1 (
+        echo.
+        echo [错误] 程序启动失败（退出码 %errorlevel%）！
+        echo 请运行: start-frt.bat --console 查看详细错误日志（logs 目录）。
+        pause
+    )
+    rem UI 正常关闭后，终端窗口自动关闭；启动失败时已在上方暂停提示
     exit /b 0
 ) else (
     "%JAVA%" -Dfile.encoding=UTF-8 -jar "%JAR%" %FORWARD%
