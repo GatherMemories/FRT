@@ -38,7 +38,7 @@ jobs:
       - name: 生成精简运行时 runtime/（无 JDK 环境可运行）
         shell: bash
         run: |
-          jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported \
+          jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported,jdk.compiler \
                 --strip-debug --no-header-files --no-man-pages \
                 --output release/runtime
 

@@ -12,7 +12,8 @@
 | 规则生成 | 交互式向导生成/编辑规则文件（控制台逐步向导；UI 为表单弹窗，支持策略链） |
 | 清理残留备份 | 删除备份目录中未被任何操作记录引用的文件（无记录保护的跳过），残留 ≥5 个时启动提醒 |
 | 核心配置 | 设置更新/目标/删除/备份目录与日志级别，写入 config.json |
-| 双界面 | Swing 图形界面（默认）或控制台菜单（7 项，`--console`）；更新/删除前均有 dry-run 预览二次确认 |
+| 打包插件 | 把 `plugins/` 目录下的 `.java` 策略源码一键编译打包成 jar（下次启动自动加载），无需命令行/IDE |
+| 双界面 | Swing 图形界面（默认）或控制台菜单（8 项，`--console`）；更新/删除前均有 dry-run 预览二次确认 |
 
 ## 快速开始
 
@@ -56,7 +57,7 @@ java -jar target/FRT-*.jar        # 直接运行 jar（控制台）
 
 ```bash
 # 在有 JDK 17+ 的机器上（Windows 用户在 Windows 上执行，Linux 用户在 Linux 上执行）
-jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported \
+jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported,jdk.compiler \
       --strip-debug --no-header-files --no-man-pages \
       --output runtime
 ```
@@ -150,11 +151,15 @@ jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported 
 3. **多层支持**：任意层级的规则继承链；
 4. **策略隔离**：不同策略类型的规则独立继承。
 
-## 外部策略插件
+## 外部策略插件（自定义策略 · 小白教程）
 
-按规范编写策略类打成 jar 放入程序工作目录的 `plugins/`，启动时自动加载，规则文件 `strategyType` 直接填插件类型标识；与内置类型冲突时插件被跳过（内置优先）。向导的策略列表会自动包含插件策略。
+内置策略不够用时，可以**自己写一个策略类**，打成 jar 放进程序根目录的 `plugins/` 文件夹，程序启动时自动加载。之后规则文件 `strategyType` 直接填你的策略标识即可，规则生成向导的策略列表也会自动出现它。
 
-**推荐方式：继承 `AbstractOperationStrategy`**（模板方法已统一 null 校验、节点过滤与 add/replace/delete 分派，只需实现钩子）：
+> 全程 4 步：**写代码 → 打包成 jar → 放进 plugins/ → 在规则里引用**。下面每一步都有可直接复制的内容。
+
+### 第 1 步：写策略类（复制改改就能用）
+
+新建 `MyStrategy.java` 文件（**文件名必须和类名一致**）。下面的示例实现"只处理 `.dat` 文件"：
 
 ```java
 package com.example;
@@ -164,62 +169,76 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.strategy.AbstractOperationStrategy;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
+import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** 自定义策略：只处理 .dat 文件 */
 public class MyStrategy extends AbstractOperationStrategy {
-    @Override
-    public String getStrategyType() { return "MyStrategy"; }   // 规则文件 strategyType 填这个
 
     @Override
-    public String getDescription() { return "示例策略（按扩展名处理 .dat）"; }
+    public String getStrategyType() { return "MyStrategy"; }          // ① 唯一标识：规则文件 strategyType 填这个
 
-    /** 节点筛选：决定哪些文件/目录进入本策略 */
+    @Override
+    public String getDescription() { return "按规则黑白名单处理文件"; }     // ② 中文说明（向导/日志显示，可省略）
+
+    // ③ 筛选：返回 true 的文件才交给本策略
+    //    用基类提供的 matchesRules() 按规则文件 patterns/excludePatterns 过滤（与内置策略同款）：
+    //    patterns:["*.txt"] 只处理 txt；patterns 留空 = 匹配所有；excludePatterns 排除；caseSensitive=false 忽略大小写
     @Override
     protected boolean accepts(FileNode node, OperationContext context) {
-        return !node.isDirectory() && node.getName().endsWith(".dat");
+        return !node.isDirectory() && matchesRules(node, context);
     }
 
-    /** 新增钩子：返回 true = 已处理该节点（链中后续策略跳过） */
+    // ④ 新增：把更新目录的文件复制到目标目录
     @Override
     protected boolean doAdd(FileNode node, OperationContext context) {
-        Path target = context.getTargetPath(node.getRelativePath()); // 目标位置
+        Path target = context.getTargetPath(node.getRelativePath()); // 目标位置（别用 node.getPath()！那是源文件位置）
         if (Files.exists(target)) {
-            return false;                       // 目标已存在，交给 replace 钩子
+            return false;   // 目标已存在 → 不新增，交给下面的 replace 钩子
         }
-        OperationRecord record = newRecord(context);                // 创建操作记录（已带策略类型；FileUtil 会自动写入操作类型）
-        boolean ok = FileUtil.addFile(node.getPath(), target, record, context.isDryRun()); // 复制+备份+记录
-        context.recordOperation(record);        // 提交记录（预览模式不落盘）
+        OperationRecord record = newRecord(context);                  // 创建操作记录（自动带好你的策略类型）
+        boolean ok = FileUtil.addFile(node.getPath(), target, record, context.isDryRun()); // 真正的复制动作
+        context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
+        // 处理结果打日志（+ = 新增，预览模式不打，避免"预览就报成功"误解）
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
-            node.setHandled(true);              // 标记已处理（策略链后续策略跳过）
+            node.setHandled(true);                                    // 标记已处理：策略链后续步骤不再碰这个文件
         }
         return ok;
     }
 
+    // ⑤ 替换：目标已有同名文件时用源文件覆盖（自动备份旧文件）
     @Override
     protected boolean doReplace(FileNode node, OperationContext context) {
         Path target = context.getTargetPath(node.getRelativePath());
         if (!Files.exists(target)) {
             return false;
         }
-        // 读取规则额外参数：context.getRuleParam("key")，如 {"caseSensitive": "false"}
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.replaceFile(node.getPath(), target, record, context.isDryRun());
-        context.recordOperation(record);
+        context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);
         }
         return ok;
     }
 
+    // ⑥ 删除：删除目标目录里对应的文件（自动备份后删除）
     @Override
     protected boolean doDelete(FileNode node, OperationContext context) {
         Path target = context.getTargetPath(node.getRelativePath());
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.deleteFile(target, record, context.isDryRun());
-        context.recordOperation(record);
+        context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);
         }
@@ -228,9 +247,65 @@ public class MyStrategy extends AbstractOperationStrategy {
 }
 ```
 
-> 上述写法与内置策略（如 `ZipEntryBaseStrategy`）完全一致，可直接参考其源码；`accepts` 只做筛选，真正的文件操作统一走 `FileUtil` + `OperationRecord` 流程，即可自动获得备份、操作记录与会话恢复能力。
+**只想要"新增"？** 把 `doReplace`/`doDelete` 的方法体换成 `return false;` 即可（返回 false = 本策略不管这个操作）。
 
-**简单方式：直接实现 `OperationStrategy` 接口**（需自行处理一切，适合极简场景）：
+**各方法通俗解释**：
+
+- `getStrategyType()` —— 策略身份证。返回值写进规则文件 `strategyType` 字段，**全程序唯一**（不能与内置策略/其他插件重名，否则被跳过）。
+- `getDescription()` —— 中文说明，向导和日志展示用，不写也行。
+- `accepts(...)` —— 过滤器。返回 `true` 的文件才进入本策略；**只做判断，不要在这里做文件操作**。想按规则文件的 `patterns`/`excludePatterns` 黑白名单过滤（与内置策略一致），一行调用基类的 `matchesRules(node, context)` 即可（空白名单=匹配所有、黑名单排除、`caseSensitive=false` 忽略大小写）——不需要自己实现通配符匹配。
+- `doAdd / doReplace / doDelete(...)` —— 三个操作钩子：新增/替换/删除时被调用。返回 `true` = 已处理该节点（链中后续策略跳过）；返回 `false` = 未处理。
+- `node` —— 当前文件节点（源文件）。`node.getPath()` 源路径；`node.getName()` 文件名；`node.getRelativePath()` 相对路径；`node.setHandled(true)` 标记已处理。
+- `context` —— 操作上下文。`context.getTargetPath(相对路径)` 计算**目标位置**；`context.getRuleParam("key")` 读取规则 `replacements` 里的参数；`context.isDryRun()` 是否预览模式；`context.recordOperation(record)` 提交操作记录。
+- `FileUtil` —— 真正的文件操作工具。三个方法**内部自动完成备份 + 写操作记录 + MD5 特征码**，务必用它而不是自己写 `Files.copy`（否则没有备份/恢复能力）：
+  - `FileUtil.addFile(源, 目标, record[, dryRun])` —— 复制新增
+  - `FileUtil.replaceFile(源, 目标, record[, dryRun])` —— 覆盖替换（自动备份旧文件）
+  - `FileUtil.deleteFile(文件, record[, dryRun])` —— 删除（自动备份）
+
+> 预览模式（dryRun）下 `FileUtil` 会自动"只校验不落盘"，所以上面代码直接透传 `context.isDryRun()` 即可，无需自己判断。
+
+> **想看处理结果日志？** 处理完成后用 `LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"))` 打印（`+` 新增 / `=` 替换 / `-` 删除，与内置策略一致；预览模式跳过不打印）。不打印的话文件照常处理，但界面日志区看不到结果——内置策略都有这行日志。
+
+### 第 2 步：编译打包成 jar
+
+**方法 A：程序内置"打包插件"按钮（推荐，无需命令行）**
+
+程序界面上有 **"打包插件"** 按钮（控制台菜单：选 `7`），一键把 `plugins/` 目录下所有 `.java` 源码编译打包成 jar（多个文件互相引用也能一起打包），输出回 `plugins/`。打包成功日志提示"重启程序后自动加载生效"。需要完整 JDK 启动（发布包精简运行时已内置编译器模块，可直接用）。
+
+**方法 B：命令行**（需要 JDK 17+；`FRT-*.jar` 换成你实际的 jar 文件名）：
+
+```bash
+javac -encoding UTF-8 -cp FRT-0.1.1-SNAPSHOT.jar -d out MyStrategy.java
+jar --create --file my-strategy.jar -C out .
+```
+
+**方法 B：IDE 导出**（IDEA：File → Project Structure → Artifacts 新建 jar，Build → Build Artifacts 导出）。
+
+打出来的 `my-strategy.jar` 里装的是编译后的 `.class` 文件（不是 `.java`）。
+
+### 第 3 步：放进 plugins/ 并启动
+
+1. 在程序根目录建 `plugins/` 文件夹（没有就新建）；
+2. 把 `my-strategy.jar` 放进去；
+3. 启动程序，日志出现 `[插件] 已加载策略插件: my-strategy.jar（1 个策略）` 即成功；规则生成向导的策略列表里也能看到"只处理 .dat 文件"。
+
+### 第 4 步：在规则文件里使用
+
+在更新目录放 `matching-rules.json`：
+
+```json
+{
+  "strategyType": "MyStrategy",
+  "replacements": { "suffix": ".copy" },
+  "inheritToSubfolders": false
+}
+```
+
+策略内用 `context.getRuleParam("suffix")` 就能读到 `".copy"` —— **想给插件传什么参数，都写在 `replacements` 里**，策略里用 `getRuleParam` 读。
+
+### 进阶：直接在 execute 里写（简单方式）
+
+不想继承模板类，也可以直接实现 `OperationStrategy` 接口，但 null 校验、操作类型分派、节点筛选全要自己写：
 
 ```java
 public class MyStrategy implements OperationStrategy {
@@ -242,7 +317,9 @@ public class MyStrategy implements OperationStrategy {
 }
 ```
 
-**方法参数对象参考**：
+> 内置策略源码（`src/main/java/com/awei/frt/core/strategy/`）就是最好的参考，写法与上面完全一致。
+
+**方法参数对象参考**（精确版）：
 
 `FileNode node` —— 当前被处理的文件/目录节点：
 
@@ -277,15 +354,27 @@ public class MyStrategy implements OperationStrategy {
 
 `OperationRecord` —— 操作记录（继承 `AbstractOperationStrategy` 时用 `newRecord(context)` 创建，已填好策略类型；常规流程中 FileUtil 会自动填写操作类型/路径/MD5，**无需手动设置**）。手动场景可用 setter：`setOperationType(OperationContext.OPERATION_ADD 等)`、`setSourcePath`/`setTargetPath`、`setSuccess`、`setErrorMessage`；最后 `context.recordOperation(record)` 提交。
 
-**加载方式**（启动时自动执行，无需额外配置）：
+### 常见问题（避坑）
+
+| 现象 | 原因 / 解决办法 |
+|------|----------------|
+| 日志"未在插件中找到策略实现" | jar 里没有实现 `OperationStrategy` 的类；确认类 `extends AbstractOperationStrategy` 或 `implements OperationStrategy` |
+| 插件加载了，但规则报"策略类型不合法" | 规则 `strategyType` 与 `getStrategyType()` 返回值不一致（含大小写） |
+| 插件被跳过，提示"策略类型已存在" | 与内置策略或其他插件重名了；换一个唯一标识 |
+| 改了代码不生效 | 重新编译打包、替换 plugins/ 里的 jar，并**重启程序**（插件只在启动时加载） |
+| 自动扫描注册不上 | 策略类必须是 `public`、文件名=类名、有公开无参构造 |
+| 文件没备份/没操作记录 | 用了 `Files.copy` 等原生 API 绕过了 FileUtil；改用 `FileUtil.addFile/replaceFile/deleteFile` |
+| 文件被复制到了错误位置 | 目标位置要用 `context.getTargetPath(node.getRelativePath())`，不要用 `node.getPath()` |
+
+### 加载方式（程序启动时自动执行，无需配置）
 
 1. **classpath SPI**：读取应用 classpath 上的 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 描述符（适合策略类与主程序同 classpath 部署）；
 2. **plugins/ 目录 jar**（每个 jar 二选一）：
-   - **标准 SPI**：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容写策略类全限定名（如 `com.example.MyStrategy`，一行一个）；
+   - **标准 SPI**：jar 内提供 `META-INF/services/com.awei.frt.core.strategy.OperationStrategy` 文件，内容写策略类全限定名（如 `com.example.MyStrategy`，一行一个）——**不写也可以**，程序会兜底自动扫描；
    - **自动扫描**：jar 内无 services 文件时，自动扫描 jar 内所有实现 `OperationStrategy` 的具体类（需公开无参构造）。仅当 SPI 实际注册数为 0 时才启用该兜底。
 
 > 注册时若 `strategyType` 与已注册类型（含内置策略）冲突，外部策略被跳过（内置优先），并输出告警。
 
 ## 测试
 
-`mvn test`（surefire 3.2.5，JUnit5 真实运行）：当前 **58 个测试全绿**，覆盖策略注册表/模板方法/动态代理/多策略链/外部插件加载、压缩包策略、模组元数据解析、备份恢复/残留清理/会话记录、进度回调等。
+`mvn test`（surefire 3.2.5，JUnit5 真实运行）：当前 **123 个测试全绿**，覆盖策略注册表/模板方法/动态代理/多策略链/外部插件加载（含读取与执行全面测试）、压缩包策略、模组元数据解析、备份恢复/残留清理/会话记录、进度回调等。

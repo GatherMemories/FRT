@@ -2,7 +2,10 @@ package com.awei.frt.core.strategy;
 
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
+import com.awei.frt.core.uitls.GlobMatcher;
 import com.awei.frt.model.OperationRecord;
+
+import java.util.List;
 
 /**
  * 操作策略抽象基类（模板方法）
@@ -54,6 +57,36 @@ public abstract class AbstractOperationStrategy implements OperationStrategy {
      */
     protected boolean accepts(FileNode node, OperationContext context) {
         return true;
+    }
+
+    /**
+     * 按规则黑白名单匹配节点文件名——内置策略（FileSameName 等）同款语义，外部策略在 accepts 里
+     * 一行调用即可获得与内置策略一致的过滤行为：
+     * <ul>
+     *   <li>空白名单（patterns 为空）= 匹配所有文件；</li>
+     *   <li>黑名单（excludePatterns）命中 = 排除；</li>
+     *   <li>规则 replacements 配置 {@code caseSensitive=false} 时忽略大小写（默认区分）。</li>
+     * </ul>
+     * 本方法只做匹配、不打印"忽略"日志（需要时由调用方自行输出）。
+     *
+     * @return true = 命中规则（应处理该节点）
+     */
+    protected boolean matchesRules(FileNode node, OperationContext context) {
+        if (node == null || context == null
+                || context.getRuleInheritanceContext() == null
+                || context.getRuleInheritanceContext().getRuleChain() == null) {
+            return false;
+        }
+        String fileName = node.getName();
+        boolean caseSensitive = !"false".equalsIgnoreCase(context.getRuleParam("caseSensitive"));
+        List<String> patterns = context.getRuleInheritanceContext().getRuleChain().getPatterns();
+        List<String> excludePatterns = context.getRuleInheritanceContext().getRuleChain().getExcludePatterns();
+        if (!GlobMatcher.matchesAny(fileName, patterns, caseSensitive)) {
+            return false; // 白名单未命中
+        }
+        // 黑名单：空列表表示不排除任何文件
+        return excludePatterns == null || excludePatterns.isEmpty()
+                || !GlobMatcher.matchesAny(fileName, excludePatterns, caseSensitive);
     }
 
     /**

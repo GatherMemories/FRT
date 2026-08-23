@@ -151,8 +151,11 @@ public final class StrategyLoader {
                             && !cls.isEnum()
                             && !Modifier.isAbstract(cls.getModifiers())) {
                         Object instance = cls.getDeclaredConstructor().newInstance();
-                        registerExternal((OperationStrategy) instance, jar.getFileName().toString());
-                        loaded++;
+                        // 只统计实际注册成功的类（空白/null 类型、与内置冲突被跳过的类不计入，
+                        // 否则"已加载 N 个策略"日志数字虚高——加载计数不准确）
+                        if (registerExternal((OperationStrategy) instance, jar.getFileName().toString())) {
+                            loaded++;
+                        }
                     }
                 } catch (Throwable ignored) {
                     // 单个类解析失败不影响其他类（可能是不相关的依赖类）

@@ -8,6 +8,7 @@ import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.service.CoreConfigWizard;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
+import com.awei.frt.service.PluginCompiler;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.service.RuleConfigWizard;
 import com.awei.frt.util.LoggerUtil;
@@ -31,6 +32,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -89,6 +91,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         top.add(topButton("规则生成", this::runWizard));
         top.add(topButton("清理残留备份", this::runCleanup));
         top.add(topButton("核心配置", this::runConfig));
+        top.add(topButton("打包插件", this::runPluginBuild));
         JButton clearLogButton = new JButton("清空日志");
         UITheme.styleButton(clearLogButton);
         clearLogButton.addActionListener(e -> logArea.setText(""));
@@ -230,6 +233,16 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         runService("清理残留备份", () -> {
             int deleted = BackupFileLoader.cleanupOrphanBackupFiles(prompter);
             return "清理完成: 删除 " + deleted + " 个残留备份文件";
+        });
+    }
+
+    /**
+     * 打包插件：把 plugins/ 目录下的 .java 策略源码编译打包成 jar（下次启动自动加载）
+     */
+    private void runPluginBuild() {
+        runService("打包插件", () -> {
+            PluginCompiler.CompileResult r = PluginCompiler.compilePluginsToJar(Path.of("plugins"));
+            return r.isSuccess() ? r.getMessage() : "[失败] " + r.getMessage();
         });
     }
 

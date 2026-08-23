@@ -7,11 +7,13 @@ import com.awei.frt.model.RestoreResult;
 import com.awei.frt.service.CoreConfigWizard;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
+import com.awei.frt.service.PluginCompiler;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.service.RuleConfigWizard;
 import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.util.LoggerUtil;
 
+import java.nio.file.Path;
 import java.util.Scanner;
 
 /**
@@ -72,8 +74,9 @@ public class Main {
                 System.out.println("4. 规则生成（生成/编辑匹配规则配置文件）");
                 System.out.println("5. 清理残留备份");
                 System.out.println("6. 核心配置（设置目标/更新/删除/备份路径、日志级别）");
-                System.out.println("7. 退出");
-                System.out.print("请输入选项 (1-7): ");
+                System.out.println("7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）");
+                System.out.println("8. 退出");
+                System.out.print("请输入选项 (1-8): ");
 
                 String choice = scanner.nextLine().trim();
 
@@ -103,6 +106,15 @@ public class Main {
                         new CoreConfigWizard(config, scanner).start();
                         break;
                     case "7":
+                        LoggerUtil.logInfo("[打包] 编译打包 plugins/ 目录的 .java 策略源码...");
+                        PluginCompiler.CompileResult buildResult = PluginCompiler.compilePluginsToJar(Path.of("plugins"));
+                        if (buildResult.isSuccess()) {
+                            LoggerUtil.logInfo("[成功] " + buildResult.getMessage());
+                        } else {
+                            LoggerUtil.logErrorMsg("[失败] " + buildResult.getMessage());
+                        }
+                        break;
+                    case "8":
                         LoggerUtil.logInfo("程序退出");
                         return;
                     default:

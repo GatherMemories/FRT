@@ -4,13 +4,11 @@ import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.uitls.FileSignUtil;
 import com.awei.frt.core.uitls.FileUtil;
-import com.awei.frt.core.uitls.GlobMatcher;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * 文件名称相同策略
@@ -41,30 +39,17 @@ public class FileSameNameStrategy extends AbstractOperationStrategy {
     }
 
     /**
-     * 白名单/黑名单匹配
-     * 空白名单 = 匹配所有；空黑名单 = 不排除任何文件
+     * 白名单/黑名单匹配（复用基类 matchesRules：空白名单=匹配所有；空黑名单=不排除；
+     * caseSensitive=false 忽略大小写）
      */
     private boolean isMatch(FileNode node, OperationContext context) {
-        String fileName = node.getName();
-        // 策略扩展参数：caseSensitive=false 时文件名匹配忽略大小写（默认 true 区分大小写）
-        boolean caseSensitive = !"false".equalsIgnoreCase(context.getRuleParam("caseSensitive"));
-
-        List<String> patterns = context.getRuleInheritanceContext().getRuleChain().getPatterns();
-        List<String> excludePatterns = context.getRuleInheritanceContext().getRuleChain().getExcludePatterns();
-
-        if (!GlobMatcher.matchesAny(fileName, patterns, caseSensitive)) {
-            // 白名单未命中：提示跳过原因（INFO，用户需要知道哪些文件被跳过；
+        boolean matched = matchesRules(node, context);
+        if (!matched) {
+            // 未命中：提示跳过原因（INFO，用户需要知道哪些文件被跳过；
             // 配合已去除的"处理/完成"配对日志，不会像早期那样逐文件刷屏）
-            LoggerUtil.logInfo("忽略文件：" + fileName);
-            return false;
+            LoggerUtil.logInfo("忽略文件：" + node.getName());
         }
-        // 黑名单：空列表表示不排除任何文件（matchesAny 空列表返回 true 是"白名单匹配所有"语义）
-        if (excludePatterns != null && !excludePatterns.isEmpty()
-                && GlobMatcher.matchesAny(fileName, excludePatterns, caseSensitive)) {
-            LoggerUtil.logInfo("忽略文件：" + fileName);
-            return false;
-        }
-        return true;
+        return matched;
     }
 
     /**
