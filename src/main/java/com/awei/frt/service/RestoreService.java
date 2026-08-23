@@ -231,8 +231,7 @@ public class RestoreService {
 
                     // 6. 确认恢复 / 固定（永久保留，不受备份数量淘汰影响）
                     // p 是"固定/取消固定"切换，提示按当前状态动态显示，避免误操作
-                    String pinAction = selectedResult.isPinned() ? "取消固定（当前已固定）" : "固定（永久保留）";
-                    System.out.print("\n操作：y=从此备份恢复, p=" + pinAction + ", 其他=返回 (y/p/回车): ");
+                    System.out.print("\n" + buildPinActionPrompt(selectedResult));
                     String confirm = prompter.readLine().toLowerCase();
 
                     if (confirm.equals("p")) {
@@ -292,12 +291,22 @@ public class RestoreService {
     }
 
     /**
+     * 固定/取消固定操作提示文案（按当前固定状态动态显示，避免用户误取消固定）
+     * @param result 选中的备份记录
+     * @return 提示文案（不含换行前缀）
+     */
+    String buildPinActionPrompt(ProcessingResult result) {
+        String pinAction = result.isPinned() ? "取消固定（当前已固定）" : "固定（永久保留）";
+        return "操作：y=从此备份恢复, p=" + pinAction + ", 其他=返回 (y/p/回车): ";
+    }
+
+    /**
      * 格式化备份信息
      * @param fileName 文件名
      * @param result 处理结果
      * @return 格式化的字符串
      */
-    private String formatBackupInfo(String fileName, ProcessingResult result) {
+    String formatBackupInfo(String fileName, ProcessingResult result) {
         LocalDateTime time = result.getResultTime();
         String timeStr = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String pinned = result.isPinned() ? " [固定]" : "";

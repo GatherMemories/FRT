@@ -121,10 +121,20 @@ class FRTFrameQuickOptionsTest {
 
     @Test
     void restoreOperationPromptGetsYPButtons() {
-        // 恢复操作提示：y=恢复 / p=固定 / 取消（描述截断括号内容）
-        String prompt = "\n操作：y=从此备份恢复, p=固定/取消固定（永久保留）, 其他=返回 (y/p/回车): ";
-        assertEquals(List.of("从此备份恢复", "固定/取消固定", "取消"), labels(prompt),
-                "恢复操作提示应生成 y/p 快捷按钮");
+        // 恢复操作提示（未固定状态）：p=固定（永久保留）→ 按钮「固定」
+        // 与 RestoreService.buildPinActionPrompt 真实输出保持一致
+        String prompt = "\n操作：y=从此备份恢复, p=固定（永久保留）, 其他=返回 (y/p/回车): ";
+        assertEquals(List.of("从此备份恢复", "固定", "取消"), labels(prompt),
+                "未固定记录的恢复提示应生成 y/p 快捷按钮");
+    }
+
+    @Test
+    void restoreOperationPromptPinnedStateShowsUnpin() {
+        // 恢复操作提示（已固定状态）：p=取消固定（当前已固定）→ 按钮「取消固定」
+        // 旧测试用"固定/取消固定"旧文案，与真实提示脱节——用户实测发现按钮与实际不符
+        String prompt = "\n操作：y=从此备份恢复, p=取消固定（当前已固定）, 其他=返回 (y/p/回车): ";
+        assertEquals(List.of("从此备份恢复", "取消固定", "取消"), labels(prompt),
+                "已固定记录的恢复提示应生成 y/p 快捷按钮");
     }
 
     @Test
