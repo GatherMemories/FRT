@@ -229,10 +229,17 @@ public class RestoreService {
                     }
                     System.out.println("-----------------------------------------");
 
-                    // 6. 确认恢复
-                    System.out.print("\n确认要从此备份恢复系统吗？(y/n): ");
+                    // 6. 确认恢复 / 固定（永久保留，不受备份数量淘汰影响）
+                    System.out.print("\n操作：y=从此备份恢复, p=固定/取消固定（永久保留）, 其他=返回 (y/p/回车): ");
                     String confirm = prompter.readLine().toLowerCase();
 
+                    if (confirm.equals("p")) {
+                        boolean newPin = !selectedResult.isPinned();
+                        BackupFileLoader.updatePinnedFlag(selectedFileName, newPin);
+                        LoggerUtil.logInfo("[信息] 已" + (newPin ? "固定" : "取消固定")
+                                + "备份（" + (newPin ? "永久保留，不受数量淘汰" : "恢复受数量淘汰管理") + "）: " + selectedFileName);
+                        continue;
+                    }
                     if (!confirm.equals("y") && !confirm.equals("yes")) {
                         LoggerUtil.logInfo("[信息] 已取消恢复操作");
                         continue;
@@ -291,7 +298,8 @@ public class RestoreService {
     private String formatBackupInfo(String fileName, ProcessingResult result) {
         LocalDateTime time = result.getResultTime();
         String timeStr = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        return String.format("[%s] %s | 成功:%d 失败:%d", fileName, timeStr,
+        String pinned = result.isPinned() ? " [固定]" : "";
+        return String.format("[%s%s] %s | 成功:%d 失败:%d", fileName, pinned, timeStr,
             result.getSuccessCount(), result.getErrorCount());
     }
 

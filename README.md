@@ -74,6 +74,7 @@ jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported 
 | `deletePath` | 删除文件目录 | `delete` |
 | `backupPath` | 备份目录 | `backup` |
 | `logLevel` | 日志级别（DEBUG/INFO/WARN/ERROR） | `INFO` |
+| `maxBackupRecords` | 备份记录保留上限，超出自动淘汰最旧（固定 pinned 的记录除外） | `20` |
 
 相对路径基于 `baseDirectory` 解析；未知键（如 `logPath`）静默忽略，核心配置向导写入时保留。
 
@@ -89,7 +90,7 @@ jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported 
 }
 ```
 
-> 程序根目录没有 `config.json` 时使用内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录；需要自定义路径时按上面示例创建即可（也可用顶部"核心配置"功能生成）。
+> 程序根目录没有 `config.json` 时使用内置默认配置，启动时自动创建 `update/THtest/delete/backup` 目录；需要自定义路径时按上面示例创建即可（也可用顶部"核心配置"功能生成）。备份记录默认保留 20 条，超出自动删除最旧；恢复菜单里选备份后输入 `p` 可**固定**该备份（永久保留，不受数量淘汰影响，列表显示 `[固定]`）。
 
 ### 规则文件（replace.json / add.json / delete.json / matching-rules.json，作用相同）
 

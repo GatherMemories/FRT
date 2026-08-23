@@ -16,6 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -232,6 +235,43 @@ public class BackupFileLoaderTest {
             RestoreResult rrDel = BackupFileLoader.restoreFromResult(result, () -> "");
             assertTrue(rrDel.isFullSuccess(), "回车=删除改名文件，应全成功");
             assertFalse(Files.exists(renamedFile), "回车时应删除改名文件");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    /**
+     * 备份数量淘汰：超过上限（20）自动删最旧；固定（pinned）的记录不受淘汰影响
+     */
+    @Test
+    public void trimBackupRecordsKeepsNewestAndPinned() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            // 创建 21 条备份记录（时间递增）
+            for (int i = 0; i < 21; i++) {
+                ProcessingResult r = new ProcessingResult();
+                r.setResultTime(LocalDateTime.of(2026, 1, 1, 0, i, 0));
+                OperationRecord rec = new OperationRecord();
+                rec.setStrategyType("Test");
+                rec.setOperationType(OperationContext.OPERATION_ADD);
+                rec.setTargetPath(Path.of("/tmp/f" + i));
+                rec.setSuccess(true);
+                r.addOperationRecord(rec);
+                assertTrue(BackupFileLoader.saveOperationRecord(r), "应能保存备份记录 " + i);
+            }
+
+            Map<String, ProcessingResult> records = BackupFileLoader.getOperationRecordFiles();
+            assertEquals(21, records.size());
+            // 固定最旧的一条（时间倒序列表的末尾）
+            List<String> names = new ArrayList<>(records.keySet());
+            String oldest = names.get(names.size() - 1);
+            assertTrue(BackupFileLoader.updatePinnedFlag(oldest, true), "应能固定最旧记录");
+
+            // 淘汰到 20 条：固定记录保留，删除 1 条最旧的其它记录
+            BackupFileLoader.trimBackupRecords(20);
+            Map<String, ProcessingResult> after = BackupFileLoader.getOperationRecordFiles();
+            assertEquals(20, after.size(), "淘汰后应剩 20 条");
+            assertTrue(after.containsKey(oldest), "固定的最旧记录应保留（不受淘汰影响）");
         } finally {
             TestSupport.restoreBackupPath();
         }
