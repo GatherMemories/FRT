@@ -26,6 +26,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: 同步版本号到 pom（跟随 tag，发版无需手动改 pom）
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mvn -B -q versions:set -DnewVersion="$VERSION"
+
       - name: 构建 jar（跳过测试）
         run: mvn -B -q package -DskipTests
 
