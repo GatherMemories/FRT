@@ -23,9 +23,9 @@ cd "$SCRIPT_DIR"
 # 兼容两种布局：发布包内 jar 与脚本同目录；开发目录 target/
 # jar 名用通配（FRT-*.jar），升版本无需改脚本
 if compgen -G "FRT-*.jar" >/dev/null; then
-    JAR="$(compgen -G 'FRT-*.jar' | head -1)"
+    JAR="$(ls -t FRT-*.jar | head -1)"   # 取最新的（按修改时间）
 elif compgen -G "target/FRT-*.jar" >/dev/null; then
-    JAR="$(compgen -G 'target/FRT-*.jar' | head -1)"
+    JAR="$(ls -t target/FRT-*.jar | head -1)"
 else
     echo "[ERROR] 未找到可执行 jar（FRT-*.jar）" >&2
     echo "请先构建: mvn -o package -DskipTests，或使用发布包（jar 与脚本同目录）" >&2
