@@ -678,7 +678,7 @@ public class BackupFileLoader {
                 LoggerUtil.logInfo("[执行] 恢复操作: " + record.getOperationType() + " - " + record.getTargetPath());
 
                 // 恢复单个记录
-                boolean success = restoreSingleRecord(record, restoreResult);
+                boolean success = restoreSingleRecord(record, restoreResult, prompter);
 
                 if (success) {
                     restoredRecords.add(record);
@@ -713,17 +713,34 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreSingleRecord(OperationRecord record, RestoreResult restoreResult) {
+    /**
+     * 恢复时目标内容与备份记录不一致：询问用户是否跳过该文件。
+     * @param prompter 交互对象（null 时默认继续执行恢复动作）
+     * @param reason 不一致原因描述
+     * @param proceedAction 用户选择"不跳过"时的动作描述（如"仍删除"/"仍覆盖"）
+     * @return true=跳过（保留当前内容），false=继续执行恢复动作
+     */
+    private static boolean askSkipOrProceed(UserPrompter prompter, String reason, String proceedAction) {
+        System.out.println("[提示] " + reason);
+        System.out.print("       是否跳过该文件（保留当前内容）？(y=跳过, 回车=" + proceedAction + "): ");
+        if (prompter == null) {
+            return false;
+        }
+        String choice = prompter.readLine().toLowerCase();
+        return choice.equals("y") || choice.equals("yes");
+    }
+
+    private static boolean restoreSingleRecord(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             String operationType = record.getOperationType();
 
             switch (operationType) {
                 case OperationContext.OPERATION_ADD:
-                    return restoreAddOperation(record, restoreResult);
+                    return restoreAddOperation(record, restoreResult, prompter);
                 case OperationContext.OPERATION_REPLACE:
-                    return restoreReplaceOperation(record, restoreResult);
+                    return restoreReplaceOperation(record, restoreResult, prompter);
                 case OperationContext.OPERATION_DELETE:
-                    return restoreDeleteOperation(record, restoreResult);
+                    return restoreDeleteOperation(record, restoreResult, prompter);
                 default:
                     LoggerUtil.logErrorMsg("未知操作类型: " + operationType);
                     restoreResult.incrementFailure("未知操作类型: " + operationType);
@@ -742,7 +759,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreAddOperation(OperationRecord record, RestoreResult restoreResult) {
+    private static boolean restoreAddOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
 
@@ -764,9 +781,13 @@ public class BackupFileLoader {
             if (addedSign != null) {
                 String currentMd5 = FileSignUtil.getFileMd5(targetPath);
                 if (currentMd5 != null && !addedSign.equals(currentMd5)) {
-                    LoggerUtil.logWarn("[跳过] 目标文件已被修改（MD5 不匹配），不删除以免丢失改动: " + targetPath);
-                    restoreResult.incrementFailure("文件已被修改，未删除: " + targetPath.getFileName());
-                    return true; // 跳过该文件，继续恢复其它
+                    // 内容不一致（可能被加载改写/用户修改）：询问用户是否跳过
+                    if (askSkipOrProceed(prompter, "目标文件内容与备份记录不一致（可能被修改/加载改写）: "
+                            + targetPath.getFileName(), "仍删除")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未删除: " + targetPath);
+                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
+                        return true;
+                    }
                 }
             }
 
@@ -789,7 +810,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult) {
+    private static boolean restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
             // 替换前目标文件的签名（即备份文件索引 key），用于查找被替换前的原文件
@@ -821,9 +842,13 @@ public class BackupFileLoader {
             if (replacedSign != null && Files.exists(targetPath)) {
                 String currentMd5 = FileSignUtil.getFileMd5(targetPath);
                 if (currentMd5 != null && !replacedSign.equals(currentMd5)) {
-                    LoggerUtil.logWarn("[跳过] 目标文件已被修改（MD5 不匹配），不覆盖以免丢失改动: " + targetPath);
-                    restoreResult.incrementFailure("文件已被修改，未恢复: " + targetPath.getFileName());
-                    return true; // 跳过该文件，继续恢复其它
+                    // 内容不一致：询问用户是否跳过
+                    if (askSkipOrProceed(prompter, "目标文件内容与备份记录不一致（可能被修改/加载改写）: "
+                            + targetPath.getFileName(), "仍用备份覆盖")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + targetPath);
+                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
+                        return true;
+                    }
                 }
             }
 
@@ -852,7 +877,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreDeleteOperation(OperationRecord record, RestoreResult restoreResult) {
+    private static boolean restoreDeleteOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
             String targetFileSign = record.getTargetFileSign();
@@ -868,9 +893,13 @@ public class BackupFileLoader {
                 // MD5 校验：已存在但内容与被删文件不同（用户重建/改过）→ 跳过，不覆盖
                 String currentMd5 = FileSignUtil.getFileMd5(targetPath);
                 if (currentMd5 != null && targetFileSign != null && !targetFileSign.equals(currentMd5)) {
-                    LoggerUtil.logWarn("[跳过] 目标文件已存在且内容不同（MD5 不匹配），不覆盖以免丢失改动: " + targetPath);
-                    restoreResult.incrementFailure("文件已存在且内容不同，未恢复: " + targetPath.getFileName());
-                    return true;
+                    // 目标已存在但内容不同：询问用户是否跳过
+                    if (askSkipOrProceed(prompter, "目标文件已存在且内容与备份记录不一致: "
+                            + targetPath.getFileName(), "仍从备份覆盖")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + targetPath);
+                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
+                        return true;
+                    }
                 }
                 LoggerUtil.logInfo("[信息] 文件已存在，无需恢复: " + targetPath);
                 restoreResult.incrementSuccess();

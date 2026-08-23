@@ -191,9 +191,9 @@ public class BackupFileLoaderTest {
             record.setSuccess(true);
             result.addOperationRecord(record);
 
-            RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "n");
-            assertFalse(rr.isFullSuccess(), "目标被修改应跳过，不算全成功");
-            assertTrue(Files.exists(targetFile), "被修改的文件不应被删除");
+            RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "y"); // 回答"跳过"
+            assertFalse(rr.isFullSuccess(), "目标被修改且用户选择跳过，不算全成功");
+            assertTrue(Files.exists(targetFile), "被修改的文件应保留（用户选择跳过）");
         } finally {
             TestSupport.restoreBackupPath();
         }
