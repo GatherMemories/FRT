@@ -2,7 +2,10 @@ package com.awei.frt;
 
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
+import com.awei.frt.core.context.OperationContext;
+import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.model.RestoreResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -134,6 +137,36 @@ public class BackupFileLoaderTest {
             if (realBackup != null) {
                 BackupFileLoader.loadBackupFiles(realBackup);
             }
+        }
+    }
+
+    /**
+     * 回归：第一次初始化场景（目标目录为空 → 全是新增操作 → 备份目录无旧文件）。
+     * 恢复纯 ADD 备份只需删除目标文件、不依赖备份文件——曾因"备份文件列表为空"
+     * 被直接判失败，用户实测"第一次使用备份出现没有找到旧文件失败"。
+     */
+    @Test
+    public void restoreAddOnlyBackupWorksWithoutBackupFiles() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path targetDir = Files.createDirectories(tempDir.resolve("THtest"));
+            Path targetFile = targetDir.resolve("a.txt");
+            Files.writeString(targetFile, "new content", StandardCharsets.UTF_8);
+
+            ProcessingResult result = new ProcessingResult();
+            OperationRecord record = new OperationRecord();
+            record.setStrategyType("FileSameName");
+            record.setOperationType(OperationContext.OPERATION_ADD);
+            record.setTargetPath(targetFile);
+            record.setSuccess(true);
+            result.addOperationRecord(record);
+            // 不创建任何备份文件（模拟纯新增无旧文件可备份）
+
+            RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "n");
+            assertTrue(rr.isFullSuccess(), "纯新增备份恢复应成功（不依赖备份文件）");
+            assertFalse(Files.exists(targetFile), "新增的目标文件应被恢复（删除）");
+        } finally {
+            TestSupport.restoreBackupPath();
         }
     }
 }
