@@ -678,7 +678,7 @@ public class BackupFileLoader {
                 LoggerUtil.logInfo("[执行] 恢复操作: " + record.getOperationType() + " - " + record.getTargetPath());
 
                 // 恢复单个记录
-                boolean success = restoreSingleRecord(record, restoreResult);
+                boolean success = restoreSingleRecord(record, restoreResult, prompter);
 
                 if (success) {
                     restoredRecords.add(record);
@@ -713,17 +713,55 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreSingleRecord(OperationRecord record, RestoreResult restoreResult) {
+    /**
+     * 恢复时目标内容与备份记录不一致：询问用户是否跳过该文件。
+     * @param prompter 交互对象（null 时默认继续执行恢复动作）
+     * @param reason 不一致原因描述
+     * @param proceedAction 用户选择"不跳过"时的动作描述（如"仍删除"/"仍覆盖"）
+     * @return true=跳过（保留当前内容），false=继续执行恢复动作
+     */
+    private static boolean askSkipOrProceed(UserPrompter prompter, String reason, String proceedAction) {
+        System.out.println("[提示] " + reason);
+        System.out.print("       是否跳过该文件（保留当前内容）？(y=跳过, 回车=" + proceedAction + "): ");
+        if (prompter == null) {
+            return false;
+        }
+        String choice = prompter.readLine().toLowerCase();
+        return choice.equals("y") || choice.equals("yes");
+    }
+
+    /**
+     * 在目录中查找 MD5 与指定签名匹配的文件（排除 excludePath）。
+     * 用于恢复时检测"目标文件被改名"（内容相同但文件名不同）。
+     * @return 匹配的文件路径，未找到返回 null
+     */
+    private static Path findFileWithMd5InDir(Path dir, String md5, Path excludePath) {
+        if (dir == null || md5 == null || !Files.isDirectory(dir)) {
+            return null;
+        }
+        try (java.util.stream.Stream<Path> stream = Files.list(dir)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(p -> !p.equals(excludePath))
+                    .filter(p -> md5.equals(FileSignUtil.getFileMd5(p)))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            LoggerUtil.logException("扫描目录查找同名内容文件失败: " + dir, e);
+            return null;
+        }
+    }
+
+    private static boolean restoreSingleRecord(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             String operationType = record.getOperationType();
 
             switch (operationType) {
                 case OperationContext.OPERATION_ADD:
-                    return restoreAddOperation(record, restoreResult);
+                    return restoreAddOperation(record, restoreResult, prompter);
                 case OperationContext.OPERATION_REPLACE:
-                    return restoreReplaceOperation(record, restoreResult);
+                    return restoreReplaceOperation(record, restoreResult, prompter);
                 case OperationContext.OPERATION_DELETE:
-                    return restoreDeleteOperation(record, restoreResult);
+                    return restoreDeleteOperation(record, restoreResult, prompter);
                 default:
                     LoggerUtil.logErrorMsg("未知操作类型: " + operationType);
                     restoreResult.incrementFailure("未知操作类型: " + operationType);
@@ -742,7 +780,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreAddOperation(OperationRecord record, RestoreResult restoreResult) {
+    private static boolean restoreAddOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
 
@@ -754,9 +792,43 @@ public class BackupFileLoader {
 
             // 检查文件是否存在
             if (!Files.exists(targetPath)) {
+                // 目标按记录名不存在：可能是被改名/移动——若父目录存在 MD5 相同的文件，
+                // 提示用户（y=跳过保留，回车=删除该改名文件）；确无则视为已删除，无需操作
+                String addedSign = record.getSourceFileSign();
+                Path renamed = (addedSign != null && targetPath.getParent() != null)
+                        ? findFileWithMd5InDir(targetPath.getParent(), addedSign, targetPath)
+                        : null;
+                if (renamed != null) {
+                    String renamedRel = targetPath.getParent().relativize(renamed).toString();
+                    if (askSkipOrProceed(prompter, "目标文件不存在，但发现内容相同（MD5 匹配）的文件（可能被改名）: "
+                            + renamedRel, "删除该改名文件")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未删除改名文件: " + renamed);
+                        restoreResult.incrementFailure("用户选择跳过改名文件: " + renamedRel);
+                        return true;
+                    }
+                    Files.delete(renamed);
+                    LoggerUtil.logInfo("[成功] 已删除改名文件: " + renamed);
+                    restoreResult.incrementSuccess();
+                    return true;
+                }
                 LoggerUtil.logInfo("[信息] 文件不存在，无需删除: " + targetPath);
                 restoreResult.incrementSuccess();
                 return true;
+            }
+
+            // MD5 校验：确认目标还是"当时新增的文件"（未被用户修改），避免误删改动
+            String addedSign = record.getSourceFileSign();
+            if (addedSign != null) {
+                String currentMd5 = FileSignUtil.getFileMd5(targetPath);
+                if (currentMd5 != null && !addedSign.equals(currentMd5)) {
+                    // 内容不一致（可能被加载改写/用户修改）：询问用户是否跳过
+                    if (askSkipOrProceed(prompter, "目标文件内容与备份记录不一致（可能被修改/加载改写）: "
+                            + targetPath.getFileName(), "仍删除")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未删除: " + targetPath);
+                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
+                        return true;
+                    }
+                }
             }
 
             // 删除文件
@@ -778,7 +850,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult) {
+    private static boolean restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
             // 替换前目标文件的签名（即备份文件索引 key），用于查找被替换前的原文件
@@ -803,6 +875,21 @@ public class BackupFileLoader {
                 LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 备份文件不存在: " + backupFile);
                 restoreResult.incrementFailure("备份文件不存在");
                 return false;
+            }
+
+            // MD5 校验：确认目标还是"替换后的新内容"（未被用户修改），避免覆盖改动
+            String replacedSign = record.getSourceFileSign(); // REPLACE 的源 = 替换后的新内容
+            if (replacedSign != null && Files.exists(targetPath)) {
+                String currentMd5 = FileSignUtil.getFileMd5(targetPath);
+                if (currentMd5 != null && !replacedSign.equals(currentMd5)) {
+                    // 内容不一致：询问用户是否跳过
+                    if (askSkipOrProceed(prompter, "目标文件内容与备份记录不一致（可能被修改/加载改写）: "
+                            + targetPath.getFileName(), "仍用备份覆盖")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + targetPath);
+                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
+                        return true;
+                    }
+                }
             }
 
             // 确保目标目录存在
@@ -830,7 +917,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreDeleteOperation(OperationRecord record, RestoreResult restoreResult) {
+    private static boolean restoreDeleteOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
             String targetFileSign = record.getTargetFileSign();
@@ -843,6 +930,17 @@ public class BackupFileLoader {
 
             // 检查文件是否已存在
             if (Files.exists(targetPath)) {
+                // MD5 校验：已存在但内容与被删文件不同（用户重建/改过）→ 跳过，不覆盖
+                String currentMd5 = FileSignUtil.getFileMd5(targetPath);
+                if (currentMd5 != null && targetFileSign != null && !targetFileSign.equals(currentMd5)) {
+                    // 目标已存在但内容不同：询问用户是否跳过
+                    if (askSkipOrProceed(prompter, "目标文件已存在且内容与备份记录不一致: "
+                            + targetPath.getFileName(), "仍从备份覆盖")) {
+                        LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + targetPath);
+                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
+                        return true;
+                    }
+                }
                 LoggerUtil.logInfo("[信息] 文件已存在，无需恢复: " + targetPath);
                 restoreResult.incrementSuccess();
                 return true;
