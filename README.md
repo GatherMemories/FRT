@@ -211,7 +211,7 @@ public class MyStrategy extends AbstractOperationStrategy {
         }
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.replaceFile(node.getPath(), target, record, context.isDryRun());
-        context.recordOperation(record);
+        context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
         if (ok) {
             node.setHandled(true);
         }
@@ -224,7 +224,7 @@ public class MyStrategy extends AbstractOperationStrategy {
         Path target = context.getTargetPath(node.getRelativePath());
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.deleteFile(target, record, context.isDryRun());
-        context.recordOperation(record);
+        context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
         if (ok) {
             node.setHandled(true);
         }
