@@ -20,13 +20,18 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
+import javax.swing.JTextPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.HeadlessException;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -35,6 +40,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * FRT Swing 主窗口（固定输入区版）
@@ -45,7 +52,7 @@ import java.util.List;
  */
 public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, SwingPrompter.InputPanel {
 
-    private final JTextArea logArea;
+    private final JTextPane logArea;
     private final JLabel statusLabel;
     private final JProgressBar progressBar;
     private final QuickButtonPanel quickPanel;
@@ -54,6 +61,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private final JTextField inputField;
     private final JButton submitButton;
     private final JButton cancelButton;
+    private final JButton fontMinusButton; // 日志字体缩小（A-）
+    private final JButton fontPlusButton;  // 日志字体放大（A+）
+    private int logFontSize = 13;          // 当前日志字体大小（可调 10~24，持久化到 config.json）
     private final List<JButton> topButtons = new ArrayList<>();
     // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明）
     private final StringBuilder promptBuffer = new StringBuilder();
@@ -70,14 +80,17 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         setSize(860, 600);
         setLocationRelativeTo(null);
 
-        logArea = new JTextArea();
+        logArea = new JTextPane();
         logArea.setEditable(false);
-        logArea.setFont(UITheme.MONO_FONT);
-        logArea.setBackground(UITheme.PANEL_BG);
-        logArea.setForeground(UITheme.TEXT);
+        logArea.setFont(UITheme.LOG_FONT);      // 好看的等宽字体（平台候选）
+        logArea.setBackground(UITheme.LOG_BG);  // 深色终端背景
+        logArea.setForeground(UITheme.LOG_TEXT);
         logArea.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         // 加大滚轮步长：Swing 默认 unitIncrement 偏小，鼠标滚轮滚动日志区很慢
         JScrollPane logScroll = new JScrollPane(logArea);
+        logScroll.setBackground(UITheme.LOG_BG);
+        logScroll.getViewport().setBackground(UITheme.LOG_BG); // 视口同色，避免白底四周露边
+        logScroll.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER)); // 顶部分隔线，与按钮区分界清晰
         logScroll.getVerticalScrollBar().setUnitIncrement(24);
         logScroll.getHorizontalScrollBar().setUnitIncrement(24);
         add(logScroll, BorderLayout.CENTER);
@@ -96,6 +109,17 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         UITheme.styleButton(clearLogButton);
         clearLogButton.addActionListener(e -> logArea.setText(""));
         top.add(clearLogButton);
+        // 日志字体大小调整（A-/A+）：即时生效并持久化到 config.json，重启后保留
+        fontMinusButton = new JButton("A-");
+        UITheme.styleButton(fontMinusButton);
+        fontMinusButton.setToolTipText("缩小日志字体（最小 " + Config.MIN_LOG_FONT_SIZE + "px）");
+        fontMinusButton.addActionListener(e -> adjustLogFontSize(-1));
+        top.add(fontMinusButton);
+        fontPlusButton = new JButton("A+");
+        UITheme.styleButton(fontPlusButton);
+        fontPlusButton.setToolTipText("放大日志字体（最大 " + Config.MAX_LOG_FONT_SIZE + "px）");
+        fontPlusButton.addActionListener(e -> adjustLogFontSize(1));
+        top.add(fontPlusButton);
         add(top, BorderLayout.NORTH);
 
         // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
@@ -156,6 +180,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
         // 初始化配置与日志（LoggerUtil 会在 tee 之后初始化，其输出链仍回到日志区）
         config = ConfigLoader.getConfig();
+        if (config != null) {
+            // 应用 config.json 里持久化的日志字体大小（无该字段时默认 13）
+            logFontSize = config.getLogFontSize();
+            applyLogFontSize(logFontSize);
+        }
+        updateFontButtons();
         prompter = new SwingPrompter(this, this);
         if (config == null) {
             appendText("[失败] 配置加载失败，请检查 config.json\n");
@@ -400,6 +430,37 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         }
     }
 
+    // ---------------- 日志字体大小调整（A-/A+） ----------------
+
+    /** 调整日志字体大小（delta=±1），即时生效并持久化到 config.json，重启后保留 */
+    private void adjustLogFontSize(int delta) {
+        int next = Math.max(Config.MIN_LOG_FONT_SIZE,
+                Math.min(Config.MAX_LOG_FONT_SIZE, logFontSize + delta));
+        if (next == logFontSize) {
+            return;
+        }
+        logFontSize = next;
+        applyLogFontSize(next);
+        if (config != null) {
+            config.setLogFontSize(next);
+        }
+        ConfigLoader.saveLogFontSize(next);
+        statusLabel.setText("日志字体: " + next + "px");
+        updateFontButtons();
+    }
+
+    /** 只改字号，保留当前字体族（已插入的日志文本会随组件字体联动重绘） */
+    private void applyLogFontSize(int size) {
+        Font font = logArea.getFont();
+        logArea.setFont(new Font(font.getFamily(), Font.PLAIN, size));
+    }
+
+    /** 到达可调范围边界时禁用对应按钮 */
+    private void updateFontButtons() {
+        fontMinusButton.setEnabled(logFontSize > Config.MIN_LOG_FONT_SIZE);
+        fontPlusButton.setEnabled(logFontSize < Config.MAX_LOG_FONT_SIZE);
+    }
+
     private void submitInput() {
         if (prompter != null) {
             prompter.submit(inputField.getText());
@@ -435,15 +496,225 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         System.setErr(new PrintStream(new TeeOutputStream(originalErr, logStream), true, StandardCharsets.UTF_8));
     }
 
+    /** 日志区当前末尾是否以换行结尾（用于输入提交时判断是否要补换行，避免日志与提示拼接同行） */
+    private volatile boolean lastOutputEndsWithNewline = true;
+
     private void appendText(String text) {
         if (text == null || text.isEmpty()) {
             return;
         }
-        SwingUtilities.invokeLater(() -> {
-            logArea.append(text);
-            logArea.setCaretPosition(logArea.getDocument().getLength());
-        });
+        lastOutputEndsWithNewline = text.charAt(text.length() - 1) == '\n';
+        SwingUtilities.invokeLater(() -> appendStyled(text));
         feedPrompt(text);
+    }
+
+    @Override
+    public void ensureLineBreak() {
+        // 提示行如 "是否执行以上 8 个更新操作？(y/n): " 以非换行结尾（print 输出），
+        // 终端里用户回车自带换行，日志区没有——提交输入时补一个换行
+        if (!lastOutputEndsWithNewline) {
+            appendText("\n");
+        }
+    }
+
+    /**
+     * 按行追加到日志区，每行按行首 [标记] 着色（[成功]=绿 / [失败]=红 / [警告]=橙 / 交互提示=蓝 / 说明=灰，
+     * 未识别标记与普通文本用默认浅色；===== 标题分隔线用亮蓝加粗）
+     */
+    private void appendStyled(String text) {
+        StyledDocument doc = logArea.getStyledDocument();
+        int start = 0;
+        int nl;
+        while ((nl = text.indexOf('\n', start)) >= 0) {
+            insertStyledLine(doc, text.substring(start, nl + 1));
+            start = nl + 1;
+        }
+        if (start < text.length()) {
+            insertStyledLine(doc, text.substring(start));
+        }
+        logArea.setCaretPosition(doc.getLength());
+    }
+
+    private void insertStyledLine(StyledDocument doc, String line) {
+        if (line.isEmpty()) {
+            return;
+        }
+        try {
+            for (LineSegment seg : segmentStyledLine(line)) {
+                doc.insertString(doc.getLength(), seg.text(), seg.style());
+            }
+        } catch (BadLocationException ignored) {
+            // 只追加在文档末尾，正常不会发生
+        }
+    }
+
+    /** 日志行的一个着色片段：text 显示文本 + style 样式（包内可见供测试） */
+    record LineSegment(String text, SimpleAttributeSet style) {
+    }
+
+    /** 行内特殊标记：固定（永久保留，不受淘汰影响），紫色加粗凸显 */
+    private static final String PINNED_TOKEN = "[固定]";
+    /** JSON 键名："key" :（规则/配置预览里的参数名，如黑白名单 patterns/excludePatterns） */
+    private static final Pattern JSON_KEY = Pattern.compile("\"([^\"]+)\"\\s*:");
+    /** logback 时间戳+级别前缀（CONSOLE pattern：%d{HH:mm:ss.SSS} %-5level %msg） */
+    private static final Pattern LOG_PREFIX = Pattern.compile("^\\d{1,2}:\\d{2}:\\d{2}[.,]\\d{3}\\s+\\S+\\s+");
+
+    /**
+     * 把一行拆分为若干着色片段（包内可见供测试）：
+     * 整行先按 styleForLine 取基础样式，再扫描行内特殊 token 单独着色——
+     * logback 时间戳前缀灰色、[固定] 紫色加粗、JSON 键名蓝色（预览里的参数名醒目）。
+     */
+    static List<LineSegment> segmentStyledLine(String line) {
+        List<LineSegment> segments = new ArrayList<>();
+        int contentStart = 0;
+        Matcher pm = LOG_PREFIX.matcher(line);
+        if (pm.find()) {
+            contentStart = pm.end();
+            SimpleAttributeSet prefixStyle = new SimpleAttributeSet();
+            StyleConstants.setForeground(prefixStyle, UITheme.LOG_MUTED);
+            segments.add(new LineSegment(line.substring(0, contentStart), prefixStyle));
+        }
+        String content = line.substring(contentStart);
+        SimpleAttributeSet base = styleForLine(content);
+        int idx = 0;
+        int n = content.length();
+        while (idx < n) {
+            int pin = content.indexOf(PINNED_TOKEN, idx);
+            Matcher m = JSON_KEY.matcher(content);
+            int keyStart = -1;
+            int keyEnd = -1;
+            if (m.find(idx)) {
+                keyStart = m.start();
+                keyEnd = m.end();
+            }
+            // 选最近的 token 起点
+            int next = n;
+            boolean isPinned = false;
+            boolean isKey = false;
+            if (pin >= 0 && pin < next) {
+                next = pin;
+                isPinned = true;
+            }
+            if (keyStart >= 0 && keyStart < next) {
+                next = keyStart;
+                isPinned = false;
+                isKey = true;
+            }
+            if (next > idx) {
+                segments.add(new LineSegment(content.substring(idx, next), base));
+            }
+            if (next == n) {
+                break;
+            }
+            if (isPinned) {
+                segments.add(new LineSegment(PINNED_TOKEN, pinnedStyle()));
+                idx = pin + PINNED_TOKEN.length();
+            } else {
+                segments.add(new LineSegment(content.substring(keyStart, keyEnd), keyStyle()));
+                idx = keyEnd;
+            }
+        }
+        return segments;
+    }
+
+    private static SimpleAttributeSet pinnedStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, UITheme.LOG_PINNED);
+        StyleConstants.setBold(s, true);
+        return s;
+    }
+
+    private static SimpleAttributeSet keyStyle() {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, UITheme.LOG_ACCENT);
+        return s;
+    }
+
+    /** 按行首 [标记] 挑选颜色（包内可见供样式测试）
+     *  配色原则（用户拍板）：站在"用户使用功能时哪些信息必看/必操作"角度——
+     *  可操作提示、可选项列表(1-xx/2-xx)、功能标题、交互输入 → 醒目蓝；
+     *  状态反馈(成功/失败/警告) → 绿/红/橙；次要信息(说明/文件树/普通文本/装饰框) → 白/灰。
+     *  （灰字配灰底阅读累，用户必看的信息不能用灰色）
+     *  规则顺序：装饰框 → 摘要标题 → 行首标记 → 编号选项列表 → 操作提示 → 预览动作 → >>回显 → 默认 */
+    static SimpleAttributeSet styleForLine(String line) {
+        SimpleAttributeSet s = new SimpleAttributeSet();
+        StyleConstants.setForeground(s, UITheme.LOG_TEXT);
+        String trimmed = line.trim();
+        // 1. 纯装饰框/分隔线：一整行只有 = 或 -（向导标题框、列表分隔线）→ 灰，低调
+        if (trimmed.matches("^[-=]{4,}$")) {
+            StyleConstants.setForeground(s, UITheme.LOG_MUTED);
+            return s;
+        }
+        // 2. 摘要标题：===== 文字 =====（结果汇总）→ 亮蓝加粗
+        if (trimmed.startsWith("=====")) {
+            StyleConstants.setForeground(s, UITheme.LOG_TITLE);
+            StyleConstants.setBold(s, true);
+            return s;
+        }
+        // 3. 行首 [标记]：成功绿 / 失败红 / 警告橙 / 交互输入蓝 / 功能标题青 / 其余说明灰
+        String tag = tagOf(line);
+        if (tag != null) {
+            switch (tag) {
+                case "成功" -> { StyleConstants.setForeground(s, UITheme.LOG_SUCCESS); return s; }
+                case "失败", "错误" -> { StyleConstants.setForeground(s, UITheme.LOG_ERROR); return s; }
+                case "警告", "取消", "跳过" -> { StyleConstants.setForeground(s, UITheme.LOG_WARN); return s; }
+                case "输入", "选择", "确认" ->
+                        { StyleConstants.setForeground(s, UITheme.LOG_ACCENT); return s; }
+                case "执行", "列表", "预览", "信息", "校验", "规则生成", "核心配置", "FILE", "STATS" ->
+                        { StyleConstants.setForeground(s, UITheme.LOG_HEADING); StyleConstants.setBold(s, true); return s; }
+                default -> { StyleConstants.setForeground(s, UITheme.LOG_MUTED); return s; }
+            }
+        }
+        // 4. 编号选项列表（用户要从中选择）：1. / 0. / -1. / 1-3. / 备份记录行 → 蓝
+        if (OPTION_LINE.matcher(line).find()) {
+            StyleConstants.setForeground(s, UITheme.LOG_ACCENT);
+            return s;
+        }
+        // 5. 操作提示（用户必看/必操作）：请输入… / 操作：y=… / (y/n) 快捷键说明 → 蓝
+        if (OPTION_HINT.matcher(line).find()) {
+            StyleConstants.setForeground(s, UITheme.LOG_ACCENT);
+            return s;
+        }
+        // 6. 预览操作类型（重点动作）：新增=绿、删除=橙、[!]错误=红；替换等常态操作保持中性
+        //    （预览行格式 "[+] 新增: path"，动词后带冒号，避免误伤选项文本里的"删除"字样）
+        if (line.contains("新增:")) { StyleConstants.setForeground(s, UITheme.LOG_SUCCESS); return s; }
+        if (line.contains("删除:")) { StyleConstants.setForeground(s, UITheme.LOG_WARN); return s; }
+        if (line.contains("[!]")) { StyleConstants.setForeground(s, UITheme.LOG_ERROR); return s; }
+        // 7. 输入回显：灰（次要信息）
+        if (trimmed.startsWith(">>")) {
+            StyleConstants.setForeground(s, UITheme.LOG_MUTED);
+            return s;
+        }
+        // 其余（文件树 / 普通文本）：默认浅色，不额外上色
+        return s;
+    }
+
+    /** 编号选项行：1. / 0. / -1. / 1-3.（含中文标点变体）——用户要从中选择，醒目蓝 */
+    private static final Pattern OPTION_LINE =
+            Pattern.compile("^\\s*-?\\d+(-\\d+)?[.、:：)）]\\s");
+    /** 操作提示：请输入… / 操作：… / (y/n)、(y/p) 等快捷键说明——用户必看必操作，醒目蓝 */
+    private static final Pattern OPTION_HINT =
+            Pattern.compile("^\\s*请输入|^\\s*操作[：:]|[(（][yYpPnN][/，,、]");
+
+    /** 提取行首的 [标记]（容忍前导空白与 logback 时间戳前缀，如 "21:20:05.718 INFO  [成功] ..."）；
+     *  只在行首识别，JSON 数组值、编号行等行内 [xxx] 不算标记；
+     *  [+]/[-]/[=]/[!]/[→]/[○] 等图标符号也不算标记，返回 null（包内可见供样式测试） */
+    static String tagOf(String line) {
+        String t = line.trim();
+        // 跳过 logback 时间戳+级别前缀（logback.xml CONSOLE pattern：%d{HH:mm:ss.SSS} %-5level %msg）
+        t = t.replaceFirst("^\\d{1,2}:\\d{2}:\\d{2}[.,]\\d{3}\\s+(INFO|WARN|ERROR|DEBUG|TRACE)\\s+", "");
+        if (!t.startsWith("[")) {
+            return null;
+        }
+        int end = t.indexOf(']', 1);
+        if (end > 1) {
+            String tag = t.substring(1, end).trim();
+            if (!tag.isEmpty() && tag.length() <= 12
+                    && tag.matches(".*[A-Za-z0-9\\u4e00-\\u9fff].*")) {
+                return tag;
+            }
+        }
+        return null;
     }
 
     private void feedPrompt(String text) {

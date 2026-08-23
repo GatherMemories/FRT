@@ -6,8 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.core.JsonParser;
 
 import java.io.IOException;
@@ -67,6 +69,38 @@ public class ConfigLoader {
      */
     public static void setBackupPathForTesting(Path path) {
         backupPath = path;
+    }
+
+    /**
+     * 保存日志字体大小到外部 config.json（合并保留其他键，不弹确认、不打断 UI）。
+     * UI 顶部 A-/A+ 按钮调整字体时调用；失败仅记日志，下次启动仍可用旧值。
+     */
+    public static void saveLogFontSize(int size) {
+        saveLogFontSizeTo(getExternalConfigPath(), size);
+    }
+
+    /**
+     * 把 logFontSize 合并写入指定 config.json（包内可见，供测试传临时路径隔离污染）
+     */
+    static void saveLogFontSizeTo(Path configPath, int size) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            if (Files.exists(configPath)) {
+                String text = Files.readString(configPath);
+                if (text.startsWith("\uFEFF")) {
+                    text = text.substring(1);
+                }
+                JsonNode existing = objectMapper.readTree(text);
+                if (existing != null && existing.isObject()) {
+                    root = (ObjectNode) existing;
+                }
+            }
+            root.put("logFontSize", size);
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+            Files.writeString(configPath, json, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LoggerUtil.logException("[警告] 保存日志字体大小失败", e);
+        }
     }
 
     /**
