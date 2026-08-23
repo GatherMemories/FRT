@@ -25,6 +25,7 @@ public class Config implements Serializable {
     private Path deletePath;         // 删除文件目录（相对路径，默认：delete）
     private Path backupPath;         // 备份目录（相对路径，默认：backup）
     private String logLevel;         // 日志级别（默认：INFO）
+    private int maxBackupRecords = 20; // 备份记录保留上限（超出自动淘汰最旧，固定 pinned 除外；默认 20）
 
     public Config() {
         this.baseDirectory = Path.of(".").normalize().toAbsolutePath();
@@ -33,6 +34,7 @@ public class Config implements Serializable {
         this.deletePath = Path.of("delete");
         this.backupPath = Path.of("backup");
         this.logLevel = "INFO";
+        this.maxBackupRecords = 20;
     }
 
     /**
@@ -185,6 +187,17 @@ public class Config implements Serializable {
 
     public String getLogLevel() {
         return logLevel;
+    }
+
+    /**
+     * 备份记录保留上限：超出自动淘汰最旧（固定 pinned 除外），默认 20
+     */
+    public int getMaxBackupRecords() {
+        return maxBackupRecords;
+    }
+
+    public void setMaxBackupRecords(int maxBackupRecords) {
+        this.maxBackupRecords = maxBackupRecords > 0 ? maxBackupRecords : 20;
     }
 
     public void setLogLevel(String logLevel) {

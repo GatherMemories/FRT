@@ -19,6 +19,7 @@ public class ProcessingResult {
     private List<OperationRecord> operationRecords; // 操作记录列表
     private boolean success;           // 整体操作是否成功
     private Path resultPath;           // 结果文件路径
+    private boolean pinned;             // 是否固定（固定后不受备份数量淘汰影响，永久保留）
     @JsonIgnore
     private transient boolean cancelled; // 操作被用户取消（预览确认时选否，未真正执行）
 
@@ -38,6 +39,17 @@ public class ProcessingResult {
 
     public void setResultPath(Path resultPath) {
         this.resultPath = resultPath;
+    }
+
+    /**
+     * 是否固定（固定后不受备份数量淘汰影响，永久保留）
+     */
+    public boolean isPinned() {
+        return pinned;
+    }
+
+    public void setPinned(boolean pinned) {
+        this.pinned = pinned;
     }
 
     public LocalDateTime getResultTime() {

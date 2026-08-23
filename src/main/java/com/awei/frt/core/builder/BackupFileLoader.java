@@ -599,6 +599,10 @@ public class BackupFileLoader {
             clearSessionRecord();
             LoggerUtil.logInfo("[成功] 备份操作文件成功！");
 
+            // 备份数量淘汰：超过上限自动删除最旧（固定 pinned 的记录除外）
+            Config cfg = ConfigLoader.getConfig();
+            trimBackupRecords(cfg != null ? cfg.getMaxBackupRecords() : 20);
+
             if (processingResult.getErrorCount() > 0) {
                 LoggerUtil.logWarn("[警告] 检测到 " + processingResult.getErrorCount() + " 个文件处理失败");
                 System.out.println("是否要执行恢复操作，将系统恢复到操作前的状态？(y/n)");
@@ -1165,6 +1169,63 @@ public class BackupFileLoader {
      * @param fileName 备份记录文件名（不含扩展名）
      * @return 是否成功
      */
+    /**
+     * 更新备份记录的固定标记并持久化（写回 backup-xxx.json）。
+     * @param fileName 备份记录文件名（含 .json）
+     * @param pinned 是否固定（固定后不受备份数量淘汰影响）
+     */
+    public static boolean updatePinnedFlag(String fileName, boolean pinned) {
+        try {
+            ProcessingResult result = operationRecordFiles.get(fileName);
+            if (result == null) {
+                return false;
+            }
+            result.setPinned(pinned);
+            Path backupPath = ConfigLoader.getBackupPath();
+            if (backupPath == null) {
+                return false;
+            }
+            Path recordFile = backupPath.resolve("record").resolve(fileName).normalize();
+            if (!Files.exists(recordFile)) {
+                return false;
+            }
+            Path temp = recordFile.resolveSibling(fileName + ".tmp");
+            BACKUP_MAPPER.writeValue(temp.toFile(), result);
+            Files.move(temp, recordFile, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException e) {
+            LoggerUtil.logException("更新备份固定标记失败", e);
+            return false;
+        }
+    }
+
+    /**
+     * 备份数量淘汰：超过上限时自动删除最旧的备份记录（跳过 pinned 固定记录）。
+     * 删除记录时由 deleteBackupRecord 按引用计数清理无引用的备份实体文件。
+     * @param max 保留上限（<=0 表示不淘汰）
+     */
+    public static void trimBackupRecords(int max) {
+        if (max <= 0) {
+            return;
+        }
+        Map<String, ProcessingResult> records = getOperationRecordFiles(); // 已按时间倒序
+        if (records == null || records.size() <= max) {
+            return;
+        }
+        List<Map.Entry<String, ProcessingResult>> ordered = new ArrayList<>(records.entrySet());
+        int over = records.size() - max;
+        for (int i = ordered.size() - 1; i >= 0 && over > 0; i--) {
+            Map.Entry<String, ProcessingResult> e = ordered.get(i);
+            if (e.getValue() != null && e.getValue().isPinned()) {
+                continue; // 固定记录不淘汰
+            }
+            LoggerUtil.logInfo("[淘汰] 备份记录超过上限 " + max + " 个，自动删除最旧: " + e.getKey());
+            if (deleteBackupRecord(e.getKey())) {
+                over--;
+            }
+        }
+    }
+
     public static boolean deleteBackupRecord(String fileName) {
         try {
             // 1. 参数校验
