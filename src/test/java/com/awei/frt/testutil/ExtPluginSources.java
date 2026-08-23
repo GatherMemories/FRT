@@ -315,6 +315,63 @@ public final class ExtPluginSources {
             }
             """);
 
+        // 5.5 规则黑白名单策略：accepts 直接复用基类 matchesRules（验证封装对外部策略可用）
+        FULL.put("extfull.ExtRuleMatchStrategy", """
+            package extfull;
+
+            import com.awei.frt.core.context.OperationContext;
+            import com.awei.frt.core.node.FileNode;
+            import com.awei.frt.core.strategy.AbstractOperationStrategy;
+            import com.awei.frt.core.uitls.FileUtil;
+            import com.awei.frt.model.OperationRecord;
+
+            import java.nio.file.Files;
+            import java.nio.file.Path;
+
+            /** 外部插件策略：accepts 用基类 matchesRules 按规则 patterns/excludePatterns 过滤（与内置策略同款） */
+            public class ExtRuleMatchStrategy extends AbstractOperationStrategy {
+                @Override
+                public String getStrategyType() {
+                    return "ExtRuleMatchStrategy";
+                }
+
+                @Override
+                public String getDescription() {
+                    return "外部插件：基类 matchesRules 黑白名单过滤";
+                }
+
+                @Override
+                protected boolean accepts(FileNode node, OperationContext context) {
+                    return !node.isDirectory() && matchesRules(node, context);
+                }
+
+                @Override
+                protected boolean doAdd(FileNode node, OperationContext context) {
+                    Path target = context.getTargetPath(node.getRelativePath());
+                    if (Files.exists(target)) {
+                        return false;
+                    }
+                    OperationRecord record = newRecord(context);
+                    boolean ok = FileUtil.addFile(node.getPath(), target, record, context.isDryRun());
+                    context.recordOperation(record);
+                    if (ok) {
+                        node.setHandled(true);
+                    }
+                    return true;
+                }
+
+                @Override
+                protected boolean doReplace(FileNode node, OperationContext context) {
+                    return false;
+                }
+
+                @Override
+                protected boolean doDelete(FileNode node, OperationContext context) {
+                    return false;
+                }
+            }
+            """);
+
         // 6. 无效：空白策略类型（应被跳过并告警）
         FULL.put("extfull.ExtBlankTypeStrategy", """
             package extfull;

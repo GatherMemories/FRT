@@ -180,12 +180,14 @@ public class MyStrategy extends AbstractOperationStrategy {
     public String getStrategyType() { return "MyStrategy"; }          // ① 唯一标识：规则文件 strategyType 填这个
 
     @Override
-    public String getDescription() { return "只处理 .dat 文件"; }     // ② 中文说明（向导/日志显示，可省略）
+    public String getDescription() { return "按规则黑白名单处理文件"; }     // ② 中文说明（向导/日志显示，可省略）
 
-    // ③ 筛选：返回 true 的文件才交给本策略（这里：不是目录、且以 .dat 结尾）
+    // ③ 筛选：返回 true 的文件才交给本策略
+    //    用基类提供的 matchesRules() 按规则文件 patterns/excludePatterns 过滤（与内置策略同款）：
+    //    patterns:["*.txt"] 只处理 txt；patterns 留空 = 匹配所有；excludePatterns 排除；caseSensitive=false 忽略大小写
     @Override
     protected boolean accepts(FileNode node, OperationContext context) {
-        return !node.isDirectory() && node.getName().endsWith(".dat");
+        return !node.isDirectory() && matchesRules(node, context);
     }
 
     // ④ 新增：把更新目录的文件复制到目标目录
@@ -251,7 +253,7 @@ public class MyStrategy extends AbstractOperationStrategy {
 
 - `getStrategyType()` —— 策略身份证。返回值写进规则文件 `strategyType` 字段，**全程序唯一**（不能与内置策略/其他插件重名，否则被跳过）。
 - `getDescription()` —— 中文说明，向导和日志展示用，不写也行。
-- `accepts(...)` —— 过滤器。返回 `true` 的文件才进入本策略；**只做判断，不要在这里做文件操作**。
+- `accepts(...)` —— 过滤器。返回 `true` 的文件才进入本策略；**只做判断，不要在这里做文件操作**。想按规则文件的 `patterns`/`excludePatterns` 黑白名单过滤（与内置策略一致），一行调用基类的 `matchesRules(node, context)` 即可（空白名单=匹配所有、黑名单排除、`caseSensitive=false` 忽略大小写）——不需要自己实现通配符匹配。
 - `doAdd / doReplace / doDelete(...)` —— 三个操作钩子：新增/替换/删除时被调用。返回 `true` = 已处理该节点（链中后续策略跳过）；返回 `false` = 未处理。
 - `node` —— 当前文件节点（源文件）。`node.getPath()` 源路径；`node.getName()` 文件名；`node.getRelativePath()` 相对路径；`node.setHandled(true)` 标记已处理。
 - `context` —— 操作上下文。`context.getTargetPath(相对路径)` 计算**目标位置**；`context.getRuleParam("key")` 读取规则 `replacements` 里的参数；`context.isDryRun()` 是否预览模式；`context.recordOperation(record)` 提交操作记录。

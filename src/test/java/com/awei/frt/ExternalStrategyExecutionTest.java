@@ -244,6 +244,94 @@ class ExternalStrategyExecutionTest {
         assertTrue(Files.exists(target.resolve("a.txt")));
     }
 
+    // ---------------- matchesRules 封装（基类黑白名单） ----------------
+
+    @Test
+    void externalMatchesRulesHonorsPatterns() throws IOException {
+        Path update = Files.createDirectories(tempDir.resolve("mr-patterns/update"));
+        Path target = Files.createDirectories(tempDir.resolve("mr-patterns/target"));
+        Path backup = Files.createDirectories(tempDir.resolve("mr-patterns/backup"));
+        Files.writeString(update.resolve("a.txt"), "a");
+        Files.writeString(update.resolve("b.dat"), "b");
+        writeRule(update, """
+            {
+              "strategyType": "ExtRuleMatchStrategy",
+              "patterns": ["*.txt"],
+              "inheritToSubfolders": false
+            }
+            """);
+
+        OperationContext ctx = runUpdate(update, target, backup);
+
+        assertEquals(1, ctx.getSuccessCount(), "matchesRules 应按 patterns 白名单过滤");
+        assertTrue(Files.exists(target.resolve("a.txt")));
+        assertFalse(Files.exists(target.resolve("b.dat")));
+    }
+
+    @Test
+    void externalMatchesRulesHonorsExcludePatterns() throws IOException {
+        Path update = Files.createDirectories(tempDir.resolve("mr-exclude/update"));
+        Path target = Files.createDirectories(tempDir.resolve("mr-exclude/target"));
+        Path backup = Files.createDirectories(tempDir.resolve("mr-exclude/backup"));
+        Files.writeString(update.resolve("a.txt"), "a");
+        Files.writeString(update.resolve("b.dat"), "b");
+        writeRule(update, """
+            {
+              "strategyType": "ExtRuleMatchStrategy",
+              "excludePatterns": ["*.dat"],
+              "inheritToSubfolders": false
+            }
+            """);
+
+        OperationContext ctx = runUpdate(update, target, backup);
+
+        assertEquals(1, ctx.getSuccessCount(), "matchesRules 应按黑名单排除");
+        assertTrue(Files.exists(target.resolve("a.txt")));
+        assertFalse(Files.exists(target.resolve("b.dat")));
+    }
+
+    @Test
+    void externalMatchesRulesHonorsCaseInsensitive() throws IOException {
+        Path update = Files.createDirectories(tempDir.resolve("mr-case/update"));
+        Path target = Files.createDirectories(tempDir.resolve("mr-case/target"));
+        Path backup = Files.createDirectories(tempDir.resolve("mr-case/backup"));
+        Files.writeString(update.resolve("a.txt"), "a");
+        writeRule(update, """
+            {
+              "strategyType": "ExtRuleMatchStrategy",
+              "patterns": ["*.TXT"],
+              "replacements": {"caseSensitive": "false"},
+              "inheritToSubfolders": false
+            }
+            """);
+
+        OperationContext ctx = runUpdate(update, target, backup);
+
+        assertEquals(1, ctx.getSuccessCount(), "caseSensitive=false 应忽略大小写");
+        assertTrue(Files.exists(target.resolve("a.txt")));
+    }
+
+    @Test
+    void externalMatchesRulesEmptyPatternsMatchesAll() throws IOException {
+        Path update = Files.createDirectories(tempDir.resolve("mr-all/update"));
+        Path target = Files.createDirectories(tempDir.resolve("mr-all/target"));
+        Path backup = Files.createDirectories(tempDir.resolve("mr-all/backup"));
+        Files.writeString(update.resolve("a.txt"), "a");
+        Files.writeString(update.resolve("b.dat"), "b");
+        writeRule(update, """
+            {
+              "strategyType": "ExtRuleMatchStrategy",
+              "inheritToSubfolders": false
+            }
+            """);
+
+        OperationContext ctx = runUpdate(update, target, backup);
+
+        assertEquals(2, ctx.getSuccessCount(), "空白名单 = 匹配所有");
+        assertTrue(Files.exists(target.resolve("a.txt")));
+        assertTrue(Files.exists(target.resolve("b.dat")));
+    }
+
     // ---------------- 辅助 ----------------
 
     private OperationContext runUpdate(Path updateDir, Path targetDir, Path backupDir) throws IOException {
