@@ -12,7 +12,8 @@
 | 规则生成 | 交互式向导生成/编辑规则文件（控制台逐步向导；UI 为表单弹窗，支持策略链） |
 | 清理残留备份 | 删除备份目录中未被任何操作记录引用的文件（无记录保护的跳过），残留 ≥5 个时启动提醒 |
 | 核心配置 | 设置更新/目标/删除/备份目录与日志级别，写入 config.json |
-| 双界面 | Swing 图形界面（默认）或控制台菜单（7 项，`--console`）；更新/删除前均有 dry-run 预览二次确认 |
+| 打包插件 | 把 `plugins/` 目录下的 `.java` 策略源码一键编译打包成 jar（下次启动自动加载），无需命令行/IDE |
+| 双界面 | Swing 图形界面（默认）或控制台菜单（8 项，`--console`）；更新/删除前均有 dry-run 预览二次确认 |
 
 ## 快速开始
 
@@ -56,7 +57,7 @@ java -jar target/FRT-*.jar        # 直接运行 jar（控制台）
 
 ```bash
 # 在有 JDK 17+ 的机器上（Windows 用户在 Windows 上执行，Linux 用户在 Linux 上执行）
-jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported \
+jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported,jdk.compiler \
       --strip-debug --no-header-files --no-man-pages \
       --output runtime
 ```
@@ -252,7 +253,11 @@ public class MyStrategy extends AbstractOperationStrategy {
 
 ### 第 2 步：编译打包成 jar
 
-**方法 A：命令行**（需要 JDK 17+；`FRT-*.jar` 换成你实际的 jar 文件名）：
+**方法 A：程序内置"打包插件"按钮（推荐，无需命令行）**
+
+程序界面上有 **"打包插件"** 按钮（控制台菜单：选 `7`），一键把 `plugins/` 目录下所有 `.java` 源码编译打包成 jar（多个文件互相引用也能一起打包），输出回 `plugins/`。打包成功日志提示"重启程序后自动加载生效"。需要完整 JDK 启动（发布包精简运行时已内置编译器模块，可直接用）。
+
+**方法 B：命令行**（需要 JDK 17+；`FRT-*.jar` 换成你实际的 jar 文件名）：
 
 ```bash
 javac -encoding UTF-8 -cp FRT-0.1.1-SNAPSHOT.jar -d out MyStrategy.java
