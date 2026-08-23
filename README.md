@@ -169,6 +169,7 @@ import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.strategy.AbstractOperationStrategy;
 import com.awei.frt.core.uitls.FileUtil;
 import com.awei.frt.model.OperationRecord;
+import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -197,6 +198,10 @@ public class MyStrategy extends AbstractOperationStrategy {
         OperationRecord record = newRecord(context);                  // 创建操作记录（自动带好你的策略类型）
         boolean ok = FileUtil.addFile(node.getPath(), target, record, context.isDryRun()); // 真正的复制动作
         context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
+        // 处理结果打日志（+ = 新增，预览模式不打，避免"预览就报成功"误解）
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);                                    // 标记已处理：策略链后续步骤不再碰这个文件
         }
@@ -213,6 +218,9 @@ public class MyStrategy extends AbstractOperationStrategy {
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.replaceFile(node.getPath(), target, record, context.isDryRun());
         context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("= " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);
         }
@@ -226,6 +234,9 @@ public class MyStrategy extends AbstractOperationStrategy {
         OperationRecord record = newRecord(context);
         boolean ok = FileUtil.deleteFile(target, record, context.isDryRun());
         context.recordOperation(record);                              // 提交记录（备份/恢复/统计全靠它）
+        if (!context.isDryRun()) {
+            LoggerUtil.logInfo("- " + node.getName() + " " + (ok ? "成功" : "失败"));
+        }
         if (ok) {
             node.setHandled(true);
         }
@@ -250,6 +261,8 @@ public class MyStrategy extends AbstractOperationStrategy {
   - `FileUtil.deleteFile(文件, record[, dryRun])` —— 删除（自动备份）
 
 > 预览模式（dryRun）下 `FileUtil` 会自动"只校验不落盘"，所以上面代码直接透传 `context.isDryRun()` 即可，无需自己判断。
+
+> **想看处理结果日志？** 处理完成后用 `LoggerUtil.logInfo("+ " + node.getName() + " " + (ok ? "成功" : "失败"))` 打印（`+` 新增 / `=` 替换 / `-` 删除，与内置策略一致；预览模式跳过不打印）。不打印的话文件照常处理，但界面日志区看不到结果——内置策略都有这行日志。
 
 ### 第 2 步：编译打包成 jar
 
