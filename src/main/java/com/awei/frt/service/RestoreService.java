@@ -281,12 +281,15 @@ public class RestoreService {
                     System.out.println("-----------------------------------------");
                     if (restoreResult.isFullSuccess()) {
                         LoggerUtil.logInfo("[成功] 系统已成功恢复到操作前的状态");
+                        // 恢复成功才退出恢复功能（不再跳回备份列表）；失败/回滚时留在备份功能，
+                        // 方便用户重新选择其他备份重试
+                        return;
                     } else if (restoreResult.getRollbackCount() > 0) {
                         LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
                     } else {
                         LoggerUtil.logError("[失败] 系统恢复失败，可能处于不一致状态");
                     }
-                    // 无"请按任意键继续"停顿（用户要求去掉所有此类无效确认），直接回到恢复菜单
+                    // 失败/部分恢复：继续恢复菜单循环，让用户重新选择
 
                 } catch (NumberFormatException e) {
                     System.out.println("[失败] 无效的输入，请输入数字");

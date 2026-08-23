@@ -276,4 +276,104 @@ public class BackupFileLoaderTest {
             TestSupport.restoreBackupPath();
         }
     }
+
+    /**
+     * 回归测试：备份文件丢失后再次更新应重新拷贝重建（原实现 containsKey 命中即跳过拷贝、
+     * 不验证磁盘存在性——备份实体一旦丢失/被清理，后续更新永远不再落盘，恢复时提示"备份文件不存在"。
+     * 用户实测：更新 → 删除 → 再更新 → 恢复，备份缺失）
+     */
+    @Test
+    public void lostBackupFileIsRebuiltOnNextAdd() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            // 模拟被备份的目标文件（如 THtest/config/xxx）
+            Path sourceFile = tempDir.resolve("target-file.txt");
+            Files.writeString(sourceFile, "original-content-v1");
+
+            // 1. 首次备份 → 落盘
+            assertTrue(BackupFileLoader.addBackupFile(sourceFile), "首次备份应成功");
+            String md5 = FileSignUtil.getFileMd5(sourceFile);
+            Path backup1 = BackupFileLoader.getBackupFiles().get(md5);
+            assertNotNull(backup1, "备份索引应含该文件");
+            assertTrue(Files.exists(backup1), "首次备份文件应真实落盘");
+
+            // 2. 模拟备份文件丢失（被清理残留/误删等）
+            Files.deleteIfExists(backup1);
+            assertFalse(Files.exists(backup1), "前置：备份文件已丢失");
+
+            // 3. 再次更新同一文件 → 应重新拷贝重建备份（修复点）
+            assertTrue(BackupFileLoader.addBackupFile(sourceFile), "再次备份应成功");
+            Path backup2 = BackupFileLoader.getBackupFiles().get(md5);
+            assertNotNull(backup2, "再备份后索引应仍指向该文件");
+            assertTrue(Files.exists(backup2), "备份文件丢失后再次更新必须重建（否则恢复时找不到备份）");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    /**
+     * 平铺存储验证：备份文件直接以原文件名平铺在 backup/ 下（不再镜像目录层级）。
+     * 同名但内容不同（MD5 不同）→ 加短哈希后缀互不覆盖；同内容（MD5 相同）→ 去重合并为一份。
+     */
+    @Test
+    public void backupFilesAreFlattenedSameNameDifferentContentGetsHashSuffix() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path dir1 = Files.createDirectories(tempDir.resolve("src/dir1"));
+            Path dir2 = Files.createDirectories(tempDir.resolve("src/dir2"));
+            Path f1 = dir1.resolve("config.txt");
+            Files.writeString(f1, "content-A");
+            Path f2 = dir2.resolve("config.txt");
+            Files.writeString(f2, "content-B-different");
+
+            assertTrue(BackupFileLoader.addBackupFile(f1), "第一个同名文件备份应成功");
+            assertTrue(BackupFileLoader.addBackupFile(f2), "第二个同名文件备份应成功（不得覆盖第一个）");
+
+            // 平铺：backup/ 下两个普通文件（无目录层级）
+            java.util.List<Path> backups = new ArrayList<>();
+            try (java.util.stream.Stream<Path> s = Files.list(ConfigLoader.getBackupPath())) {
+                s.filter(Files::isRegularFile).forEach(backups::add);
+            }
+            assertEquals(2, backups.size(), "同名不同内容的两个备份应平铺保存且互不覆盖");
+
+            String c1 = Files.readString(backups.get(0));
+            String c2 = Files.readString(backups.get(1));
+            assertTrue((c1.equals("content-A") && c2.equals("content-B-different"))
+                            || (c1.equals("content-B-different") && c2.equals("content-A")),
+                    "两个备份的内容都应完整保留");
+
+            // 同内容再备份：MD5 去重，不新增文件
+            assertTrue(BackupFileLoader.addBackupFile(f1), "同内容再备份应成功（去重合并）");
+            long count;
+            try (java.util.stream.Stream<Path> s = Files.list(ConfigLoader.getBackupPath())) {
+                count = s.filter(Files::isRegularFile).count();
+            }
+            assertEquals(2, count, "同内容（相同 MD5）备份应去重，不新增文件");
+
+            // 跨目录同名同内容（如 dir3/config.txt 内容与 f1 相同）：也应合并为一份，不新增
+            Path dir3 = Files.createDirectories(tempDir.resolve("src/dir3"));
+            Path f3 = dir3.resolve("config.txt");
+            Files.writeString(f3, "content-A"); // 与 f1 内容相同（MD5 相同）
+            assertTrue(BackupFileLoader.addBackupFile(f3), "跨目录同名同内容备份应成功（去重合并）");
+            long countAfter;
+            try (java.util.stream.Stream<Path> s = Files.list(ConfigLoader.getBackupPath())) {
+                countAfter = s.filter(Files::isRegularFile).count();
+            }
+            assertEquals(2, countAfter, "跨目录同名同 MD5 应自动合并为一份，不新增备份文件");
+
+            // 不同文件名但内容相同（如 config.txt 与 config (副本).md）：MD5 去重合并为一份，
+            // 恢复时按 MD5 找到备份、拷贝到目标原名即可（备份文件名不影响恢复）
+            Path dir4 = Files.createDirectories(tempDir.resolve("src/dir4"));
+            Path f4 = dir4.resolve("other-name.txt");
+            Files.writeString(f4, "content-A"); // 与 f1 内容相同，但文件名不同
+            assertTrue(BackupFileLoader.addBackupFile(f4), "不同名同内容备份应成功（去重合并）");
+            long countFinal;
+            try (java.util.stream.Stream<Path> s = Files.list(ConfigLoader.getBackupPath())) {
+                countFinal = s.filter(Files::isRegularFile).count();
+            }
+            assertEquals(2, countFinal, "不同名同内容（相同 MD5）应合并为一份，不新增备份文件");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
 }
