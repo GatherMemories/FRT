@@ -16,11 +16,14 @@ cd /d "%~dp0"
 rem 兼容两种布局：发布包内 jar 与脚本同目录；开发目录 target\
 rem jar 名用通配（FRT-*.jar），升版本无需改脚本
 set JAR=
-for /f "delims=" %%f in ('dir /b /o-d "FRT-*.jar" 2^>nul') do set JAR=%%f & goto found_jar
+rem for /f 从 dir /b 捕获文件名时行尾会带空格（"FRT-x.jar "），java -jar 打不开带尾随空格的
+rem 文件 → 报"尝试打开文件...意外错误"。这里捕获后立即去掉尾部空格，再跳转
+for /f "delims=" %%f in ('dir /b /o-d "FRT-*.jar" 2^>nul') do set JAR=%%f & goto jar_found
 if not defined JAR (
     for /f "delims=" %%f in ('dir /b /o-d "target\FRT-*.jar" 2^>nul') do set JAR=target\%%f
 )
-:found_jar
+:jar_found
+if defined JAR set "JAR=%JAR: =%"
 
 if not defined JAR (
     echo [ERROR] jar not found: FRT-*.jar
