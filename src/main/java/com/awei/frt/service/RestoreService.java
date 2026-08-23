@@ -42,22 +42,25 @@ public class RestoreService {
      */
     public void executeRestore() {
         try {
-            // 1. 加载所有操作记录
-            Map<String, ProcessingResult> operationRecords = BackupFileLoader.getOperationRecordFiles();
-
-            if (operationRecords == null || operationRecords.isEmpty()) {
-                System.out.println("\n=========================================");
-                System.out.println("[执行] 恢复操作");
-                System.out.println("=========================================");
-                LoggerUtil.logWarn("[失败] 没有找到可用的备份记录，请先执行更新操作以创建备份");
-                return;
-            }
-
-            // 按时间排序备份记录（）
-            List<String> fileNames = new ArrayList<>(operationRecords.keySet());
-
             // 循环菜单，允许用户选择多个备份进行恢复
             while (true) {
+                // 每次循环都重新加载备份记录：loadOperationRecordsFiles() 每次都会替换静态
+                // operationRecordFiles 引用（读盘重建）。若只加载一次，固定/删除等写盘操作
+                // 修改的是"新 map"，而列表仍显示"旧 map"，导致同会话内固定后 [固定] 不刷新
+                // （用户实测：固定→删除→再固定另一个，列表无 [固定]，重进备份功能才显示）
+                Map<String, ProcessingResult> operationRecords = BackupFileLoader.getOperationRecordFiles();
+
+                if (operationRecords == null || operationRecords.isEmpty()) {
+                    System.out.println("\n=========================================");
+                    System.out.println("[执行] 恢复操作");
+                    System.out.println("=========================================");
+                    LoggerUtil.logWarn("[失败] 没有找到可用的备份记录，请先执行更新操作以创建备份");
+                    return;
+                }
+
+                // 按时间排序备份记录
+                List<String> fileNames = new ArrayList<>(operationRecords.keySet());
+
                 System.out.println("\n=========================================");
                 System.out.println("[执行] 恢复操作");
                 System.out.println("=========================================");
@@ -134,21 +137,30 @@ public class RestoreService {
                             deleteIndexes.add(deleteIndex);
                         }
 
-                        // 显示要删除的备份列表
+                        // 显示要删除的备份列表（固定备份带 [固定] 标记，便于识别）
                         System.out.println("\n[FILE] 要删除的备份记录 (" + deleteIndexes.size() + "个):");
                         System.out.println("-----------------------------------------");
+                        int pinnedCount = 0;
                         for (int i = 0; i < deleteIndexes.size(); i++) {
                             int index = deleteIndexes.get(i);
                             String fileName = fileNames.get(index);
                             ProcessingResult result = operationRecords.get(fileName);
-                            System.out.printf("%d. [%s] %s | 成功:%d 失败:%d\n",
+                            if (result.isPinned()) {
+                                pinnedCount++;
+                            }
+                            System.out.printf("%d. [%s]%s %s | 成功:%d 失败:%d\n",
                                 (i + 1), fileName,
+                                result.isPinned() ? " [固定]" : "",
                                 result.getResultTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                                 result.getSuccessCount(), result.getErrorCount());
                         }
                         System.out.println("-----------------------------------------");
 
-                        // 确认删除
+                        // 确认删除：若列表包含已固定备份，提示文字中显著标注，提醒不可恢复
+                        if (pinnedCount > 0) {
+                            System.out.println(">>> 警告：待删除的备份中包含 " + pinnedCount + " 个已固定备份（[固定]），"
+                                    + "固定备份永久保留、删除后不可恢复！请谨慎操作 <<<");
+                        }
                         System.out.print("\n确认要删除这 " + deleteIndexes.size() + " 个备份记录吗？此操作不可逆！(y/n): ");
                         String confirmDelete = prompter.readLine().toLowerCase();
 
@@ -167,11 +179,10 @@ public class RestoreService {
                             boolean success = BackupFileLoader.deleteBackupRecord(deleteFileName);
                             if (success) {
                                 successCount++;
-                                operationRecords.remove(deleteFileName);
                             } else {
                                 failCount++;
                             }
-                            fileNames.remove(index);
+                            // 不手动维护本地列表：下一轮循环会重新加载，删除结果立即反映
                         }
 
                         LoggerUtil.logInfo("[成功] 备份记录删除完成: 成功 " + successCount + " 个, 失败 " + failCount + " 个");
@@ -230,7 +241,8 @@ public class RestoreService {
                     System.out.println("-----------------------------------------");
 
                     // 6. 确认恢复 / 固定（永久保留，不受备份数量淘汰影响）
-                    System.out.print("\n操作：y=从此备份恢复, p=固定/取消固定（永久保留）, 其他=返回 (y/p/回车): ");
+                    // p 是"固定/取消固定"切换，提示按当前状态动态显示，避免误操作
+                    System.out.print("\n" + buildPinActionPrompt(selectedResult));
                     String confirm = prompter.readLine().toLowerCase();
 
                     if (confirm.equals("p")) {
@@ -290,16 +302,26 @@ public class RestoreService {
     }
 
     /**
+     * 固定/取消固定操作提示文案（按当前固定状态动态显示，避免用户误取消固定）
+     * @param result 选中的备份记录
+     * @return 提示文案（不含换行前缀）
+     */
+    String buildPinActionPrompt(ProcessingResult result) {
+        String pinAction = result.isPinned() ? "取消固定（当前已固定）" : "固定（永久保留）";
+        return "操作：y=从此备份恢复, p=" + pinAction + ", 其他=返回 (y/p/回车): ";
+    }
+
+    /**
      * 格式化备份信息
      * @param fileName 文件名
      * @param result 处理结果
      * @return 格式化的字符串
      */
-    private String formatBackupInfo(String fileName, ProcessingResult result) {
+    String formatBackupInfo(String fileName, ProcessingResult result) {
         LocalDateTime time = result.getResultTime();
         String timeStr = time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String pinned = result.isPinned() ? " [固定]" : "";
-        return String.format("[%s%s] %s | 成功:%d 失败:%d", fileName, pinned, timeStr,
+        return String.format("[%s]%s %s | 成功:%d 失败:%d", fileName, pinned, timeStr,
             result.getSuccessCount(), result.getErrorCount());
     }
 

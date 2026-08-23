@@ -120,6 +120,24 @@ class FRTFrameQuickOptionsTest {
     }
 
     @Test
+    void restoreOperationPromptGetsYPButtons() {
+        // 恢复操作提示（未固定状态）：p=固定（永久保留）→ 按钮「固定」
+        // 与 RestoreService.buildPinActionPrompt 真实输出保持一致
+        String prompt = "\n操作：y=从此备份恢复, p=固定（永久保留）, 其他=返回 (y/p/回车): ";
+        assertEquals(List.of("从此备份恢复", "固定", "取消"), labels(prompt),
+                "未固定记录的恢复提示应生成 y/p 快捷按钮");
+    }
+
+    @Test
+    void restoreOperationPromptPinnedStateShowsUnpin() {
+        // 恢复操作提示（已固定状态）：p=取消固定（当前已固定）→ 按钮「取消固定」
+        // 旧测试用"固定/取消固定"旧文案，与真实提示脱节——用户实测发现按钮与实际不符
+        String prompt = "\n操作：y=从此备份恢复, p=取消固定（当前已固定）, 其他=返回 (y/p/回车): ";
+        assertEquals(List.of("从此备份恢复", "取消固定", "取消"), labels(prompt),
+                "已固定记录的恢复提示应生成 y/p 快捷按钮");
+    }
+
+    @Test
     void moreThanTwentyRecordsAreNotTruncated() {
         // 回归：恢复菜单 22 条记录时，旧上限 20 截断 → 21/22 无快捷按钮（用户实测多轮测试后暴露）
         String prompt = "0. 返回主菜单\n-1. 删除备份记录\n1-22. 恢复备份记录\n"
