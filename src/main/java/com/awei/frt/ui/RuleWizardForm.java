@@ -23,6 +23,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -63,11 +64,21 @@ public class RuleWizardForm extends JDialog {
 
     private static final String[] BASE_CHOICES = {"更新目录", "删除目录"};
 
+    /** 模板下拉首项（不套用模板） */
+    private static final String NO_TEMPLATE_ITEM = "（不使用模板）";
+    /** 模板下拉分隔项（内置与自定义之间，不可套用） */
+    private static final String CUSTOM_SEPARATOR_ITEM = "—— 自定义模板 ——";
+    /** 自定义模板显示名前缀标记（与内置模板来源可辨，需求 §3.4） */
+    private static final String CUSTOM_MARKER = "【自定义】";
+
     private final Config config;
     private Result result;
 
     private final JComboBox<String> templateCombo = new JComboBox<>(); // 模板下拉（首项=（不使用模板））
-    private final List<RuleTemplate> templates = new ArrayList<>();    // 已加载模板（与下拉项一一对应，不含首项）
+    private final List<RuleTemplate> builtinTemplates = new ArrayList<>(); // 内置模板（下拉原名展示）
+    private final List<RuleTemplate> customTemplates = new ArrayList<>();  // 自定义模板（下拉带【自定义】标记）
+    private final Map<String, RuleTemplate> templateByDisplay = new LinkedHashMap<>(); // 下拉显示名 -> 模板（套用映射）
+    private JLabel templateHint; // 模板区块提示（随下拉刷新）
     private final JComboBox<String> baseCombo = new JComboBox<>(BASE_CHOICES);
     private final JComboBox<String> folderCombo = new JComboBox<>();
     private final JComboBox<String> strategyCombo = new JComboBox<>();
@@ -112,30 +123,29 @@ public class RuleWizardForm extends JDialog {
         c.weightx = 1.0;
         int row = 0;
 
-        // ---- 0. 套用内置模板（可选）：模板区块放表单顶部，不重排既有区块顺序 ----
+        // ---- 0. 套用规则模板（可选）：模板区块放表单顶部，不重排既有区块顺序 ----
         c.gridy = row++;
-        form.add(sectionTitle("0. 套用内置模板（可选）"), c);
+        form.add(sectionTitle("0. 套用规则模板（可选）"), c);
         c.gridy = row++;
         JPanel templateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         templateRow.setBackground(UITheme.PANEL_BG);
-        templateCombo.addItem("（不使用模板）");
-        templates.addAll(RuleTemplateLibrary.loadAll());
-        for (RuleTemplate t : templates) {
-            templateCombo.addItem(t.getName());
-        }
         JButton applyTemplateButton = new JButton("套用模板");
         UITheme.styleButton(applyTemplateButton);
         applyTemplateButton.addActionListener(e -> applySelectedTemplate());
+        JButton manageTemplateButton = new JButton("管理自定义模板");
+        UITheme.styleButton(manageTemplateButton);
+        manageTemplateButton.addActionListener(e -> openManageTemplates());
         templateRow.add(templateCombo);
         templateRow.add(applyTemplateButton);
+        templateRow.add(manageTemplateButton);
         form.add(templateRow, c);
         c.gridy = row++;
         // 模板加载失败（空列表）→ 下拉只有（不使用模板），提示手动填写，不影响手动流程
-        JLabel templateHint = new JLabel(templates.isEmpty()
-                ? "模板库加载失败，可手动填写" : "选择模板后点套用，可继续修改任意参数");
+        templateHint = new JLabel(" ");
         templateHint.setFont(UITheme.SMALL_FONT);
         templateHint.setForeground(UITheme.MUTED);
         form.add(templateHint, c);
+        refreshTemplateCombo(); // 内置 + 自定义合并填充下拉
 
         // ---- 1. 作用目录 ----
         c.gridy = row++;
@@ -208,12 +218,16 @@ public class RuleWizardForm extends JDialog {
         // ---- 按钮 ----
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         buttons.setBackground(UITheme.PANEL_BG);
+        JButton saveTemplateButton = new JButton("保存为模板");
+        UITheme.styleButton(saveTemplateButton);
+        saveTemplateButton.addActionListener(e -> saveAsTemplate());
         JButton okButton = new JButton("确定生成");
         UITheme.stylePrimaryButton(okButton);
         okButton.addActionListener(e -> onOk());
         JButton cancelButton = new JButton("取消");
         UITheme.styleButton(cancelButton);
         cancelButton.addActionListener(e -> dispose());
+        buttons.add(saveTemplateButton);
         buttons.add(okButton);
         buttons.add(cancelButton);
         c.gridy = row++;
@@ -350,21 +364,309 @@ public class RuleWizardForm extends JDialog {
     }
 
     /**
-     * 套用选中的内置模板（模板区块「套用模板」按钮）：
+     * 刷新模板下拉（内置 + 自定义合并，自定义带【自定义】标记，需求 §3.4）：
+     * 顺序 =（不使用模板）→ 内置模板（原名）→ 分隔项 → 自定义模板（标记名）。
+     * 保存/删除/改名后调用，下拉立即反映最新状态。
+     */
+    private void refreshTemplateCombo() {
+        templateCombo.removeAllItems();
+        templateByDisplay.clear();
+        builtinTemplates.clear();
+        customTemplates.clear();
+        templateCombo.addItem(NO_TEMPLATE_ITEM);
+        builtinTemplates.addAll(RuleTemplateLibrary.loadAll());
+        for (RuleTemplate t : builtinTemplates) {
+            templateCombo.addItem(t.getName());
+            templateByDisplay.put(t.getName(), t);
+        }
+        customTemplates.addAll(RuleTemplateLibrary.loadAllCustom());
+        if (!customTemplates.isEmpty()) {
+            templateCombo.addItem(CUSTOM_SEPARATOR_ITEM); // 分隔项：仅视觉分隔，不可套用
+        }
+        for (RuleTemplate t : customTemplates) {
+            String display = CUSTOM_MARKER + t.getName();
+            templateCombo.addItem(display);
+            templateByDisplay.put(display, t);
+        }
+        if (templateHint != null) {
+            templateHint.setText(builtinTemplates.isEmpty() && customTemplates.isEmpty()
+                    ? "模板库加载失败，可手动填写"
+                    : "选择模板后点套用，可继续修改任意参数；自定义模板带" + CUSTOM_MARKER + "标记");
+        }
+    }
+
+    /**
+     * 套用选中的规则模板（内置或自定义，模板区块「套用模板」按钮）：
      * 复用 applyRuleToForm 预填全部字段（策略类型/patterns/excludePatterns/replacements/
      * 继承开关/策略链步骤），套用后用户仍可修改任意字段，「确定生成」走既有 onOk() 流程。
      */
     private void applySelectedTemplate() {
-        int idx = templateCombo.getSelectedIndex();
-        if (idx <= 0 || idx > templates.size()) {
+        Object selected = templateCombo.getSelectedItem();
+        if (selected == null || NO_TEMPLATE_ITEM.equals(selected) || CUSTOM_SEPARATOR_ITEM.equals(selected)) {
             warningLabel.setText("请先选择要套用的模板");
             warningLabel.setForeground(UITheme.ERROR);
             return;
         }
-        RuleTemplate t = templates.get(idx - 1);
-        applyRuleToForm(t.getRule().copy());
+        RuleTemplate t = templateByDisplay.get(selected);
+        if (t == null) {
+            warningLabel.setText("请先选择要套用的模板");
+            warningLabel.setForeground(UITheme.ERROR);
+            return;
+        }
+        applyRuleToForm(t.getRule().copy()); // 深拷贝：模板资源不被表单修改污染
         warningLabel.setText("已套用模板「" + t.getName() + "」，可继续修改后生成");
         warningLabel.setForeground(UITheme.MUTED);
+    }
+
+    /**
+     * 「保存为模板」按钮（需求 §3.5）：组装当前表单规则（复用 buildRuleFromForm，
+     * 不含作用目录/目标文件夹——模板只存规则）→ 保存前校验（MatchRuleLoader）→
+     * 收集名称/分类/描述 → 保存；重名（自定义）覆盖询问、重名（内置）拒绝；
+     * 成功刷新模板下拉并提示，不关闭表单，可继续「确定生成」。
+     */
+    private void saveAsTemplate() {
+        MatchRule rule = buildRuleFromForm();
+        if (rule == null) {
+            showError("请先选择策略类型，再保存为模板");
+            return;
+        }
+        // 保存前校验（§3.7）：rule 序列化 → MatchRuleLoader 非 null，不合法不写文件、不关闭表单
+        if (!RuleTemplateLibrary.isValidRule(rule)) {
+            showError("当前规则不合法，无法保存为模板（策略类型或策略链步骤未注册）");
+            return;
+        }
+        TemplateInfo info = askTemplateInfo();
+        if (info == null) {
+            return; // 用户取消
+        }
+        RuleTemplate template = new RuleTemplate();
+        template.setId(RuleTemplateLibrary.generateCustomTemplateId());
+        template.setName(info.name);
+        template.setCategory(info.category);
+        template.setDescription(info.description);
+        template.setRule(rule);
+        RuleTemplateLibrary.SaveStatus status = RuleTemplateLibrary.saveTemplate(template, false);
+        if (status == RuleTemplateLibrary.SaveStatus.DUPLICATE_NAME) {
+            // 与自定义模板重名：询问是否覆盖（覆盖保持原 id，引用不失效）
+            int choice = javax.swing.JOptionPane.showConfirmDialog(this,
+                    "已存在同名模板「" + info.name + "」，是否覆盖？", "保存为模板",
+                    javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.QUESTION_MESSAGE);
+            if (choice != javax.swing.JOptionPane.YES_OPTION) {
+                return;
+            }
+            status = RuleTemplateLibrary.saveTemplate(template, true);
+        }
+        if (status == RuleTemplateLibrary.SaveStatus.SUCCESS) {
+            refreshTemplateCombo(); // 下拉立即反映新增自定义项
+            warningLabel.setText("已保存自定义模板「" + info.name + "」");
+            warningLabel.setForeground(UITheme.SUCCESS);
+        } else if (status == RuleTemplateLibrary.SaveStatus.BUILTIN_NAME_CONFLICT) {
+            showError("与内置模板重名，请换一个名称");
+        } else if (status == RuleTemplateLibrary.SaveStatus.INVALID_RULE) {
+            showError("当前规则不合法，无法保存为模板");
+        } else {
+            showError("保存模板失败，请检查模板目录是否可写");
+        }
+    }
+
+    /** 模板信息（名称必填；分类默认"自定义"；描述可选） */
+    private static class TemplateInfo {
+        final String name;
+        final String category;
+        final String description;
+
+        TemplateInfo(String name, String category, String description) {
+            this.name = name;
+            this.category = category;
+            this.description = description;
+        }
+    }
+
+    /**
+     * 收集模板信息：样式化输入面板（UITheme 组件，深色主题可读），
+     * 名称必填（空名弹错提示并视为取消）；用户取消返回 null。
+     */
+    private TemplateInfo askTemplateInfo() {
+        JTextField nameField = new JTextField(20);
+        JTextField categoryField = new JTextField(20);
+        categoryField.setText("自定义");
+        JTextField descField = new JTextField(20);
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBackground(UITheme.PANEL_BG);
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(4, 4, 4, 4);
+        c.anchor = GridBagConstraints.WEST;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1.0;
+        int row = 0;
+        c.gridy = row++;
+        panel.add(new JLabel("模板名称（必填）:"), c);
+        c.gridy = row++;
+        panel.add(nameField, c);
+        c.gridy = row++;
+        panel.add(new JLabel("分类（可选，默认「自定义」）:"), c);
+        c.gridy = row++;
+        panel.add(categoryField, c);
+        c.gridy = row++;
+        panel.add(new JLabel("描述（可选）:"), c);
+        c.gridy = row++;
+        panel.add(descField, c);
+        int choice = javax.swing.JOptionPane.showConfirmDialog(this, panel, "保存为自定义模板",
+                javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE);
+        if (choice != javax.swing.JOptionPane.OK_OPTION) {
+            return null;
+        }
+        String name = nameField.getText() == null ? "" : nameField.getText().trim();
+        if (name.isEmpty()) {
+            showError("模板名称不能为空");
+            return null;
+        }
+        String category = categoryField.getText() == null ? "" : categoryField.getText().trim();
+        String description = descField.getText() == null ? "" : descField.getText().trim();
+        return new TemplateInfo(name, category.isEmpty() ? "自定义" : category, description);
+    }
+
+    /**
+     * 「管理自定义模板」入口（需求 §3.5）：打开管理对话框（仅列自定义，内置不展示、
+     * 删除入口隐藏——内置只读保护第一层），对话框内删除/改名后即刷新下拉，关闭后再刷一次兜底。
+     */
+    private void openManageTemplates() {
+        new TemplateManageDialog().setVisible(true); // 模态：关闭后才继续
+        refreshTemplateCombo();
+    }
+
+    /**
+     * 自定义模板管理对话框（FR-1，v0.1.16，§3.5；内嵌于表单，与表单共享刷新路径）
+     * <p>
+     * 仅列出自定义模板（内置模板不展示、删除入口对内置隐藏——内置只读保护第一层，
+     * 库层 deleteTemplate/renameTemplate 对内置 id 仍拒绝，双保险）。
+     * 每行提供「改名」「删除」（删除需确认，确认后生效）；操作成功后列表与表单模板下拉
+     * 立即刷新（保存/删除/改名共享同一刷新路径）。全部组件使用 UITheme 样式
+     * （依赖工作区未提交的 UIManager 深色主题修复，深色主题下可读）。
+     */
+    private class TemplateManageDialog extends JDialog {
+
+        private final JPanel listPanel = new JPanel();
+        private final JLabel statusLabel = new JLabel(" ");
+
+        TemplateManageDialog() {
+            super(RuleWizardForm.this, "管理自定义模板", true);
+            UITheme.apply();
+            buildContent();
+            pack();
+            setSize(560, 420);
+            setLocationRelativeTo(RuleWizardForm.this);
+            refreshList();
+        }
+
+        private void buildContent() {
+            JPanel root = new JPanel(new BorderLayout(8, 8));
+            root.setBackground(UITheme.PANEL_BG);
+
+            JLabel title = new JLabel("自定义模板管理（内置模板只读，不在本列表展示）");
+            title.setFont(UITheme.TITLE_FONT);
+            title.setForeground(UITheme.TEXT);
+            root.add(title, BorderLayout.NORTH);
+
+            listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+            listPanel.setBackground(UITheme.PANEL_BG);
+            JScrollPane scroll = new JScrollPane(listPanel);
+            // 加大滚轮步长（与主表单一致）
+            scroll.getVerticalScrollBar().setUnitIncrement(24);
+            root.add(scroll, BorderLayout.CENTER);
+
+            statusLabel.setFont(UITheme.SMALL_FONT);
+            statusLabel.setForeground(UITheme.MUTED);
+            JPanel statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+            statusRow.setBackground(UITheme.PANEL_BG);
+            statusRow.add(statusLabel);
+            root.add(statusRow, BorderLayout.SOUTH);
+
+            getContentPane().add(root);
+        }
+
+        /** 刷新列表：仅列自定义模板；无自定义模板时显示空提示（不误导） */
+        private void refreshList() {
+            listPanel.removeAll();
+            List<RuleTemplate> customs = RuleTemplateLibrary.loadAllCustom();
+            if (customs.isEmpty()) {
+                JLabel empty = new JLabel("暂无自定义模板");
+                empty.setForeground(UITheme.MUTED);
+                listPanel.add(empty);
+            } else {
+                for (RuleTemplate t : customs) {
+                    listPanel.add(templateRow(t));
+                }
+            }
+            listPanel.revalidate();
+            listPanel.repaint();
+        }
+
+        /** 一行自定义模板：名称（分类）+ 描述 + 改名 + 删除 */
+        private JPanel templateRow(RuleTemplate t) {
+            JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+            row.setBackground(UITheme.PANEL_BG);
+            String category = t.getCategory() == null || t.getCategory().isBlank() ? "" : "（" + t.getCategory() + "）";
+            JLabel nameLabel = new JLabel(t.getName() + category);
+            nameLabel.setForeground(UITheme.TEXT);
+            JLabel descLabel = new JLabel(t.getDescription() == null || t.getDescription().isBlank()
+                    ? "" : " — " + t.getDescription());
+            descLabel.setFont(UITheme.SMALL_FONT);
+            descLabel.setForeground(UITheme.MUTED);
+            JButton renameButton = new JButton("改名");
+            UITheme.styleButton(renameButton);
+            renameButton.addActionListener(e -> renameTemplate(t));
+            JButton deleteButton = new JButton("删除");
+            UITheme.styleButton(deleteButton);
+            deleteButton.addActionListener(e -> deleteTemplate(t));
+            row.add(nameLabel);
+            row.add(descLabel);
+            row.add(renameButton);
+            row.add(deleteButton);
+            return row;
+        }
+
+        /** 改名：弹窗输入新名称（非空、不与内置/其他自定义重名），改名不换 id */
+        private void renameTemplate(RuleTemplate t) {
+            String newName = javax.swing.JOptionPane.showInputDialog(this, "请输入新名称:", t.getName());
+            if (newName == null) {
+                return; // 取消
+            }
+            newName = newName.trim();
+            if (newName.isEmpty()) {
+                showStatus("名称不能为空", UITheme.ERROR);
+                return;
+            }
+            if (RuleTemplateLibrary.renameTemplate(t.getId(), newName)) {
+                showStatus("已改名为「" + newName + "」", UITheme.SUCCESS);
+                refreshList();
+                refreshTemplateCombo(); // 与表单下拉共享刷新路径
+            } else {
+                showStatus("改名失败：名称不能为空、与内置或其他自定义模板重名", UITheme.ERROR);
+            }
+        }
+
+        /** 删除：确认后调用库层删除（内置 id 不可达，库层仍拒绝，双保险） */
+        private void deleteTemplate(RuleTemplate t) {
+            int choice = javax.swing.JOptionPane.showConfirmDialog(this,
+                    "确定删除自定义模板「" + t.getName() + "」？", "删除模板",
+                    javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
+            if (choice != javax.swing.JOptionPane.YES_OPTION) {
+                return;
+            }
+            if (RuleTemplateLibrary.deleteTemplate(t.getId())) {
+                showStatus("已删除「" + t.getName() + "」", UITheme.SUCCESS);
+                refreshList();
+                refreshTemplateCombo(); // 与表单下拉共享刷新路径
+            } else {
+                showStatus("删除失败（内置模板不可删除或模板不存在）", UITheme.ERROR);
+            }
+        }
+
+        private void showStatus(String text, Color color) {
+            statusLabel.setText(text);
+            statusLabel.setForeground(color);
+        }
     }
 
     /** 将已解析的规则填充到表单（主策略 = 规则自身即链第 1 步；链步骤 = strategyChain 中的后续步骤） */
@@ -528,19 +830,19 @@ public class RuleWizardForm extends JDialog {
 
     // ---------------- 确定/取消 ----------------
 
-    private void onOk() {
-        Object folderSel = folderCombo.getSelectedItem();
-        if (folderSel == null || folderMap.get(folderSel) == null) {
-            showError("目标文件夹无效，请先确认作用目录存在且已加载文件夹列表");
-            return;
-        }
-        Path targetDir = folderMap.get(folderSel);
+    /**
+     * 组装当前表单规则（策略类型/patterns/excludePatterns/replacements/继承开关/策略链步骤），
+     * 不含作用目录/目标文件夹——模板只存规则，与内置模板语义一致。
+     * 「确定生成」与「保存为模板」共用本方法（需求 §6.2，避免两份组装逻辑漂移）。
+     *
+     * @return 完整规则；策略类型未选择时返回 null（调用方负责提示）
+     */
+    private MatchRule buildRuleFromForm() {
         // 下拉项显示"类型（说明）"，但存入规则的必须是注册表标识（否则解析失败）
         int strategyIdx = strategyCombo.getSelectedIndex();
         String strategy = (strategyIdx >= 0 && strategyIdx < strategyTypes.size()) ? strategyTypes.get(strategyIdx) : null;
         if (strategy == null) {
-            showError("请选择策略类型");
-            return;
+            return null;
         }
 
         MatchRule rule = new MatchRule();
@@ -558,7 +860,21 @@ public class RuleWizardForm extends JDialog {
             }
             rule.setStrategyChain(chain);
         }
+        return rule;
+    }
 
+    private void onOk() {
+        Object folderSel = folderCombo.getSelectedItem();
+        if (folderSel == null || folderMap.get(folderSel) == null) {
+            showError("目标文件夹无效，请先确认作用目录存在且已加载文件夹列表");
+            return;
+        }
+        Path targetDir = folderMap.get(folderSel);
+        MatchRule rule = buildRuleFromForm();
+        if (rule == null) {
+            showError("请选择策略类型");
+            return;
+        }
         result = new Result(targetDir, rule);
         dispose();
     }
