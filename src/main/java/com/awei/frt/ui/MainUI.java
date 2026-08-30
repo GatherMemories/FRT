@@ -11,7 +11,8 @@ public class MainUI {
 
     public static void main(String[] args) {
         // Swing 文本抗锯齿（与 Main 入口一致）：直接运行 MainUI 时同样开启
-        System.setProperty("awt.useSystemAAFontSettings", "on");
+        System.setProperty("awt.useSystemAAFontSettings",
+                System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win") ? "lcd" : "on");
         System.setProperty("swing.aatext", "true");
 
         SwingUtilities.invokeLater(() -> {
