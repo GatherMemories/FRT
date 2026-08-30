@@ -104,6 +104,38 @@ public class ConfigLoader {
     }
 
     /**
+     * 保存 UI 主题到外部 config.json（合并保留其他键，不弹确认、不打断 UI）。
+     * 视图菜单切换主题时调用；失败仅记日志，下次启动仍可用旧值。
+     */
+    public static void saveTheme(String theme) {
+        saveThemeTo(getExternalConfigPath(), theme);
+    }
+
+    /**
+     * 把 theme 合并写入指定 config.json（包内可见，供测试传临时路径隔离污染）
+     */
+    static void saveThemeTo(Path configPath, String theme) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            if (Files.exists(configPath)) {
+                String text = Files.readString(configPath);
+                if (text.startsWith("\uFEFF")) {
+                    text = text.substring(1);
+                }
+                JsonNode existing = objectMapper.readTree(text);
+                if (existing != null && existing.isObject()) {
+                    root = (ObjectNode) existing;
+                }
+            }
+            root.put("theme", theme);
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+            Files.writeString(configPath, json, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LoggerUtil.logException("[警告] 保存主题设置失败", e);
+        }
+    }
+
+    /**
      * 记录信息级别日志
      */
     private static void logInfo(String message) {

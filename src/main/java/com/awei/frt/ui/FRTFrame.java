@@ -11,15 +11,23 @@ import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.PluginCompiler;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.service.RuleConfigWizard;
+import com.awei.frt.service.UpdateChecker;
 import com.awei.frt.util.BuildInfo;
 import com.awei.frt.util.LoggerUtil;
 
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
+import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.JTextField;
@@ -34,6 +42,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.HeadlessException;
+import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -58,12 +67,19 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private final JProgressBar progressBar;
     private final QuickButtonPanel quickPanel;
     private final JScrollPane quickScroll;   // 快捷按钮滚动区（最多显示约 3 行，超出滚动）
+    private final JScrollPane logScroll;     // 日志滚动区（主题切换时重刷视口/边框，避免残留旧色）
     private final JPanel inputArea;          // 快捷按钮 + 输入行（等待输入时显示）
     private final JTextField inputField;
     private final JButton submitButton;
     private final JButton cancelButton;
     private final JButton fontMinusButton; // 日志字体缩小（A-）
     private final JButton fontPlusButton;  // 日志字体放大（A+）
+    private final JButton clearLogButton;  // 清空日志按钮（主题切换时重刷样式）
+    private final JPanel statusBar;        // 状态栏（主题切换时重刷背景/边框）
+    private JRadioButtonMenuItem themeLightItem; // 视图→主题 浅色项（勾选与当前主题同步）
+    private JRadioButtonMenuItem themeDarkItem;  // 视图→主题 深色项
+    private JMenuItem fontMinusMenuItem;   // 视图→日志字体 缩小项（与 A- 按钮联动禁用）
+    private JMenuItem fontPlusMenuItem;    // 视图→日志字体 放大项（与 A+ 按钮联动禁用）
     private int logFontSize = 13;          // 当前日志字体大小（可调 10~24，持久化到 config.json）
     private final List<JButton> topButtons = new ArrayList<>();
     // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明）
@@ -89,7 +105,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         logArea.setForeground(UITheme.LOG_TEXT);
         logArea.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         // 加大滚轮步长：Swing 默认 unitIncrement 偏小，鼠标滚轮滚动日志区很慢
-        JScrollPane logScroll = new JScrollPane(logArea);
+        logScroll = new JScrollPane(logArea);
         logScroll.setBackground(UITheme.LOG_BG);
         logScroll.getViewport().setBackground(UITheme.LOG_BG); // 视口同色，避免白底四周露边
         logScroll.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER)); // 顶部分隔线，与按钮区分界清晰
@@ -107,7 +123,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         top.add(topButton("清理残留备份", this::runCleanup));
         top.add(topButton("核心配置", this::runConfig));
         top.add(topButton("打包插件", this::runPluginBuild));
-        JButton clearLogButton = new JButton("清空日志");
+        clearLogButton = new JButton("清空日志");
         UITheme.styleButton(clearLogButton);
         clearLogButton.addActionListener(e -> logArea.setText(""));
         top.add(clearLogButton);
@@ -160,12 +176,14 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         statusLabel.setFont(UITheme.SMALL_FONT);
         statusLabel.setForeground(UITheme.MUTED);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
-        JPanel statusBar = new JPanel(new BorderLayout());
+        statusBar = new JPanel(new BorderLayout());
         statusBar.setBackground(UITheme.PANEL_BG);
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
         statusBar.add(statusLabel, BorderLayout.CENTER);
 
-        // 状态栏右侧：版本号 + GitHub 仓库链接（版本自动取自 pom.xml；链接可点击，用系统浏览器打开）
+        // 状态栏右侧：版本号 + GitHub 仓库链接（版本自动取自 pom.xml；链接可点击，用系统浏览器打开）。
+        // 注：LinkLabel 用 HTML 锚点渲染，链接色由 HTML 样式表决定、不随主题（深色下仍可读），
+        // 不做 setForeground 无效调用（见审查 F4）
         LinkLabel versionLink = new LinkLabel("v" + BuildInfo.VERSION + " · GitHub", BuildInfo.GITHUB_URL);
         versionLink.setFont(UITheme.SMALL_FONT);
         versionLink.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 10));
@@ -193,7 +211,15 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             // 应用 config.json 里持久化的日志字体大小（无该字段时默认 13）
             logFontSize = config.getLogFontSize();
             applyLogFontSize(logFontSize);
+            // 按 config.json 记录的 UI 主题应用：组件已按浅色创建，配置为深色时补一次
+            // apply(true) + refreshTheme()（窗口尚未显示，无闪烁；浅色时保持默认即可）
+            if (Config.THEME_DARK.equals(config.getTheme()) && !UITheme.isDark()) {
+                UITheme.apply(true);
+                refreshTheme();
+            }
         }
+        // 菜单栏（放在 config 读取之后：主题菜单勾选初始状态与 UITheme 当前主题一致）
+        setJMenuBar(buildMenuBar(this));
         updateFontButtons();
         prompter = new SwingPrompter(this, this);
         if (config == null) {
@@ -210,6 +236,295 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         b.addActionListener(e -> action.run());
         topButtons.add(b);
         return b;
+    }
+
+    // ---------------- 菜单栏（文件/视图/帮助） ----------------
+
+    /**
+     * 构建菜单栏（包内可见，供菜单结构 headless 测试；frame 为 null 时只构建骨架不绑定动作）：
+     * - 文件：打开目录 ▸ 更新/目标/删除/备份/日志目录、分隔线、退出
+     * - 视图：主题 ▸ 浅色/深色（单选勾选，与当前主题同步）、日志字体 ▸ 缩小(A-)/放大(A+)
+     * - 帮助：检查更新、关于
+     * 菜单项动作与顶部按钮同一行为风格：执行动作走后台线程，日志区输出 [成功]/[失败]/[警告] 标记。
+     */
+    static JMenuBar buildMenuBar(FRTFrame frame) {
+        JMenuBar bar = new JMenuBar();
+        // 个别 L&F 下 JMenuBar 不透传 UIManager 的 MenuBar 颜色键，显式设置保证深色主题可读
+        bar.setBackground(UITheme.PANEL_BG);
+        bar.setForeground(UITheme.TEXT);
+
+        // ---------- 文件：打开目录 ▸ 5 个目录 + 退出 ----------
+        JMenu fileMenu = new JMenu("文件");
+        JMenu openDirMenu = new JMenu("打开目录");
+        openDirMenu.add(menuItem(frame, "更新目录", () -> frame.openDirectoryByName("更新目录")));
+        openDirMenu.add(menuItem(frame, "目标目录", () -> frame.openDirectoryByName("目标目录")));
+        openDirMenu.add(menuItem(frame, "删除目录", () -> frame.openDirectoryByName("删除目录")));
+        openDirMenu.add(menuItem(frame, "备份目录", () -> frame.openDirectoryByName("备份目录")));
+        openDirMenu.add(menuItem(frame, "日志目录", () -> frame.openDirectoryByName("日志目录")));
+        fileMenu.add(openDirMenu);
+        fileMenu.addSeparator();
+        // 注意：用 lambda 而非方法引用——方法引用对实例目标会立即求值，frame 为 null（菜单结构测试）时会 NPE
+        // 退出：触发 WINDOW_CLOSING 事件，由既有 setDefaultCloseOperation(EXIT_ON_CLOSE) 走正常退出流程
+        //（dispose() 只发 WINDOW_CLOSED，Swing EDT 为非守护线程，窗口消失但进程残留，故不用）
+        fileMenu.add(menuItem(frame, "退出",
+                () -> frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING))));
+        bar.add(fileMenu);
+
+        // ---------- 视图：主题（浅色/深色单选勾选）+ 日志字体（A-/A+） ----------
+        JMenu viewMenu = new JMenu("视图");
+        JMenu themeMenu = new JMenu("主题");
+        JRadioButtonMenuItem lightItem = new JRadioButtonMenuItem("浅色", !UITheme.isDark());
+        JRadioButtonMenuItem darkItem = new JRadioButtonMenuItem("深色", UITheme.isDark());
+        ButtonGroup themeGroup = new ButtonGroup();
+        themeGroup.add(lightItem);
+        themeGroup.add(darkItem);
+        if (frame != null) {
+            lightItem.addActionListener(e -> frame.switchTheme(false));
+            darkItem.addActionListener(e -> frame.switchTheme(true));
+            frame.themeLightItem = lightItem;
+            frame.themeDarkItem = darkItem;
+        }
+        themeMenu.add(lightItem);
+        themeMenu.add(darkItem);
+        viewMenu.add(themeMenu);
+        JMenu fontMenu = new JMenu("日志字体");
+        JMenuItem fontMinusItem = new JMenuItem("缩小 (A-)");
+        JMenuItem fontPlusItem = new JMenuItem("放大 (A+)");
+        if (frame != null) {
+            fontMinusItem.addActionListener(e -> frame.adjustLogFontSize(-1));
+            fontPlusItem.addActionListener(e -> frame.adjustLogFontSize(1));
+            frame.fontMinusMenuItem = fontMinusItem;
+            frame.fontPlusMenuItem = fontPlusItem;
+        }
+        fontMenu.add(fontMinusItem);
+        fontMenu.add(fontPlusItem);
+        viewMenu.add(fontMenu);
+        bar.add(viewMenu);
+
+        // ---------- 帮助：检查更新 + 关于 ----------
+        JMenu helpMenu = new JMenu("帮助");
+        helpMenu.add(menuItem(frame, "检查更新", () -> frame.runCheckUpdate()));
+        helpMenu.add(menuItem(frame, "关于", () -> frame.showAbout()));
+        bar.add(helpMenu);
+
+        return bar;
+    }
+
+    /** 创建菜单项并绑定动作（frame 为 null 时不绑定，供菜单结构测试） */
+    private static JMenuItem menuItem(FRTFrame frame, String text, Runnable action) {
+        JMenuItem item = new JMenuItem(text);
+        if (frame != null) {
+            item.addActionListener(e -> action.run());
+        }
+        return item;
+    }
+
+    // ---------------- 便捷功能：主题切换 / 检查更新 / 打开目录 / 关于 ----------------
+
+    /**
+     * 主题切换（视图 → 主题 浅色/深色）：
+     * apply(boolean) 换配色 + refreshTheme() 即时重刷已捕获旧色的组件 +
+     * config.setTheme + ConfigLoader.saveTheme 持久化到 config.json（重启保留）。
+     */
+    private void switchTheme(boolean darkTheme) {
+        if (UITheme.isDark() == darkTheme) {
+            return;
+        }
+        UITheme.apply(darkTheme);
+        refreshTheme();
+        if (config != null) {
+            config.setTheme(darkTheme ? Config.THEME_DARK : Config.THEME_LIGHT);
+        }
+        ConfigLoader.saveTheme(darkTheme ? Config.THEME_DARK : Config.THEME_LIGHT);
+        statusLabel.setText("已切换为" + (darkTheme ? "深色" : "浅色") + "主题");
+        appendText("[成功] 已切换为" + (darkTheme ? "深色" : "浅色") + "主题\n");
+    }
+
+    /**
+     * 主题切换后重刷直接 setBackground/setForeground 捕获旧色的组件
+     * （updateComponentTreeUI 只刷新 UIManager 默认值捕获的组件，直接设色的必须显式重刷）。
+     */
+    void refreshTheme() {
+        SwingUtilities.updateComponentTreeUI(this);
+        // 日志区 + 滚动区视口/边框
+        logArea.setBackground(UITheme.LOG_BG);
+        logArea.setForeground(UITheme.LOG_TEXT);
+        logScroll.setBackground(UITheme.LOG_BG);
+        logScroll.getViewport().setBackground(UITheme.LOG_BG);
+        logScroll.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
+        // 滚动条区显式重刷（轨道/滑块用主题色，Metal L&F 下避免深色主题露浅灰条）
+        recolorScrollBars(logScroll);
+        // 快捷按钮滚动区 + 面板
+        quickScroll.setBackground(UITheme.PANEL_BG);
+        quickScroll.getViewport().setBackground(UITheme.PANEL_BG);
+        recolorScrollBars(quickScroll);
+        quickPanel.setBackground(UITheme.PANEL_BG);
+        // 状态栏（标签文字色 + 背景 + 边框）
+        statusLabel.setForeground(UITheme.MUTED);
+        statusBar.setBackground(UITheme.PANEL_BG);
+        statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
+        // 顶部功能按钮逐个重套主题样式（直接捕获了旧色）
+        for (JButton b : topButtons) {
+            UITheme.styleButton(b);
+        }
+        UITheme.styleButton(clearLogButton);
+        UITheme.styleButton(fontMinusButton);
+        UITheme.styleButton(fontPlusButton);
+        // 菜单栏本身（个别 L&F 不透传颜色键）与主题菜单勾选状态同步
+        JMenuBar bar = getJMenuBar();
+        if (bar != null) {
+            bar.setBackground(UITheme.PANEL_BG);
+            bar.setForeground(UITheme.TEXT);
+        }
+        if (themeLightItem != null && themeDarkItem != null) {
+            themeLightItem.setSelected(!UITheme.isDark());
+            themeDarkItem.setSelected(UITheme.isDark());
+        }
+        // 重着色既有日志内容：日志行插入时把当时的 UITheme 颜色写入了字符属性，
+        // 主题切换后需按当前主题重新着色（EDT 内，典型日志量级可接受）
+        recolorLogContent();
+    }
+
+    /** 滚动条区显式重刷：轨道/滑块用当前主题色（Metal/基础 L&F 读取 UIManager 键 + 组件级颜色双保险） */
+    private static void recolorScrollBars(JScrollPane scroll) {
+        for (JScrollBar sb : new JScrollBar[]{scroll.getVerticalScrollBar(), scroll.getHorizontalScrollBar()}) {
+            sb.setBackground(UITheme.PANEL_BG);
+            sb.setForeground(UITheme.BORDER);
+        }
+    }
+
+    /**
+     * 重着色日志区已有内容：读取 StyledDocument 全文 → remove 后复用 insertStyledLine/segmentStyledLine
+     * 按当前 UITheme 颜色重新分段插入，使主题切换后既有日志行（含 [成功]/[失败] 标记着色）不残留旧色。
+     */
+    private void recolorLogContent() {
+        StyledDocument doc = logArea.getStyledDocument();
+        int len = doc.getLength();
+        if (len == 0) {
+            return;
+        }
+        try {
+            String existing = doc.getText(0, len);
+            doc.remove(0, len);
+            appendStyled(existing);
+        } catch (BadLocationException e) {
+            // 只操作文档末尾，正常不会发生；失败仅记日志，不影响主题切换
+            LoggerUtil.logException("[警告] 主题切换时日志内容重着色失败", e);
+        }
+    }
+
+    /**
+     * 检查更新（帮助 → 检查更新）：后台线程查询 GitHub 最新 Release（最多等 5s），
+     * 与 BuildInfo.VERSION 比较；有新版弹提示并可打开下载页，无新版提示已最新，
+     * 网络失败仅提示不崩溃。全程不阻塞 EDT。
+     */
+    private void runCheckUpdate() {
+        statusLabel.setText("正在检查更新...");
+        appendText("[信息] 正在检查更新...\n");
+        new SwingWorker<UpdateChecker.ReleaseInfo, Void>() {
+            @Override
+            protected UpdateChecker.ReleaseInfo doInBackground() {
+                return UpdateChecker.fetchLatestRelease();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    handleCheckUpdateResult(get());
+                } catch (Exception e) {
+                    LoggerUtil.logException("[检查更新] 执行异常", e);
+                    appendText("[失败] 检查更新异常，详见日志\n");
+                    statusLabel.setText("检查更新异常");
+                }
+            }
+        }.execute();
+    }
+
+    /** 检查更新结果处理（EDT，done() 回调）：有新版 / 已最新 / 失败 三分支 */
+    private void handleCheckUpdateResult(UpdateChecker.ReleaseInfo info) {
+        if (info == null) {
+            // 网络失败 / API 不可达 / GITHUB_URL 未配置：静默降级，仅提示不崩溃
+            appendText("[警告] 检查更新失败（网络不可用或 GitHub 无法访问），请稍后重试\n");
+            statusLabel.setText("检查更新失败");
+            JOptionPane.showMessageDialog(this,
+                    "检查更新失败（网络不可用或 GitHub 无法访问），请稍后重试",
+                    "检查更新", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (UpdateChecker.isNewer(info.tagName(), BuildInfo.VERSION)) {
+            appendText("[成功] 发现新版本 " + info.tagName() + "（当前 v" + BuildInfo.VERSION + "）\n");
+            statusLabel.setText("发现新版本 " + info.tagName());
+            String message = "发现新版本 " + info.tagName() + "\n"
+                    + "当前版本: v" + BuildInfo.VERSION + "\n"
+                    + "发布名称: " + (info.name() == null || info.name().isBlank() ? "-" : info.name()) + "\n"
+                    + "发布时间: " + (info.publishedAt() == null || info.publishedAt().isBlank() ? "-" : info.publishedAt()) + "\n"
+                    + "\n是否打开下载页面？";
+            Object[] options = {"打开下载页", "取消"};
+            int choice = JOptionPane.showOptionDialog(this, message, "发现新版本",
+                    JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+            if (choice == 0) {
+                openDownloadPage(info);
+            } else {
+                appendText("[取消] 已忽略新版本提示\n");
+                statusLabel.setText("已忽略新版本提示");
+            }
+        } else {
+            appendText("[成功] 当前已是最新版本（v" + BuildInfo.VERSION + "）\n");
+            statusLabel.setText("当前已是最新版本");
+            JOptionPane.showMessageDialog(this, "当前已是最新版本（v" + BuildInfo.VERSION + "）",
+                    "检查更新", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /** 打开新版下载页（htmlUrl 缺失时回退仓库主页），失败弹提示不崩溃 */
+    private void openDownloadPage(UpdateChecker.ReleaseInfo info) {
+        String page = (info.htmlUrl() == null || info.htmlUrl().isBlank())
+                ? BuildInfo.GITHUB_URL : info.htmlUrl();
+        if (DesktopUtil.openUri(page)) {
+            appendText("[成功] 已打开下载页: " + page + "\n");
+            statusLabel.setText("已打开下载页");
+        } else {
+            appendText("[失败] 无法打开下载页，请手动访问: " + page + "\n");
+            statusLabel.setText("无法打开下载页");
+            JOptionPane.showMessageDialog(this, "无法打开下载页，请手动访问:\n" + page,
+                    "打开下载页失败", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /**
+     * 一键打开目录（文件 → 打开目录）：更新/目标/删除/备份 目录取 ConfigLoader 静态绝对路径，
+     * 日志目录固定 logs/（与 logback.xml 一致）。目录不存在由 DesktopUtil 自动创建后打开；
+     * 失败（headless/无 xdg-open 等）弹一次性提示，程序继续运行。
+     */
+    private void openDirectoryByName(String name) {
+        Path dir = switch (name) {
+            case "更新目录" -> ConfigLoader.getUpdatePath();
+            case "目标目录" -> ConfigLoader.getTargetPath();
+            case "删除目录" -> ConfigLoader.getDeletePath();
+            case "备份目录" -> ConfigLoader.getBackupPath();
+            case "日志目录" -> Path.of("logs");
+            default -> null;
+        };
+        if (dir == null) {
+            appendText("[失败] 无法确定" + name + "路径（配置未加载？）\n");
+            statusLabel.setText("无法打开" + name);
+            return;
+        }
+        if (DesktopUtil.openDirectory(dir)) {
+            appendText("[成功] 已打开" + name + ": " + dir.toAbsolutePath().normalize() + "\n");
+            statusLabel.setText("已打开" + name);
+        } else {
+            appendText("[失败] 无法打开" + name + "，详见日志\n");
+            statusLabel.setText("无法打开" + name);
+            JOptionPane.showMessageDialog(this,
+                    "无法打开" + name + "（headless 环境或系统缺少文件管理器）\n" + dir.toAbsolutePath().normalize(),
+                    "打开目录", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    /** 关于对话框（帮助 → 关于）：版本/构建时间/GitHub 链接/许可证，数据全部取自 BuildInfo */
+    private void showAbout() {
+        new AboutDialog(this).setVisible(true);
     }
 
     // ---------------- 功能入口（后台线程执行，避免卡住 UI） ----------------
@@ -464,10 +779,16 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         logArea.setFont(new Font(font.getFamily(), Font.PLAIN, size));
     }
 
-    /** 到达可调范围边界时禁用对应按钮 */
+    /** 到达可调范围边界时禁用对应按钮（视图菜单的 缩小/放大 项联动） */
     private void updateFontButtons() {
         fontMinusButton.setEnabled(logFontSize > Config.MIN_LOG_FONT_SIZE);
         fontPlusButton.setEnabled(logFontSize < Config.MAX_LOG_FONT_SIZE);
+        if (fontMinusMenuItem != null) {
+            fontMinusMenuItem.setEnabled(fontMinusButton.isEnabled());
+        }
+        if (fontPlusMenuItem != null) {
+            fontPlusMenuItem.setEnabled(fontPlusButton.isEnabled());
+        }
     }
 
     private void submitInput() {

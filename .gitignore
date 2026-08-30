@@ -55,6 +55,11 @@ META-INF/
 # 本地工具/运行时数据（不入库）
 .dsh-meow/
 .tools/
+.dsh-vision-router/
+diagrams/
+
+# 多智能体协作运行时状态（不入库，规范见 .agent-teams/ 自身说明）
+.agent-teams/
 
 # 外部策略插件目录（用户自装，不入库，规范见 README）
 /plugins/
