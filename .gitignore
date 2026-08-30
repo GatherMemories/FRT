@@ -67,3 +67,6 @@ diagrams/
 # 发布产物目录（jar + 启动脚本，重新发布时重新生成）
 release/
 pom.xml.versionsBackup
+
+# 用户自定义规则模板（程序运行时生成，不入库）
+templates/
