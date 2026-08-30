@@ -681,6 +681,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         for (MouseListener ml : hint.getMouseListeners()) {
             hint.removeMouseListener(ml);
         }
+        // 注意：移除全部监听器会连带移除 ToolTipManager 的悬停监听（tooltip 失效），
+        // 重新设置提示文本即可恢复悬停 tooltip（setToolTipText 会重新注册监听）
+        hint.setToolTipText("点击打开下载页 " + page);
         hint.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {

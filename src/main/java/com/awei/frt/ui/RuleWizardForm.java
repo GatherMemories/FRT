@@ -368,7 +368,8 @@ public class RuleWizardForm extends JDialog {
     }
 
     /** 将已解析的规则填充到表单（主策略 = 规则自身即链第 1 步；链步骤 = strategyChain 中的后续步骤） */
-    private void applyRuleToForm(MatchRule rule) {        if (rule == null) {
+    private void applyRuleToForm(MatchRule rule) {
+        if (rule == null) {
             return;
         }
         // 主策略 = 规则自身（strategyChain 只存后续步骤，无"链首步=主策略"冗余）
