@@ -2,6 +2,8 @@
 
 基于 Java 17 的多层级文件夹更新工具：按规则文件（`matching-rules.json` 等）将**更新目录**的文件新增/替换到**目标目录**，或按**删除目录**匹配删除目标文件，全程自动备份、可恢复。特别适用于 Minecraft 模组管理等需要精细化文件操作的场景。
 
+> 仓库：[https://github.com/GatherMemories/FRT](https://github.com/GatherMemories/FRT) ｜ 版本号自动取自 `pom.xml` 的 `<version>`（构建时注入），升级版本只需改 pom.xml 后重新打包，界面标题与状态栏、控制台启动横幅自动更新。
+
 ## 功能一览
 
 | 功能 | 作用 |
