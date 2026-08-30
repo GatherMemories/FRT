@@ -90,6 +90,7 @@ public final class UITheme {
 
     /** 应用指定主题并写入 UIManager 默认值 */
     public static void apply(boolean darkTheme) {
+        applyNativeLookAndFeel(); // 只切换一次：Windows/macOS 用系统外观，文字渲染更平滑
         dark = darkTheme;
         if (darkTheme) {
             applyDarkColors();
@@ -97,6 +98,37 @@ public final class UITheme {
             applyLightColors();
         }
         applyUIManager();
+    }
+
+    private static boolean lookAndFeelApplied = false;
+
+    /**
+     * 平台原生外观（仅首次调用生效，避免主题切换时重装 LAF 闪烁）：
+     * - Windows：Windows LAF（原生控件 + GDI 平滑文字渲染，解决 Metal 下文字线条粗细不一）
+     * - macOS：系统 Aqua LAF
+     * - Linux：保持默认 Metal（深色主题自定义样式兼容最好）
+     * 切换后 applyUIManager() 会覆盖关键颜色/字体键，自定义主题不受影响。
+     */
+    private static void applyNativeLookAndFeel() {
+        if (lookAndFeelApplied) {
+            return;
+        }
+        lookAndFeelApplied = true;
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        String laf = null;
+        if (os.contains("win")) {
+            laf = "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
+        } else if (os.contains("mac") || os.contains("darwin")) {
+            laf = UIManager.getSystemLookAndFeelClassName();
+        }
+        if (laf == null) {
+            return;
+        }
+        try {
+            UIManager.setLookAndFeel(laf);
+        } catch (Exception ignored) {
+            // 切换失败保持默认，不影响功能
+        }
     }
 
     // ---------- 浅色主题（默认，大众白底深字） ----------
@@ -258,14 +290,21 @@ public final class UITheme {
     }
 
     /**
-     * 日志区等宽字体：按平台候选列表挑选第一个已安装的字体，
-     * 保证 Windows（Cascadia/Consolas）/ macOS（Menlo）/ Linux（JetBrains Mono/DejaVu）都好看
+     * 日志区字体：按平台挑选"好看且覆盖中文"的字体（用户实测 Windows 日志区中文回退宋体，
+     * 线条粗细不一难看）。优先等宽中文字体（更纱黑体等，装了就用，对齐最好），
+     * 否则退回微软雅黑（覆盖中文+拉丁、渲染漂亮，代价是失去等宽对齐）：
+     * - Windows：Sarasa Mono SC/J > 微软雅黑 > Cascadia Mono/Consolas（拉丁等宽）
+     * - macOS：Menlo/SF Mono（系统 CJK 回退较好）
+     * - Linux：JetBrains Mono/DejaVu（系统 CJK 回退到 Noto，效果尚可）
      */
     private static Font createLogFont() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         String[] candidates;
         if (os.contains("win")) {
-            candidates = new String[]{"Cascadia Mono", "JetBrains Mono", "Consolas", "Courier New"};
+            // 等宽中文字体优先（Sarasa 更纱黑体），没有则用微软雅黑保证中文清晰
+            candidates = new String[]{"Sarasa Mono SC", "Sarasa Mono J", "Sarasa Mono TC",
+                    "Microsoft YaHei UI", "Microsoft YaHei",
+                    "Cascadia Mono", "JetBrains Mono", "Consolas", "Courier New"};
         } else if (os.contains("mac") || os.contains("darwin")) {
             candidates = new String[]{"Menlo", "SF Mono", "Monaco", "Courier New"};
         } else {
