@@ -168,8 +168,46 @@ public final class UITheme {
         UIManager.put("ProgressBar.font", SMALL_FONT);
         UIManager.put("TitledBorder.font", TITLE_FONT);
         UIManager.put("Panel.background", PANEL_BG);
+        UIManager.put("Panel.foreground", TEXT);
         UIManager.put("OptionPane.background", PANEL_BG);
         UIManager.put("OptionPane.messageForeground", TEXT);
+        // 表单/对话框通用组件文字与背景（深色主题下若缺省会黑字压深底看不清：
+        // Label/输入框/下拉框/复选框/单选/列表/标题边框等默认取 Metal 黑字，必须随主题）
+        UIManager.put("Label.foreground", TEXT);
+        UIManager.put("CheckBox.foreground", TEXT);
+        UIManager.put("CheckBox.background", PANEL_BG);
+        UIManager.put("RadioButton.foreground", TEXT);
+        UIManager.put("RadioButton.background", PANEL_BG);
+        UIManager.put("TitledBorder.titleColor", TEXT);
+        // 标题边框的线色（链步骤框/分区框的边框随主题，不再露默认浅灰线）
+        UIManager.put("TitledBorder.border", BorderFactory.createLineBorder(BORDER));
+        // 滚动区视口/滚动面板背景（表单/链步骤等 JScrollPane 深色下不再露浅色底）
+        UIManager.put("Viewport.background", PANEL_BG);
+        UIManager.put("ScrollPane.background", PANEL_BG);
+        // 输入类：深色用更深底 + 浅字，浅色用白底深字，与面板区分明
+        Color inputBg = dark ? new Color(0x0B1220) : Color.WHITE;
+        UIManager.put("TextField.foreground", TEXT);
+        UIManager.put("TextField.background", inputBg);
+        UIManager.put("TextField.caretForeground", TEXT);
+        UIManager.put("TextField.selectionBackground", PRIMARY_LIGHT);
+        UIManager.put("TextField.selectionForeground", TEXT);
+        UIManager.put("PasswordField.foreground", TEXT);
+        UIManager.put("PasswordField.background", inputBg);
+        UIManager.put("TextArea.foreground", TEXT);
+        UIManager.put("TextArea.background", inputBg);
+        UIManager.put("TextPane.foreground", TEXT);
+        UIManager.put("TextPane.background", inputBg);
+        UIManager.put("EditorPane.foreground", TEXT);
+        UIManager.put("EditorPane.background", inputBg);
+        // 下拉/列表（含弹出项）：背景/文字/选中色随主题
+        UIManager.put("ComboBox.foreground", TEXT);
+        UIManager.put("ComboBox.background", PANEL_BG);
+        UIManager.put("ComboBox.selectionForeground", TEXT);
+        UIManager.put("ComboBox.selectionBackground", PRIMARY);
+        UIManager.put("List.foreground", TEXT);
+        UIManager.put("List.background", PANEL_BG);
+        UIManager.put("List.selectionForeground", TEXT);
+        UIManager.put("List.selectionBackground", PRIMARY);
         UIManager.put("ProgressBar.foreground", PRIMARY);
         UIManager.put("ProgressBar.background", new Color(dark ? 0x374151 : 0xE5E7EB));
         UIManager.put("ProgressBar.border", BorderFactory.createLineBorder(BORDER));

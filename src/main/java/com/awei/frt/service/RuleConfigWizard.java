@@ -101,11 +101,15 @@ public class RuleConfigWizard {
             String rel = basePath.relativize(targetDir).toString().replace('\\', '/');
             System.out.println("[已选] 生成位置: " + (rel.isEmpty() ? basePath.getFileName() : rel) + "/");
 
-            // 3. 套用内置模板（可选，FR-2）或逐参数输入规则
+            // 3. 套用规则模板（可选，FR-2/FR-1 自定义模板）或逐参数输入规则
             MatchRule rule = askTemplateOrInput(targetDir);
             if (rule == null) {
                 return;
             }
+
+            // 3.5 保存为自定义模板（可选，FR-1）：手动输入与套用模板两条路径都覆盖，
+            // 插在规则组装完成后、writeRuleFile 预览前；任何失败仅提示，不打断生成
+            maybeSaveAsTemplate(rule);
 
             // 4. 生成并写入
             writeRuleFile(rule, targetDir);
@@ -232,8 +236,9 @@ public class RuleConfigWizard {
     }
 
     /**
-     * 模板询问入口（FR-2）：选择层级后、逐参数输入前询问是否套用内置规则模板——
-     * y → 列出模板（编号=名称[分类]（描述））→ 合法编号 → 跳过逐参数输入直接返回模板规则；
+     * 模板询问入口（FR-2/FR-1 自定义模板扩展）：选择层级后、逐参数输入前询问是否套用规则模板——
+     * y → 列出合并列表（内置 1..N 原名 + 自定义 N+1.. 带 [自定义] 标记，编号连续）→
+     * 合法编号 → 跳过逐参数输入直接返回模板规则（内置与自定义一视同仁，深拷贝）；
      * n/回车 → 走既有逐参数输入（输出与 v0.1.14 一致）；无效编号重新询问，0/回车=取消回手动流程；
      * 模板库加载失败 → 提示后回退手动流程，不崩溃。
      *
@@ -241,23 +246,34 @@ public class RuleConfigWizard {
      * @return 规则对象（模板规则深拷贝或手动输入结果），取消返回 null
      */
     private MatchRule askTemplateOrInput(Path targetDir) {
-        List<RuleTemplate> templates = RuleTemplateLibrary.loadAll();
-        if (templates.isEmpty()) {
+        List<RuleTemplate> builtins = RuleTemplateLibrary.loadAll();
+        List<RuleTemplate> customs = RuleTemplateLibrary.loadAllCustom();
+        if (builtins.isEmpty() && customs.isEmpty()) {
             System.out.println("[信息] 模板库加载失败或为空，继续手动输入");
             return inputRule(targetDir);
         }
-        System.out.print("\n[选择] 是否套用内置规则模板？(y/n, 回车=n): ");
+        System.out.print("\n[选择] 是否套用规则模板？(y/n, 回车=n): ");
         String answer = readLine();
         boolean yes = answer != null
                 && (answer.trim().equalsIgnoreCase("y") || answer.trim().equalsIgnoreCase("yes"));
         if (!yes) {
             return inputRule(targetDir); // n/回车：走既有逐参数流程
         }
-        System.out.println("\n[列表] 内置规则模板:");
-        for (int i = 0; i < templates.size(); i++) {
-            RuleTemplate t = templates.get(i);
-            System.out.println("       " + (i + 1) + "=" + t.getName() + "[" + t.getCategory()
-                    + "]（" + t.getDescription() + "）");
+        // 合并列表：内置在前（原名），自定义在后（带 [自定义] 标记），编号连续
+        List<RuleTemplate> merged = new ArrayList<>(builtins);
+        merged.addAll(customs);
+        System.out.println("\n[列表] 规则模板:");
+        for (int i = 0; i < merged.size(); i++) {
+            RuleTemplate t = merged.get(i);
+            if (i < builtins.size()) {
+                System.out.println("       " + (i + 1) + "=" + t.getName() + "[" + t.getCategory()
+                        + "]（" + t.getDescription() + "）");
+            } else {
+                // 自定义模板行尾追加 [自定义] 标记（需求 §3.4）
+                System.out.println("       " + (i + 1) + "=" + t.getName() + "[自定义]（"
+                        + (t.getDescription() == null || t.getDescription().isBlank()
+                                ? "自定义模板" : t.getDescription()) + "）");
+            }
         }
         while (true) {
             System.out.print("\n[选择] 请输入模板编号 (0/回车=取消): ");
@@ -268,8 +284,10 @@ public class RuleConfigWizard {
             }
             try {
                 int idx = Integer.parseInt(num.trim());
-                if (idx >= 1 && idx <= templates.size()) {
-                    RuleTemplate t = templates.get(idx - 1);
+                if (idx >= 1 && idx <= merged.size()) {
+                    RuleTemplate t = idx <= builtins.size()
+                            ? builtins.get(idx - 1)
+                            : customs.get(idx - builtins.size() - 1);
                     System.out.println("[已选] 已套用模板「" + t.getName() + "」，跳过逐参数输入");
                     return t.getRule().copy(); // 深拷贝：模板资源不被后续修改污染
                 }
@@ -277,6 +295,79 @@ public class RuleConfigWizard {
                 // 非数字输入按无效编号处理，重新询问
             }
             System.out.println("[失败] 无效模板编号");
+        }
+    }
+
+    /**
+     * 询问是否将当前规则保存为自定义模板（FR-1，v0.1.16，§3.6）：
+     * 插在规则组装完成后、writeRuleFile 预览前（手动输入与套用模板两条路径都覆盖）。
+     * <p>
+     * n/回车直接继续（既有流程输出不变）；y → 保存前校验（rule 序列化 → MatchRuleLoader 非 null，
+     * 与模板库加载校验同款）→ 输入名称（回车/空=取消）；与内置重名拒绝换名、与自定义重名
+     * 询问覆盖；保存成功/失败均提示后继续生成流程，不打断、不崩溃。控制台不提供删除/改名
+     * （由 GUI「管理自定义模板」入口覆盖，GUI/控制台共享同一存储文件）。
+     */
+    private void maybeSaveAsTemplate(MatchRule rule) {
+        System.out.print("\n[选择] 是否将当前规则保存为自定义模板？(y/n, 回车=n): ");
+        String answer = readLine();
+        boolean yes = answer != null
+                && (answer.trim().equalsIgnoreCase("y") || answer.trim().equalsIgnoreCase("yes"));
+        if (!yes) {
+            return; // n/回车：直接继续既有预览流程
+        }
+        // 保存前校验（§3.7）：rule 序列化 → MatchRuleLoader 非 null；不合法不写文件、不打断生成
+        if (!RuleTemplateLibrary.isValidRule(rule)) {
+            System.out.println("[失败] 当前规则不合法，无法保存为模板");
+            return;
+        }
+        while (true) {
+            System.out.print("[输入] 请输入模板名称 (回车=取消): ");
+            String name = readLine();
+            if (name == null || name.isBlank()) {
+                System.out.println("[取消] 未保存模板");
+                return;
+            }
+            String trimmed = name.trim();
+            // 内置只读保护：与内置模板重名 → 拒绝换名（回车可随时取消，不会死循环）
+            boolean builtinName = false;
+            for (RuleTemplate t : RuleTemplateLibrary.loadAll()) {
+                if (trimmed.equals(t.getName())) {
+                    builtinName = true;
+                    break;
+                }
+            }
+            if (builtinName) {
+                System.out.println("[失败] 与内置模板重名，请换名");
+                continue;
+            }
+            RuleTemplate template = new RuleTemplate();
+            template.setId(RuleTemplateLibrary.generateCustomTemplateId());
+            template.setName(trimmed);
+            template.setCategory("自定义"); // 控制台最小交互：分类默认"自定义"，描述留空
+            template.setDescription("");
+            template.setRule(rule);
+            RuleTemplateLibrary.SaveStatus status = RuleTemplateLibrary.saveTemplate(template, false);
+            if (status == RuleTemplateLibrary.SaveStatus.DUPLICATE_NAME) {
+                // 与自定义模板重名：询问是否覆盖
+                System.out.print("[选择] 已存在同名模板「" + trimmed + "」，是否覆盖？(y/n, 回车=n): ");
+                if (parseBoolean(readLine(), false)) {
+                    status = RuleTemplateLibrary.saveTemplate(template, true);
+                } else {
+                    System.out.println("[取消] 未保存模板");
+                    return;
+                }
+            }
+            if (status == RuleTemplateLibrary.SaveStatus.SUCCESS) {
+                System.out.println("[成功] 已保存自定义模板「" + trimmed + "」");
+            } else if (status == RuleTemplateLibrary.SaveStatus.BUILTIN_NAME_CONFLICT) {
+                System.out.println("[失败] 与内置模板重名，请换名");
+                continue;
+            } else if (status == RuleTemplateLibrary.SaveStatus.INVALID_RULE) {
+                System.out.println("[失败] 当前规则不合法，无法保存为模板");
+            } else {
+                System.out.println("[失败] 保存模板失败: 模板目录不可写或写入失败（详见日志）");
+            }
+            return;
         }
     }
 
