@@ -11,6 +11,7 @@ import com.awei.frt.service.PluginCompiler;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.service.RuleConfigWizard;
 import com.awei.frt.core.builder.ConfigLoader;
+import com.awei.frt.util.BuildInfo;
 import com.awei.frt.util.LoggerUtil;
 
 import java.nio.file.Path;
@@ -47,7 +48,10 @@ public class Main {
             }
 
             LoggerUtil.logInfo("=========================================");
-            LoggerUtil.logInfo("多层级文件夹更新工具启动");
+            LoggerUtil.logInfo(BuildInfo.displayName() + " 启动");
+            if (BuildInfo.GITHUB_URL != null && !BuildInfo.GITHUB_URL.isBlank()) {
+                LoggerUtil.logInfo("GitHub: " + BuildInfo.GITHUB_URL);
+            }
             LoggerUtil.logInfo("=========================================");
 
             scanner = new Scanner(System.in);

@@ -11,6 +11,7 @@ import com.awei.frt.service.FileUpdateServiceNew;
 import com.awei.frt.service.PluginCompiler;
 import com.awei.frt.service.RestoreService;
 import com.awei.frt.service.RuleConfigWizard;
+import com.awei.frt.util.BuildInfo;
 import com.awei.frt.util.LoggerUtil;
 
 import javax.swing.BorderFactory;
@@ -74,7 +75,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private SwingPrompter prompter;
 
     public FRTFrame() throws HeadlessException {
-        super("多层级文件夹更新工具");
+        // 标题带版本号：版本来自 pom.xml（Maven 构建时注入 build-info.properties，见 BuildInfo）
+        super("多层级文件夹更新工具 v" + BuildInfo.VERSION);
         UITheme.apply(); // 全局主题：统一字体/颜色/间距
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(860, 600);
@@ -157,10 +159,17 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         statusLabel = new JLabel("就绪");
         statusLabel.setFont(UITheme.SMALL_FONT);
         statusLabel.setForeground(UITheme.MUTED);
-        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
+        JPanel statusBar = new JPanel(new BorderLayout());
         statusBar.setBackground(UITheme.PANEL_BG);
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
-        statusBar.add(statusLabel);
+        statusBar.add(statusLabel, BorderLayout.CENTER);
+
+        // 状态栏右侧：版本号 + GitHub 仓库链接（版本自动取自 pom.xml；链接可点击，用系统浏览器打开）
+        LinkLabel versionLink = new LinkLabel("v" + BuildInfo.VERSION + " · GitHub", BuildInfo.GITHUB_URL);
+        versionLink.setFont(UITheme.SMALL_FONT);
+        versionLink.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 10));
+        statusBar.add(versionLink, BorderLayout.EAST);
 
         // 进度条：更新/删除真实执行阶段显示，平时隐藏
         progressBar = new JProgressBar(0, 100);

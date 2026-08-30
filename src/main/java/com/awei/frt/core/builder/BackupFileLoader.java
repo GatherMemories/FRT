@@ -169,12 +169,16 @@ public class BackupFileLoader {
             // 检查文件是否已存在于备份文件列表中（存在更改为新路径）
             String fileMd5 = FileSignUtil.getFileMd5(filePath);
             Path backupFilePath = getBackupFilePath(filePath, fileMd5);
-            // 同内容已备份且备份文件仍在磁盘上：只更新索引，不重复拷贝（MD5 去重合并）。
+            // 同内容已备份且备份文件仍在磁盘上：直接复用现有备份，不重复拷贝（MD5 去重合并）。
             // 恢复时按 MD5 找到备份、拷贝到记录的目标路径（目标原名），备份文件名不影响恢复，
             // 因此不同文件名的同内容文件（如 config.txt 与 config (副本).md）共用一个备份即可。
+            // 注意：索引必须继续指向真实文件 existing，不能改指到按新文件名推导的 backupFilePath——
+            // 该路径只是命名推导结果，磁盘上未必存在（同内容文件此前从未以这个文件名备份过时），
+            // 若把索引改指到不存在的路径，恢复时 findBackupFileBySignature 命中"备份文件不存在"
+            // （用户实测：config.txt 与 config (副本).md 内容相同，后者更新后其备份索引被改指到
+            // backup/config (副本).md，而磁盘上只有 backup/config.txt → 恢复失败）。
             Path existing = backupFiles.get(fileMd5);
             if (existing != null && Files.isRegularFile(existing)) {
-                backupFiles.put(fileMd5, backupFilePath);
                 return true;
             }
             // 索引缺失或磁盘备份已丢失（被清理/误删等）：重新拷贝重建——
