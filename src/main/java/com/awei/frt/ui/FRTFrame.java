@@ -492,11 +492,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     /** 检查更新结果处理（EDT，done() 回调）：有新版 / 已最新 / 失败 三分支 */
     private void handleCheckUpdateResult(UpdateChecker.ReleaseInfo info) {
         if (info == null) {
-            // 网络失败 / API 不可达 / GITHUB_URL 未配置：静默降级，仅提示不崩溃
-            appendText("[警告] 检查更新失败（网络不可用或 GitHub 无法访问），请稍后重试\n");
+            // 网络失败 / API 不可达 / 证书被拦截 / GITHUB_URL 未配置：静默降级，仅提示不崩溃。
+            // 常见原因：网络不可用、GitHub 无法访问、或安全软件/代理拦截 HTTPS（已自动尝试系统证书库）
+            appendText("[警告] 检查更新失败（网络不可用/GitHub 无法访问/HTTPS 被拦截），请稍后重试\n");
             statusLabel.setText("检查更新失败");
             JOptionPane.showMessageDialog(this,
-                    "检查更新失败（网络不可用或 GitHub 无法访问），请稍后重试",
+                    "检查更新失败\n常见原因：网络不可用、GitHub 无法访问，\n或安全软件/代理拦截了 HTTPS 连接。\n详见日志 logs/frt.log 中的真实原因。",
                     "检查更新", JOptionPane.WARNING_MESSAGE);
             return;
         }
