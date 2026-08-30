@@ -8,6 +8,10 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * GitHub 最新版检查（便捷功能）
@@ -63,9 +67,34 @@ public final class UpdateChecker {
         if (apiUrl == null || apiUrl.isBlank()) {
             return null;
         }
+        try {
+            return fetch(apiUrl, null);
+        } catch (Exception e) {
+            // 证书校验失败（常见于安全软件/代理对 HTTPS 的拦截，出示非公开信任库证书）：
+            // Windows 上回退用系统证书库重试一次（拦截软件证书通常已装入 Windows 信任库）
+            SSLContext winTrust = windowsSystemTrustContext();
+            if (winTrust != null) {
+                try {
+                    return fetch(apiUrl, winTrust);
+                } catch (Exception ignored) {
+                    // 系统信任库也失败：按普通失败处理
+                }
+            }
+            // 网络失败静默降级，但记录真实原因到日志（便于排查：TLS 握手/超时/DNS/证书等）
+            com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            return null;
+        }
+    }
+
+    /** 执行一次 HTTPS GET 并解析最新版信息；失败抛异常由调用方决定是否回退/降级 */
+    private static ReleaseInfo fetch(String apiUrl, SSLContext sslContext) throws Exception {
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) URI.create(apiUrl).toURL().openConnection();
+            if (conn instanceof HttpsURLConnection https && sslContext != null) {
+                https.setSSLSocketFactory(sslContext.getSocketFactory());
+            }
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(READ_TIMEOUT_MS);
@@ -85,15 +114,32 @@ public final class UpdateChecker {
                 }
                 return new ReleaseInfo(tag, name, published, html);
             }
-        } catch (Exception e) {
-            // 网络失败静默降级，但记录真实原因到日志（便于排查：TLS 握手/超时/DNS 等）
-            com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
-                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
-            return null;
         } finally {
             if (conn != null) {
                 conn.disconnect();
             }
+        }
+    }
+
+    /**
+     * Windows 系统证书库 SSLContext（回退用）：信任 Windows-ROOT 信任库里的证书，
+     * 用于安全软件/代理 HTTPS 拦截场景（其证书通常已装入系统信任库）。
+     * 非 Windows 或初始化失败返回 null（保持默认单次尝试行为）。
+     */
+    private static SSLContext windowsSystemTrustContext() {
+        if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")) {
+            return null;
+        }
+        try {
+            KeyStore systemStore = KeyStore.getInstance("Windows-ROOT");
+            systemStore.load(null, null);
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(systemStore);
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, tmf.getTrustManagers(), null);
+            return ctx;
+        } catch (Exception e) {
+            return null;
         }
     }
 
