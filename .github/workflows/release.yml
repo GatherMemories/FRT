@@ -41,7 +41,9 @@ jobs:
       - name: 生成精简运行时 runtime/（无 JDK 环境可运行）
         shell: bash
         run: |
-          jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported,jdk.compiler \
+          # jdk.crypto.ec 必须包含：SunEC 提供 ECDHE 密钥交换，GitHub API 等现代 HTTPS 需要它，
+          # 缺失会导致发布包里"检查更新"等 HTTPS 请求握手失败（用户实测 Windows 无法检查更新）
+          jlink --add-modules java.base,java.desktop,java.naming,java.sql,jdk.unsupported,jdk.compiler,jdk.crypto.ec \
                 --strip-debug --no-header-files --no-man-pages \
                 --output release/runtime
 
