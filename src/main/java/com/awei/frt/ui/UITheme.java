@@ -23,9 +23,11 @@ import java.util.Set;
 public final class UITheme {
 
     static {
-        // Swing 文本抗锯齿（关键）：默认在部分 Linux/LAF 组合下关闭，文字渲染锯齿感强。
+        // Swing 文本抗锯齿（关键）：默认在部分平台/L&F 组合下关闭，文字渲染锯齿感强。
         // 必须在任何文本渲染前设置；类加载即设置 + Main/MainUI 入口双保险。
-        System.setProperty("awt.useSystemAAFontSettings", "on");
+        // Windows 用 lcd（ClearType 亚像素，与系统文字一致、浓淡均匀）；其他平台用 on（灰度 AA）
+        System.setProperty("awt.useSystemAAFontSettings",
+                System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? "lcd" : "on");
         System.setProperty("swing.aatext", "true");
     }
 

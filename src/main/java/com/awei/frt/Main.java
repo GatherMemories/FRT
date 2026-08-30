@@ -25,7 +25,8 @@ public class Main {
 
     public static void main(String[] args) {
         // Swing 文本抗锯齿：默认部分平台关闭导致文字锯齿感强，入口最先开启（UITheme 类加载时也会设置，双保险）
-        System.setProperty("awt.useSystemAAFontSettings", "on");
+        System.setProperty("awt.useSystemAAFontSettings",
+                System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win") ? "lcd" : "on");
         System.setProperty("swing.aatext", "true");
 
         // UI 模式入口：java -jar FRT.jar --ui（或 java -cp ... com.awei.frt.ui.MainUI）
