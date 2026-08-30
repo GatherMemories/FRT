@@ -9,9 +9,12 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.cert.X509Certificate;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * GitHub 最新版检查（便捷功能）
@@ -67,22 +70,63 @@ public final class UpdateChecker {
         if (apiUrl == null || apiUrl.isBlank()) {
             return null;
         }
+        // 1) 默认 Java 信任库
         try {
             return fetch(apiUrl, null);
         } catch (Exception e) {
-            // 证书校验失败（常见于安全软件/代理对 HTTPS 的拦截，出示非公开信任库证书）：
-            // Windows 上回退用系统证书库重试一次（拦截软件证书通常已装入 Windows 信任库）
+            // 2) 证书校验失败：Windows 上回退系统证书库重试一次
+            //（安全软件/代理 HTTPS 拦截时其证书通常已装入 Windows 信任库）
             SSLContext winTrust = windowsSystemTrustContext();
             if (winTrust != null) {
                 try {
                     return fetch(apiUrl, winTrust);
                 } catch (Exception ignored) {
-                    // 系统信任库也失败：按普通失败处理
+                    // 继续最后兜底
+                }
+            }
+            // 3) 最后兜底：绕过证书校验（仅限"检查更新"读取版本号这一个只读请求；
+            //    拦截证书既不在 Java 信任库也不在系统库时仍能工作，并明确记录日志提示环境风险）
+            SSLContext trustAll = trustAllContext();
+            if (trustAll != null) {
+                try {
+                    ReleaseInfo info = fetch(apiUrl, trustAll);
+                    if (info != null) {
+                        com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 已绕过 HTTPS 证书校验获取最新版——"
+                                + "你的网络环境可能拦截了 HTTPS（安全软件/代理），请确认网络可信后再下载");
+                        return info;
+                    }
+                } catch (Exception ignored) {
+                    // 网络层失败，兜底也无效
                 }
             }
             // 网络失败静默降级，但记录真实原因到日志（便于排查：TLS 握手/超时/DNS/证书等）
             com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
                     + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            return null;
+        }
+    }
+
+    /** 信任任意证书的 SSLContext（仅"检查更新"最后兜底用；正常网络不会走到这一步） */
+    private static SSLContext trustAllContext() {
+        try {
+            TrustManager[] trustAll = {new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            }};
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, trustAll, null);
+            return ctx;
+        } catch (Exception e) {
             return null;
         }
     }
