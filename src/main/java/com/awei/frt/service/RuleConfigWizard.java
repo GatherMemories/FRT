@@ -8,6 +8,7 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.RuleTemplate;
 import com.awei.frt.model.StrategyStep;
 import com.awei.frt.ui.ConsoleUserPrompter;
 import com.awei.frt.ui.UserPrompter;
@@ -100,8 +101,8 @@ public class RuleConfigWizard {
             String rel = basePath.relativize(targetDir).toString().replace('\\', '/');
             System.out.println("[已选] 生成位置: " + (rel.isEmpty() ? basePath.getFileName() : rel) + "/");
 
-            // 3. 输入规则参数
-            MatchRule rule = inputRule(targetDir);
+            // 3. 套用内置模板（可选，FR-2）或逐参数输入规则
+            MatchRule rule = askTemplateOrInput(targetDir);
             if (rule == null) {
                 return;
             }
@@ -227,6 +228,55 @@ public class RuleConfigWizard {
             this.isLast = isLast;
             this.isRoot = isRoot;
             this.affectedByRule = affectedByRule;
+        }
+    }
+
+    /**
+     * 模板询问入口（FR-2）：选择层级后、逐参数输入前询问是否套用内置规则模板——
+     * y → 列出模板（编号=名称[分类]（描述））→ 合法编号 → 跳过逐参数输入直接返回模板规则；
+     * n/回车 → 走既有逐参数输入（输出与 v0.1.14 一致）；无效编号重新询问，0/回车=取消回手动流程；
+     * 模板库加载失败 → 提示后回退手动流程，不崩溃。
+     *
+     * @param targetDir 目标目录（传给 inputRule 展示已有规则文件）
+     * @return 规则对象（模板规则深拷贝或手动输入结果），取消返回 null
+     */
+    private MatchRule askTemplateOrInput(Path targetDir) {
+        List<RuleTemplate> templates = RuleTemplateLibrary.loadAll();
+        if (templates.isEmpty()) {
+            System.out.println("[信息] 模板库加载失败或为空，继续手动输入");
+            return inputRule(targetDir);
+        }
+        System.out.print("\n[选择] 是否套用内置规则模板？(y/n, 回车=n): ");
+        String answer = readLine();
+        boolean yes = answer != null
+                && (answer.trim().equalsIgnoreCase("y") || answer.trim().equalsIgnoreCase("yes"));
+        if (!yes) {
+            return inputRule(targetDir); // n/回车：走既有逐参数流程
+        }
+        System.out.println("\n[列表] 内置规则模板:");
+        for (int i = 0; i < templates.size(); i++) {
+            RuleTemplate t = templates.get(i);
+            System.out.println("       " + (i + 1) + "=" + t.getName() + "[" + t.getCategory()
+                    + "]（" + t.getDescription() + "）");
+        }
+        while (true) {
+            System.out.print("\n[选择] 请输入模板编号 (0/回车=取消): ");
+            String num = readLine();
+            if (num == null || num.trim().isEmpty() || num.trim().equals("0")) {
+                System.out.println("[返回] 未套用模板，继续手动输入");
+                return inputRule(targetDir);
+            }
+            try {
+                int idx = Integer.parseInt(num.trim());
+                if (idx >= 1 && idx <= templates.size()) {
+                    RuleTemplate t = templates.get(idx - 1);
+                    System.out.println("[已选] 已套用模板「" + t.getName() + "」，跳过逐参数输入");
+                    return t.getRule().copy(); // 深拷贝：模板资源不被后续修改污染
+                }
+            } catch (NumberFormatException ignored) {
+                // 非数字输入按无效编号处理，重新询问
+            }
+            System.out.println("[失败] 无效模板编号");
         }
     }
 

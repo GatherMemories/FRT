@@ -1,0 +1,109 @@
+{
+  "templates": [
+    {
+      "id": "mc-mod-update",
+      "name": "Minecraft 模组更新（按版本跳过）",
+      "category": "Minecraft",
+      "description": "按 modId 匹配 jar 执行增/删/改；目标已有同版本模组时跳过替换。规则文件应放在 update 侧的 mods 目录层。",
+      "rule": {
+        "strategyType": "McMod",
+        "replacements": { "onlyIfVersionChanged": "true" },
+        "patterns": [],
+        "excludePatterns": [],
+        "strategyChain": [],
+        "inheritToSubfolders": false
+      }
+    },
+    {
+      "id": "mc-mod-update-content",
+      "name": "Minecraft 模组更新（内容比对，更准确）",
+      "category": "Minecraft",
+      "description": "按 modId 匹配 jar 执行增/删/改；源与目标文件 MD5 相同（含同版本重打包）则跳过替换。适用于需要精确同步的场景。",
+      "rule": {
+        "strategyType": "McMod",
+        "replacements": { "onlyIfContentSame": "true" },
+        "patterns": [],
+        "excludePatterns": [],
+        "strategyChain": [],
+        "inheritToSubfolders": false
+      }
+    },
+    {
+      "id": "mc-mod-plus-files",
+      "name": "Minecraft 模组目录组合更新（模组 + 目录内其他文件）",
+      "category": "Minecraft",
+      "description": "策略链示例：第 1 步 McMod 按 modId 处理模组 jar；剩余文件（非 mod jar、配置等）由第 2 步 FileSameName 按文件名同步（排除临时文件）。规则文件应放在 update 侧的 mods 目录层。",
+      "rule": {
+        "strategyType": "McMod",
+        "replacements": { "onlyIfVersionChanged": "true" },
+        "patterns": [],
+        "excludePatterns": [],
+        "strategyChain": [
+          {
+            "strategyType": "FileSameName",
+            "replacements": {},
+            "patterns": [],
+            "excludePatterns": ["*.bak", "*.tmp", "*~"]
+          }
+        ],
+        "inheritToSubfolders": false
+      }
+    },
+    {
+      "id": "mc-resourcepack-sync",
+      "name": "Minecraft 资源包同步",
+      "category": "Minecraft",
+      "description": "只更新压缩包内部含 pack_format 文本（即含 pack.mcmeta 的资源包）的 zip/jar 资源包；其余压缩包跳过。",
+      "rule": {
+        "strategyType": "ZipEntryContent",
+        "replacements": { "contentContains": "pack_format" },
+        "patterns": [],
+        "excludePatterns": [],
+        "strategyChain": [],
+        "inheritToSubfolders": false
+      }
+    },
+    {
+      "id": "config-sync",
+      "name": "配置文件同步",
+      "category": "配置同步",
+      "description": "按文件名同步常见配置文件（properties/xml/json/yml/yaml/toml/ini/cfg），排除备份与临时文件。规则文件应放在 update 侧对应配置目录层。",
+      "rule": {
+        "strategyType": "FileSameName",
+        "replacements": {},
+        "patterns": ["*.properties", "*.xml", "*.json", "*.yml", "*.yaml", "*.toml", "*.ini", "*.cfg"],
+        "excludePatterns": ["*.bak", "*.tmp", "*.old", "*~"],
+        "strategyChain": [],
+        "inheritToSubfolders": false
+      }
+    },
+    {
+      "id": "file-sync-all",
+      "name": "通用文件全量同步",
+      "category": "通用",
+      "description": "按文件名匹配同步全部文件（空白名单=匹配所有），排除备份与临时文件。适用于任意目录的整目录同步。",
+      "rule": {
+        "strategyType": "FileSameName",
+        "replacements": {},
+        "patterns": [],
+        "excludePatterns": ["*.bak", "*.tmp", "*~"],
+        "strategyChain": [],
+        "inheritToSubfolders": false
+      }
+    },
+    {
+      "id": "file-sync-content",
+      "name": "通用内容比对同步（跳过相同文件）",
+      "category": "通用",
+      "description": "按文件名同步；源与目标 MD5 相同则跳过替换（只更新真正变化的文件）。",
+      "rule": {
+        "strategyType": "FileSameName",
+        "replacements": { "onlyIfContentSame": "true" },
+        "patterns": [],
+        "excludePatterns": ["*.bak", "*.tmp", "*~"],
+        "strategyChain": [],
+        "inheritToSubfolders": false
+      }
+    }
+  ]
+}

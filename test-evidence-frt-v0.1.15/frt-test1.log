@@ -1,0 +1,105 @@
+20:38:07.772 INFO  日志系统初始化完成
+20:38:07.894 INFO  [信息] 从外部加载配置: /tmp/frt-iso-test/config.json
+20:38:07.929 INFO  [列表] 配置信息:
+20:38:07.930 INFO     基准目录: /tmp/frt-iso-test
+20:38:07.930 INFO     更新目录: update
+20:38:07.930 INFO     删除目录: delete
+20:38:07.930 INFO     目标目录: THtest
+20:38:07.930 INFO     备份目录: backup
+20:38:07.930 INFO     日志级别: INFO
+20:38:07.931 INFO  [成功] 使用默认目标目录: /tmp/frt-iso-test/THtest
+20:38:07.931 INFO  [成功] 使用默认更新目录: /tmp/frt-iso-test/update
+20:38:07.931 INFO  [成功] 使用默认删除目录: /tmp/frt-iso-test/delete
+20:38:07.931 INFO  [成功] 使用默认备份目录: /tmp/frt-iso-test/backup
+20:38:07.931 INFO  =========================================
+20:38:07.932 INFO  FRT v0.1.7-SNAPSHOT 启动
+20:38:07.933 INFO  GitHub: https://github.com/GatherMemories/FRT
+20:38:07.933 INFO  =========================================
+20:38:07.951 ERROR 加载操作记录集失败: 记录目录不存在 - /tmp/frt-iso-test/backup/record
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 规则生成（生成/编辑匹配规则配置文件）
+5. 清理残留备份
+6. 核心配置（设置目标/更新/删除/备份路径、日志级别）
+7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）
+8. 退出
+请输入选项 (1-8): 20:38:07.956 INFO  [规则生成] 生成/编辑匹配规则配置文件...
+
+=========================================
+[规则生成] 生成/编辑匹配规则配置文件 (matching-rules.json)
+=========================================
+[说明] 规则文件控制所在层文件夹的 增/删/改 操作
+       查找优先级: matching-rules.json > replace.json > add.json > delete.json
+       未配置规则或未开启继承的层将被跳过处理
+-----------------------------------------
+[选择] 规则文件作用目录:
+       1. 更新目录: update
+       2. 删除目录: delete
+请输入 (1-2, 回车/取消=返回): 
+[FILE] 目录文件结构图 (/tmp/frt-iso-test/update):
+[1] [+] update/  [规则: matching-rules.json]
+├── [-] new-test-file.txt  [受规则影响]
+├── [2] [+] lib/
+│   ├── [3] [+] utils/
+│   │   ├── [-] StringHelper.class
+│   │   └── [-] DateHelper.class
+│   ├── [-] Test.class
+│   ├── [-] Main.class
+│   └── [-] Helper.class
+├── [-] config.txt  [受规则影响]
+├── [4] [+] config/  [规则: matching-rules.json]
+│   ├── [-] log4j.xml  [受规则影响]
+│   └── [-] app.properties  [受规则影响]
+├── [-] app.jar  [受规则影响]
+├── [-] 2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar  [受规则影响]
+├── [-] 2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar  [受规则影响]
+├── [-] 2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar  [受规则影响]
+├── [-] 2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar  [受规则影响]
+├── [-] 2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar  [受规则影响]
+├── [-] config (副本).md  [受规则影响]
+├── [-] a.txt  [受规则影响]
+└── [-] a (副本).dat  [受规则影响]
+
+[选择] 请选择要在哪一层生成规则文件 (输入文件夹编号, 0=返回): [已选] 生成位置: update/
+
+[选择] 是否套用内置规则模板？(y/n, 回车=n): 
+[列表] 内置规则模板:
+       1=Minecraft 模组更新（按版本跳过）[Minecraft]（按 modId 匹配 jar 执行增/删/改；目标已有同版本模组时跳过替换。规则文件应放在 update 侧的 mods 目录层。）
+       2=Minecraft 模组更新（内容比对，更准确）[Minecraft]（按 modId 匹配 jar 执行增/删/改；源与目标文件 MD5 相同（含同版本重打包）则跳过替换。适用于需要精确同步的场景。）
+       3=Minecraft 模组目录组合更新（模组 + 目录内其他文件）[Minecraft]（策略链示例：第 1 步 McMod 按 modId 处理模组 jar；剩余文件（非 mod jar、配置等）由第 2 步 FileSameName 按文件名同步（排除临时文件）。规则文件应放在 update 侧的 mods 目录层。）
+       4=Minecraft 资源包同步[Minecraft]（只更新压缩包内部含 pack_format 文本（即含 pack.mcmeta 的资源包）的 zip/jar 资源包；其余压缩包跳过。）
+       5=配置文件同步[配置同步]（按文件名同步常见配置文件（properties/xml/json/yml/yaml/toml/ini/cfg），排除备份与临时文件。规则文件应放在 update 侧对应配置目录层。）
+       6=通用文件全量同步[通用]（按文件名匹配同步全部文件（空白名单=匹配所有），排除备份与临时文件。适用于任意目录的整目录同步。）
+       7=通用内容比对同步（跳过相同文件）[通用]（按文件名同步；源与目标 MD5 相同则跳过替换（只更新真正变化的文件）。）
+
+[选择] 请输入模板编号 (0/回车=取消): [已选] 已套用模板「通用文件全量同步」，跳过逐参数输入
+
+[预览] 生成的规则文件内容 (matching-rules.json):
+-----------------------------------------
+{
+  "strategyType" : "FileSameName",
+  "replacements" : { },
+  "patterns" : [ ],
+  "excludePatterns" : [ "*.bak", "*.tmp", "*~" ],
+  "strategyChain" : [ ],
+  "inheritToSubfolders" : false
+}
+-----------------------------------------
+[确认] 写入 matching-rules.json ? (y/n, 回车=n): [成功] 已生成规则文件: /tmp/frt-iso-test/update/matching-rules.json
+[校验] 规则文件解析校验通过 [OK]
+
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 规则生成（生成/编辑匹配规则配置文件）
+5. 清理残留备份
+6. 核心配置（设置目标/更新/删除/备份路径、日志级别）
+7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）
+8. 退出
+请输入选项 (1-8): 20:38:08.018 INFO  程序退出
+20:38:08.019 INFO  日志系统已关闭

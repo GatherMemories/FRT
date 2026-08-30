@@ -18,6 +18,7 @@ import com.awei.frt.util.LoggerUtil;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -44,6 +45,9 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.HeadlessException;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -87,6 +91,12 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private JMenuItem fontPlusMenuItem;    // 视图→日志字体 放大项（与 A+ 按钮联动禁用）
     private int logFontSize = 13;          // 当前日志字体大小（可调 10~24，持久化到 config.json）
     private final List<JButton> topButtons = new ArrayList<>();
+    // 状态栏右侧面板：版本链接 +（发现新版时的）提示链接，主题切换时重刷背景
+    private final JPanel statusRight;
+    // 状态栏"发现新版本"提示链接（自动检查显示，手动检查/打开下载页时清除）
+    private LinkLabel updateHintLink;
+    // 检查更新互斥标志：自动检查与手动「帮助 → 检查更新」共用，任一进行中另一触发方直接返回
+    private volatile boolean updateCheckInProgress = false;
     // 提示缓冲：累积"自上次输入以来"打印的全部文本（结构树/选项列表/说明）
     private final StringBuilder promptBuffer = new StringBuilder();
     private static final int PROMPT_BUFFER_MAX = 20000;
@@ -189,13 +199,17 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
         statusBar.add(statusLabel, BorderLayout.CENTER);
 
-        // 状态栏右侧：版本号 + GitHub 仓库链接（版本自动取自 pom.xml；链接可点击，用系统浏览器打开）。
+        // 状态栏右侧：版本号 + GitHub 仓库链接 +（发现新版时的）提示链接。
+        // 版本自动取自 pom.xml；链接可点击，用系统浏览器打开。
         // 注：LinkLabel 用 HTML 锚点渲染，链接色由 HTML 样式表决定、不随主题（深色下仍可读），
         // 不做 setForeground 无效调用（见审查 F4）
+        statusRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        statusRight.setBackground(UITheme.PANEL_BG);
         LinkLabel versionLink = new LinkLabel("v" + BuildInfo.VERSION + " · GitHub", BuildInfo.GITHUB_URL);
         versionLink.setFont(UITheme.SMALL_FONT);
         versionLink.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 10));
-        statusBar.add(versionLink, BorderLayout.EAST);
+        statusRight.add(versionLink);
+        statusBar.add(statusRight, BorderLayout.EAST);
 
         // 进度条：更新/删除真实执行阶段显示，平时隐藏
         progressBar = new JProgressBar(0, 100);
@@ -237,6 +251,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         }
         // 残留备份过多时提醒清理
         BackupFileLoader.warnOrphanBackupsIfNeeded();
+        // 启动时自动检查更新（FR-1）：config 未加载或开关关闭时静默跳过；查询在后台线程，
+        // 发现新版仅状态栏+日志区非侵入提示，不阻塞 EDT、窗口显示前不弹任何东西
+        startAutoCheckUpdateIfEnabled();
     }
 
     private JButton topButton(String label, Runnable action) {
@@ -310,9 +327,18 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         viewMenu.add(fontMenu);
         bar.add(viewMenu);
 
-        // ---------- 帮助：检查更新 + 关于 ----------
+        // ---------- 帮助：检查更新 / 启动时自动检查更新（勾选项）/ 分隔线 / 关于 ----------
         JMenu helpMenu = new JMenu("帮助");
         helpMenu.add(menuItem(frame, "检查更新", () -> frame.runCheckUpdate()));
+        // 启动时自动检查更新开关：勾选状态与 config.isAutoCheckUpdate() 同步（frame 为 null 的
+        // 菜单结构测试只校验结构与文案，勾选状态取默认值 true，见 FRTFrameMenuTest 注释）
+        JCheckBoxMenuItem autoCheckItem = new JCheckBoxMenuItem("启动时自动检查更新",
+                initialAutoCheckState(frame == null ? null : frame.config));
+        if (frame != null) {
+            autoCheckItem.addActionListener(e -> frame.toggleAutoCheckUpdate(autoCheckItem.isSelected()));
+        }
+        helpMenu.add(autoCheckItem);
+        helpMenu.addSeparator();
         helpMenu.add(menuItem(frame, "关于", () -> frame.showAbout()));
         bar.add(helpMenu);
 
@@ -328,6 +354,15 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             item.addActionListener(e -> action.run());
         }
         return item;
+    }
+
+    /**
+     * 帮助菜单"启动时自动检查更新"勾选初始状态（包内可见，供菜单测试）：
+     * config 为 null（菜单骨架/配置未加载）时取 Config 默认值（开启），
+     * 构建真实 frame 时与 config.isAutoCheckUpdate() 同步（AC-4.2）。
+     */
+    static boolean initialAutoCheckState(Config config) {
+        return config != null ? config.isAutoCheckUpdate() : new Config().isAutoCheckUpdate();
     }
 
     // ---------------- 便捷功能：主题切换 / 检查更新 / 打开目录 / 关于 ----------------
@@ -374,6 +409,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         statusLabel.setForeground(UITheme.MUTED);
         statusBar.setBackground(UITheme.PANEL_BG);
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
+        statusRight.setBackground(UITheme.PANEL_BG);
         // 顶部功能按钮栏 / 底部区域 / 输入行（updateComponentTreeUI 对纯 JPanel 背景并非总生效，显式重刷）
         topPanel.setBackground(UITheme.PANEL_BG);
         bottomArea.setBackground(UITheme.PANEL_BG);
@@ -466,8 +502,16 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
      * 检查更新（帮助 → 检查更新）：后台线程查询 GitHub 最新 Release（最多等 5s），
      * 与 BuildInfo.VERSION 比较；有新版弹提示并可打开下载页，无新版提示已最新，
      * 网络失败仅提示不崩溃。全程不阻塞 EDT。
+     * 与启动自动检查共用互斥标志：任一检查进行中，另一触发方直接返回（不重复请求/弹窗）。
      */
     private void runCheckUpdate() {
+        if (updateCheckInProgress) {
+            appendText("[信息] 正在检查更新，请稍候\n");
+            return;
+        }
+        // 用户手动检查时清除启动自动检查留下的"发现新版本"提示链接（避免误导性残留）
+        clearUpdateHint();
+        updateCheckInProgress = true;
         statusLabel.setText("正在检查更新...");
         appendText("[信息] 正在检查更新...\n");
         new SwingWorker<UpdateChecker.ReleaseInfo, Void>() {
@@ -484,6 +528,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
                     LoggerUtil.logException("[检查更新] 执行异常", e);
                     appendText("[失败] 检查更新异常，详见日志\n");
                     statusLabel.setText("检查更新异常");
+                } finally {
+                    updateCheckInProgress = false; // 互斥标志复位（含异常路径）
                 }
             }
         }.execute();
@@ -528,6 +574,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
 
     /** 打开新版下载页（htmlUrl 缺失时回退仓库主页），失败弹提示不崩溃 */
     private void openDownloadPage(UpdateChecker.ReleaseInfo info) {
+        // 用户已主动打开下载页：清除状态栏"发现新版本"提示链接（避免误导性残留）
+        clearUpdateHint();
         String page = (info.htmlUrl() == null || info.htmlUrl().isBlank())
                 ? BuildInfo.GITHUB_URL : info.htmlUrl();
         if (DesktopUtil.openUri(page)) {
@@ -539,6 +587,136 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
             JOptionPane.showMessageDialog(this, "无法打开下载页，请手动访问:\n" + page,
                     "打开下载页失败", JOptionPane.WARNING_MESSAGE);
         }
+    }
+
+    // ---------------- 启动时自动检查更新（FR-1：后台静默 + 非侵入提示） ----------------
+
+    /** 自动检查结果的三分支（headless 可测） */
+    enum AutoCheckOutcome { FAILED, NEW_VERSION, UP_TO_DATE }
+
+    /**
+     * 自动检查结果决策（包内可见静态方法，headless 可测）：
+     * info==null（网络失败/API 不可达/证书全失败）→ FAILED（UI 完全静默）；
+     * 有新版 → NEW_VERSION（非侵入提示）；同版/更旧 → UP_TO_DATE（静默）。
+     */
+    static AutoCheckOutcome decideAutoCheck(UpdateChecker.ReleaseInfo info, String currentVersion) {
+        if (info == null) {
+            return AutoCheckOutcome.FAILED;
+        }
+        return UpdateChecker.isNewer(info.tagName(), currentVersion)
+                ? AutoCheckOutcome.NEW_VERSION : AutoCheckOutcome.UP_TO_DATE;
+    }
+
+    /**
+     * 启动时自动检查更新（构造末尾调用，包内可见）：
+     * config 未加载或开关关闭 → 直接返回（完全静默）；已有检查进行中 → 直接返回（防重复请求）。
+     * 否则置互斥标志，在 SwingWorker 后台线程执行查询（复用 UpdateChecker 三层证书兜底，走
+     * 静默变体 fetchLatestReleaseQuiet），不阻塞 EDT；窗口显示前不弹任何东西。
+     */
+    void startAutoCheckUpdateIfEnabled() {
+        if (config == null || !config.isAutoCheckUpdate()) {
+            return; // 配置未加载 / 开关关闭：静默跳过（AC-3.1/3.8）
+        }
+        if (updateCheckInProgress) {
+            return; // 已有检查在进行（如启动瞬间用户已点手动检查），不重复发起请求
+        }
+        updateCheckInProgress = true;
+        new SwingWorker<UpdateChecker.ReleaseInfo, Void>() {
+            @Override
+            protected UpdateChecker.ReleaseInfo doInBackground() {
+                // 极短延迟避免与启动争抢带宽；后台线程 sleep 不阻塞 EDT
+                try {
+                    Thread.sleep(1500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return UpdateChecker.fetchLatestReleaseQuiet();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    handleAutoCheckResult(get());
+                } catch (Exception e) {
+                    // 结果处理异常：仅日志文件记录，UI 零打扰（启动路径不弹窗）
+                    LoggerUtil.getInstance(null).logWarnFileOnly(
+                            "[自动检查更新] 结果处理异常（静默，仅文件记录）: " + e.getClass().getSimpleName());
+                } finally {
+                    updateCheckInProgress = false; // 互斥标志复位（含异常路径）
+                }
+            }
+        }.execute();
+    }
+
+    /**
+     * 自动检查结果处理（EDT，done() 回调）：非侵入三分支——
+     * 失败 / 已最新 → UI 完全静默（不弹窗、状态栏不变、日志区不追加行，仅日志文件保留排查信息）；
+     * 发现新版 → 日志区 [信息] 一行 + 状态栏文本 + 状态栏可点击 LinkLabel（打开下载页），不弹模态框。
+     */
+    private void handleAutoCheckResult(UpdateChecker.ReleaseInfo info) {
+        switch (decideAutoCheck(info, BuildInfo.VERSION)) {
+            case FAILED -> LoggerUtil.getInstance(null).logWarnFileOnly(
+                    "[自动检查更新] 查询 GitHub 最新版失败（静默，仅文件记录）");
+            case UP_TO_DATE -> LoggerUtil.getInstance(null).logDebugFileOnly(
+                    "[自动检查更新] 当前已是最新版本（静默）");
+            case NEW_VERSION -> {
+                appendText("[信息] 发现新版本 " + info.tagName() + "（当前 v" + BuildInfo.VERSION
+                        + "），可在状态栏点击提示打开下载页\n");
+                statusLabel.setText("发现新版本 " + info.tagName());
+                showUpdateHint(info);
+            }
+        }
+    }
+
+    /** 状态栏右侧（versionLink 旁）显示可点击的"发现新版本"提示链接，点击复用 openDownloadPage */
+    private void showUpdateHint(UpdateChecker.ReleaseInfo info) {
+        String page = (info.htmlUrl() == null || info.htmlUrl().isBlank())
+                ? BuildInfo.GITHUB_URL : info.htmlUrl();
+        LinkLabel hint = new LinkLabel("发现新版本 " + info.tagName(), page);
+        hint.setFont(UITheme.SMALL_FONT);
+        hint.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 10));
+        // 复用 openDownloadPage（DesktopUtil.openUri，失败弹一次性提示不崩溃）：
+        // 移除 LinkLabel 自带的无提示打开行为（其内部 MouseListener 直接 Desktop.browse），
+        // 替换为本窗口的 openDownloadPage 回调
+        for (MouseListener ml : hint.getMouseListeners()) {
+            hint.removeMouseListener(ml);
+        }
+        // 注意：移除全部监听器会连带移除 ToolTipManager 的悬停监听（tooltip 失效），
+        // 重新设置提示文本即可恢复悬停 tooltip（setToolTipText 会重新注册监听）
+        hint.setToolTipText("点击打开下载页 " + page);
+        hint.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                openDownloadPage(info);
+            }
+        });
+        updateHintLink = hint;
+        statusRight.add(hint);
+        statusRight.revalidate();
+        statusRight.repaint();
+    }
+
+    /** 清除状态栏"发现新版本"提示链接并恢复默认文案（手动检查/打开下载页时调用） */
+    private void clearUpdateHint() {
+        if (updateHintLink != null && updateHintLink.getParent() == statusRight) {
+            statusRight.remove(updateHintLink);
+            statusRight.revalidate();
+            statusRight.repaint();
+        }
+        updateHintLink = null;
+        if (statusLabel.getText() != null && statusLabel.getText().startsWith("发现新版本")) {
+            statusLabel.setText("就绪");
+        }
+    }
+
+    /** 帮助菜单"启动时自动检查更新"勾选项切换：更新 config 并即时持久化到 config.json */
+    private void toggleAutoCheckUpdate(boolean checked) {
+        if (config != null) {
+            config.setAutoCheckUpdate(checked);
+        }
+        ConfigLoader.saveAutoCheckUpdate(checked);
+        appendText("[成功] 已" + (checked ? "开启" : "关闭") + "启动时自动检查更新\n");
+        statusLabel.setText(checked ? "已开启启动时自动检查更新" : "已关闭启动时自动检查更新");
     }
 
     /**

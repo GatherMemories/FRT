@@ -60,10 +60,11 @@ class RuleConfigWizardTest {
         config.setBaseDirectory(tempDir);
         config.setUpdatePath(Path.of("update"));
 
-        // 脚本化输入：1=更新目录, 1=根目录, 1=FileSameName, patterns/exclude/inherit/replacements 均空,
+        // 脚本化输入：1=更新目录, 1=根目录, n=不套用模板（FR-2 新增询问，回车=n 等价）,
+        // 1=FileSameName, patterns/exclude/inherit/replacements 均空,
         // y=配置策略链, 2=McMod, 步patterns=*.jar, 步exclude/replacements 空, 空=结束链, y=确认写入
         RuleConfigWizard wizard = new RuleConfigWizard(config, scriptedPrompter(
-                "1", "1", "1", "", "", "", "", "y", "2", "*.jar", "", "", "", "y"));
+                "1", "1", "n", "1", "", "", "", "", "y", "2", "*.jar", "", "", "", "y"));
         wizard.start();
 
         Path ruleFile = updateDir.resolve("matching-rules.json");
@@ -89,6 +90,57 @@ class RuleConfigWizardTest {
         // 链步骤内不应出现 inheritToSubfolders（扁平结构，只属于顶层）
         assertEquals(json.indexOf("inheritToSubfolders"), json.lastIndexOf("inheritToSubfolders"),
                 "链步骤内不应携带 inheritToSubfolders: " + json);
+    }
+
+    @Test
+    void consoleWizardAppliesTemplateAndSkipsParameterInput() throws IOException {
+        Path updateDir = Files.createDirectories(tempDir.resolve("update"));
+
+        // 把配置指向临时目录，隔离全局 Config 单例
+        Config config = ConfigLoader.getConfig();
+        saved = snapshot(config);
+        config.setBaseDirectory(tempDir);
+        config.setUpdatePath(Path.of("update"));
+
+        // 脚本化输入：1=更新目录, 1=根目录, y=套用模板, 1=模板编号(mc-mod-update), y=确认写入
+        RuleConfigWizard wizard = new RuleConfigWizard(config, scriptedPrompter("1", "1", "y", "1", "y"));
+        wizard.start();
+
+        Path ruleFile = updateDir.resolve("matching-rules.json");
+        assertTrue(Files.exists(ruleFile), "套用模板后应直接生成 matching-rules.json");
+        String json = Files.readString(ruleFile, StandardCharsets.UTF_8);
+
+        // 写入内容与模板 rule 一致（McMod + onlyIfVersionChanged=true，跳过逐参数输入）
+        assertTrue(json.contains("\"strategyType\" : \"McMod\""), "主策略应为模板的 McMod: " + json);
+        assertTrue(json.contains("onlyIfVersionChanged"), "应含模板的 replacements: " + json);
+
+        MatchRule loaded = MatchRuleLoader.fromJson(json);
+        assertNotNull(loaded, "模板套用生成的规则应能被解析");
+        assertEquals("McMod", loaded.getStrategyType());
+        assertEquals("true", loaded.getReplacements().get("onlyIfVersionChanged"));
+        assertTrue(loaded.getStrategyChain().isEmpty(), "单策略模板不应带链步骤");
+    }
+
+    @Test
+    void consoleWizardInvalidTemplateNumberReasksAndCanCancel() throws IOException {
+        Path updateDir = Files.createDirectories(tempDir.resolve("update"));
+
+        Config config = ConfigLoader.getConfig();
+        saved = snapshot(config);
+        config.setBaseDirectory(tempDir);
+        config.setUpdatePath(Path.of("update"));
+
+        // 脚本化输入：1=更新目录, 1=根目录, y=套用模板,
+        // 99=无效编号（重新询问）, 0=取消回手动流程, 1=FileSameName, 其余参数空,
+        // 空=不配置策略链, y=确认写入
+        RuleConfigWizard wizard = new RuleConfigWizard(config, scriptedPrompter(
+                "1", "1", "y", "99", "0", "1", "", "", "", "", "", "y"));
+        wizard.start();
+
+        Path ruleFile = updateDir.resolve("matching-rules.json");
+        assertTrue(Files.exists(ruleFile), "无效编号取消后回手动流程仍应生成规则文件");
+        String json = Files.readString(ruleFile, StandardCharsets.UTF_8);
+        assertTrue(json.contains("\"strategyType\" : \"FileSameName\""), "应回手动输入生成 FileSameName: " + json);
     }
 
     // ---------------- 辅助 ----------------
