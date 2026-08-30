@@ -27,6 +27,11 @@ public class Config implements Serializable {
     private String logLevel;         // 日志级别（默认：INFO）
     private int maxBackupRecords = 20; // 备份记录保留上限（超出自动淘汰最旧，固定 pinned 除外；默认 20）
     private int logFontSize = 13;    // 日志区字体大小（UI 顶部 A-/A+ 按钮调整，持久化到 config.json；默认 13）
+    private String theme = "light";  // UI 主题（light/dark，视图菜单切换，持久化到 config.json；默认浅色）
+
+    /** 主题取值 */
+    public static final String THEME_LIGHT = "light";
+    public static final String THEME_DARK = "dark";
 
     /** 日志区字体大小可调范围（UI A-/A+ 按钮） */
     public static final int MIN_LOG_FONT_SIZE = 10;
@@ -219,6 +224,15 @@ public class Config implements Serializable {
 
     public void setLogFontSize(int logFontSize) {
         this.logFontSize = Math.max(MIN_LOG_FONT_SIZE, Math.min(MAX_LOG_FONT_SIZE, logFontSize));
+    }
+
+    /** UI 主题（light/dark），未知值回退浅色 */
+    public String getTheme() {
+        return THEME_DARK.equals(theme) ? THEME_DARK : THEME_LIGHT;
+    }
+
+    public void setTheme(String theme) {
+        this.theme = THEME_DARK.equals(theme) ? THEME_DARK : THEME_LIGHT;
     }
 
     @Override
