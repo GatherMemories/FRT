@@ -132,6 +132,14 @@ public class RuleWizardForm extends JDialog {
         JButton applyTemplateButton = new JButton("套用模板");
         UITheme.styleButton(applyTemplateButton);
         applyTemplateButton.addActionListener(e -> applySelectedTemplate());
+        // 选中真实模板（非占位项/分隔项）即自动套用：切换模板配置立即生效（按钮保留用于修改后重新套用）
+        templateCombo.addActionListener(e -> {
+            Object sel = templateCombo.getSelectedItem();
+            if (sel == null || NO_TEMPLATE_ITEM.equals(sel) || CUSTOM_SEPARATOR_ITEM.equals(sel)) {
+                return;
+            }
+            applySelectedTemplate();
+        });
         JButton manageTemplateButton = new JButton("管理自定义模板");
         UITheme.styleButton(manageTemplateButton);
         manageTemplateButton.addActionListener(e -> openManageTemplates());
@@ -416,6 +424,11 @@ public class RuleWizardForm extends JDialog {
         applyRuleToForm(t.getRule().copy()); // 深拷贝：模板资源不被表单修改污染
         warningLabel.setText("已套用模板「" + t.getName() + "」，可继续修改后生成");
         warningLabel.setForeground(UITheme.MUTED);
+        // 顶部模板区块同步提示（不滚动也能看到套用结果）
+        if (templateHint != null) {
+            templateHint.setText("已套用模板「" + t.getName() + "」，可继续修改任意参数后「确定生成」");
+            templateHint.setForeground(UITheme.SUCCESS);
+        }
     }
 
     /**
