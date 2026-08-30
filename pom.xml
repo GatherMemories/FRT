@@ -7,7 +7,7 @@
     <groupId>com.awei</groupId>
     <artifactId>FRT</artifactId>
     <name>FRT</name>
-    <version>0.1.1-SNAPSHOT</version>
+    <version>0.1.7-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>

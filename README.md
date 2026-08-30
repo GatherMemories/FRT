@@ -277,7 +277,7 @@ public class MyStrategy extends AbstractOperationStrategy {
 **方法 B：命令行**（需要 JDK 17+；`FRT-*.jar` 换成你实际的 jar 文件名）：
 
 ```bash
-javac -encoding UTF-8 -cp FRT-0.1.1-SNAPSHOT.jar -d out MyStrategy.java
+javac -encoding UTF-8 -cp FRT-0.1.7-SNAPSHOT.jar -d out MyStrategy.java
 jar --create --file my-strategy.jar -C out .
 ```
 
