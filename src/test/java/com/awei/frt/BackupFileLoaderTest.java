@@ -145,6 +145,132 @@ public class BackupFileLoaderTest {
     }
 
     /**
+     * 回归测试：同内容、不同文件名的两个文件（如 config.txt 与 config (副本).md 内容相同），
+     * 备份第二个文件时 MD5 去重不能把索引改指到"磁盘上不存在的推导路径"，否则恢复时
+     * findBackupFileBySignature 命中不存在的文件，报"备份文件不存在"（用户实测复现）。
+     */
+    @Test
+    public void sameContentDifferentNameKeepsExistingBackupIndex() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path backupDir = ConfigLoader.getBackupPath();
+            // 显式重置索引到隔离目录（空）：先建目录再 loadBackupFiles，确保静态索引被清空重建
+            // （loadBackupFiles 仅在目录存在时才 clear，否则会残留同 JVM 其他测试的索引，造成顺序依赖）
+            Files.createDirectories(backupDir);
+            BackupFileLoader.loadBackupFiles(backupDir);
+            assertTrue(BackupFileLoader.getBackupFiles().isEmpty(), "隔离目录初始索引应为空");
+
+            byte[] content = "Root config.txt\n".getBytes(StandardCharsets.UTF_8);
+            Path fileA = tempDir.resolve("config.txt");          // 先备份的文件
+            Path fileB = tempDir.resolve("config (副本).md");    // 后备份的同内容文件
+            Files.write(fileA, content);
+            Files.write(fileB, content);
+
+            // 第一次备份：索引应指向真实落盘的 backup/config.txt
+            assertTrue(BackupFileLoader.addBackupFile(fileA));
+            String md5 = FileSignUtil.getFileMd5(fileA);
+            Path firstIndexed = BackupFileLoader.getBackupFiles().get(md5);
+            assertNotNull(firstIndexed, "首次备份后索引应有该 MD5 条目");
+            assertTrue(Files.exists(firstIndexed), "首次备份后索引必须指向真实存在的文件");
+            assertEquals(backupDir.resolve("config.txt"), firstIndexed);
+
+            // 第二次备份同内容文件（不同文件名）：去重后索引必须仍指向真实文件，
+            // 不能改指到 backup/config (副本).md（磁盘上从未创建过该文件）
+            assertTrue(BackupFileLoader.addBackupFile(fileB));
+            Path secondIndexed = BackupFileLoader.getBackupFiles().get(md5);
+            assertNotNull(secondIndexed, "去重后索引不应丢失");
+            assertTrue(Files.exists(secondIndexed),
+                    "MD5 去重后索引必须指向真实存在的备份文件（原缺陷：改指到不存在的推导路径，恢复时报备份文件不存在）");
+            assertEquals(firstIndexed, secondIndexed, "同内容去重应复用同一备份文件，索引不应被改指");
+        } finally {
+            // 恢复真实备份索引，避免影响其他测试
+            ConfigLoader.getConfig();
+            Path realBackup = ConfigLoader.getBackupPath();
+            if (realBackup != null) {
+                BackupFileLoader.loadBackupFiles(realBackup);
+            }
+        }
+    }
+
+    /**
+     * 端到端验证：两个内容相同（MD5 相同）但文件名不同的文件被替换后，
+     * 恢复时各自按操作记录里的目标路径（原始文件名）正确复原，互不覆盖。
+     * （备份内容按 MD5 共享一份，文件名来自 record.getTargetPath()，两者不冲突）
+     */
+    @Test
+    public void restoreSameContentFilesWithDifferentNamesKeepsNames() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path backupDir = Files.createDirectories(ConfigLoader.getBackupPath());
+            BackupFileLoader.loadBackupFiles(backupDir); // 清空重建隔离索引
+
+            Path targetDir = Files.createDirectories(tempDir.resolve("THtest"));
+            byte[] oldContent = "Root config.txt\n".getBytes(StandardCharsets.UTF_8);
+            byte[] newContent = "Root config.txt v2\n".getBytes(StandardCharsets.UTF_8);
+
+            // 目标目录：两个同内容的旧文件
+            Path targetA = targetDir.resolve("config.txt");
+            Path targetB = targetDir.resolve("config (副本).md");
+            Files.write(targetA, oldContent);
+            Files.write(targetB, oldContent);
+            // 更新目录：同名同内容的新文件（内容不同 → 构成 REPLACE）
+            Path sourceA = tempDir.resolve("update/config.txt");
+            Path sourceB = tempDir.resolve("update/config (副本).md");
+            Files.createDirectories(sourceA.getParent());
+            Files.write(sourceA, newContent);
+            Files.write(sourceB, newContent);
+
+            // 模拟更新：备份旧目标（同内容 → 去重为 1 份备份）
+            assertTrue(BackupFileLoader.addBackupFile(targetA));
+            assertTrue(BackupFileLoader.addBackupFile(targetB));
+            long backupCount;
+            try (java.util.stream.Stream<Path> s = Files.list(backupDir)) {
+                backupCount = s.filter(Files::isRegularFile).count();
+            }
+            assertEquals(1, backupCount, "同内容两个旧文件应去重为 1 份备份文件");
+
+            // 构造含两条 REPLACE 的操作记录（各自带原始文件名）
+            String oldMd5 = FileSignUtil.getFileMd5(targetA);
+            ProcessingResult result = new ProcessingResult();
+            for (int i = 0; i < 2; i++) {
+                Path src = i == 0 ? sourceA : sourceB;
+                Path tgt = i == 0 ? targetA : targetB;
+                OperationRecord record = new OperationRecord();
+                record.setStrategyType("FileSameName");
+                record.setOperationType(OperationContext.OPERATION_REPLACE);
+                record.setSourcePath(src);
+                record.setTargetPath(tgt);
+                record.setSourceFileSign(FileSignUtil.getFileMd5(src)); // 替换后新内容
+                record.setTargetFileSign(oldMd5);                        // 替换前旧内容（备份索引 key）
+                record.setTimestamp(LocalDateTime.now());
+                record.setSuccess(true);
+                result.addOperationRecord(record);
+            }
+
+            // 模拟更新后的目标状态（已被替换为新内容）
+            Files.write(targetA, newContent);
+            Files.write(targetB, newContent);
+
+            // 执行恢复
+            RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "n");
+            assertTrue(rr.isFullSuccess(), "两个同内容文件应全部恢复成功: " + rr.getFailureMessages());
+            assertEquals(2, rr.getSuccessCount());
+            // 关键断言：两个文件各自按原名复原，内容都为旧内容，且互不覆盖
+            assertArrayEquals(oldContent, Files.readAllBytes(targetA), "config.txt 应按原名恢复旧内容");
+            assertArrayEquals(oldContent, Files.readAllBytes(targetB), "config (副本).md 应按原名恢复旧内容");
+            assertTrue(Files.exists(targetDir.resolve("config.txt")));
+            assertTrue(Files.exists(targetDir.resolve("config (副本).md")));
+        } finally {
+            // 恢复真实备份索引，避免影响其他测试
+            ConfigLoader.getConfig();
+            Path realBackup = ConfigLoader.getBackupPath();
+            if (realBackup != null) {
+                BackupFileLoader.loadBackupFiles(realBackup);
+            }
+        }
+    }
+
+    /**
      * 回归：第一次初始化场景（目标目录为空 → 全是新增操作 → 备份目录无旧文件）。
      * 恢复纯 ADD 备份只需删除目标文件、不依赖备份文件——曾因"备份文件列表为空"
      * 被直接判失败，用户实测"第一次使用备份出现没有找到旧文件失败"。
