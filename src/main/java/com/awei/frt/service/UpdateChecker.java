@@ -67,6 +67,26 @@ public final class UpdateChecker {
      * 不依赖真实网络）；apiUrl 为 null/空白时直接返回 null。失败降级语义与无参版本一致。
      */
     static ReleaseInfo fetchLatestRelease(String apiUrl) {
+        return fetchLatestReleaseInternal(apiUrl, false);
+    }
+
+    /**
+     * 启动时自动检查更新专用静默变体：与 {@link #fetchLatestRelease()} 同一套
+     * 三层证书兜底（默认信任库 → Windows 系统证书库 → 绕过证书校验），但失败/降级时
+     * <b>不输出任何日志</b>——logback CONSOLE appender 会把 logWarn 打到 System.out 再进 UI
+     * 日志区，自动检查要求网络失败完全静默（排查信息仍由 FRTFrame 按文件日志路径记录）。
+     * 手动「帮助 → 检查更新」继续用带日志的 {@link #fetchLatestRelease()}，行为与 v0.1.14 一致。
+     */
+    public static ReleaseInfo fetchLatestReleaseQuiet() {
+        return fetchLatestReleaseInternal(latestReleaseApiUrl(), true);
+    }
+
+    /**
+     * 三层证书兜底查询（私有实现，quiet 控制失败/降级时是否 logWarn）：
+     * 1) 默认 Java 信任库；2) 证书校验失败时 Windows 上回退系统证书库重试一次；
+     * 3) 最后兜底绕过证书校验（仅"检查更新"这一个只读请求）。
+     */
+    private static ReleaseInfo fetchLatestReleaseInternal(String apiUrl, boolean quiet) {
         if (apiUrl == null || apiUrl.isBlank()) {
             return null;
         }
@@ -91,17 +111,21 @@ public final class UpdateChecker {
                 try {
                     ReleaseInfo info = fetch(apiUrl, trustAll);
                     if (info != null) {
-                        com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 已绕过 HTTPS 证书校验获取最新版——"
-                                + "你的网络环境可能拦截了 HTTPS（安全软件/代理），请确认网络可信后再下载");
+                        if (!quiet) {
+                            com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 已绕过 HTTPS 证书校验获取最新版——"
+                                    + "你的网络环境可能拦截了 HTTPS（安全软件/代理），请确认网络可信后再下载");
+                        }
                         return info;
                     }
                 } catch (Exception ignored) {
                     // 网络层失败，兜底也无效
                 }
             }
-            // 网络失败静默降级，但记录真实原因到日志（便于排查：TLS 握手/超时/DNS/证书等）
-            com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
-                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            // 网络失败静默降级：非静默路径记录真实原因到日志（便于排查：TLS 握手/超时/DNS/证书等）
+            if (!quiet) {
+                com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
+                        + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            }
             return null;
         }
     }

@@ -1,0 +1,113 @@
+20:38:22.811 INFO  日志系统初始化完成
+20:38:22.906 INFO  [信息] 从外部加载配置: /tmp/frt-iso-test/config.json
+20:38:22.946 INFO  [列表] 配置信息:
+20:38:22.946 INFO     基准目录: /tmp/frt-iso-test
+20:38:22.946 INFO     更新目录: update
+20:38:22.947 INFO     删除目录: delete
+20:38:22.947 INFO     目标目录: THtest
+20:38:22.947 INFO     备份目录: backup
+20:38:22.947 INFO     日志级别: INFO
+20:38:22.947 INFO  [成功] 使用默认目标目录: /tmp/frt-iso-test/THtest
+20:38:22.948 INFO  [成功] 使用默认更新目录: /tmp/frt-iso-test/update
+20:38:22.948 INFO  [成功] 使用默认删除目录: /tmp/frt-iso-test/delete
+20:38:22.948 INFO  [成功] 使用默认备份目录: /tmp/frt-iso-test/backup
+20:38:22.948 INFO  =========================================
+20:38:22.950 INFO  FRT v0.1.7-SNAPSHOT 启动
+20:38:22.950 INFO  GitHub: https://github.com/GatherMemories/FRT
+20:38:22.950 INFO  =========================================
+20:38:22.968 ERROR 加载操作记录集失败: 记录目录不存在 - /tmp/frt-iso-test/backup/record
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 规则生成（生成/编辑匹配规则配置文件）
+5. 清理残留备份
+6. 核心配置（设置目标/更新/删除/备份路径、日志级别）
+7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）
+8. 退出
+请输入选项 (1-8): 20:38:22.973 INFO  [执行] 执行更新操作（增加、替换）...
+20:38:22.974 INFO  [执行] 开始执行文件更新操作...
+20:38:22.974 INFO  [FOLDER] 扫描更新目录: /tmp/frt-iso-test/update
+[→] 节点 / (使用本地规则: FileSameName)
+[○] 节点 lib (无规则: 跳过)
+[→] 节点 config (使用本地规则: FileSameName)
+
+[预览] 将执行以下 13 个更新操作（预览模式：尚未执行任何操作，确认后才真正执行）:
+-----------------------------------------
+  [=] 替换: /tmp/frt-iso-test/THtest/new-test-file.txt
+  [=] 替换: /tmp/frt-iso-test/THtest/config.txt
+  [=] 替换: /tmp/frt-iso-test/THtest/app.jar
+  [+] 新增: /tmp/frt-iso-test/THtest/2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar
+  [=] 替换: /tmp/frt-iso-test/THtest/2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar
+  [+] 新增: /tmp/frt-iso-test/THtest/2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar
+  [=] 替换: /tmp/frt-iso-test/THtest/2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar
+  [=] 替换: /tmp/frt-iso-test/THtest/2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar
+  [=] 替换: /tmp/frt-iso-test/THtest/config (副本).md
+  [=] 替换: /tmp/frt-iso-test/THtest/a.txt
+  [=] 替换: /tmp/frt-iso-test/THtest/a (副本).dat
+  [=] 替换: /tmp/frt-iso-test/THtest/config/log4j.xml
+  [=] 替换: /tmp/frt-iso-test/THtest/config/app.properties
+-----------------------------------------
+是否执行以上 13 个更新操作？(y/n): [FILE] 文件树结构:
+[+] update/
+├── [-] new-test-file.txt
+├── [+] lib/
+│   ├── [+] utils/
+│   │   ├── [-] StringHelper.class
+│   │   └── [-] DateHelper.class
+│   ├── [-] Test.class
+│   ├── [-] Main.class
+│   └── [-] Helper.class
+├── [-] config.txt
+├── [+] config/
+│   ├── [-] log4j.xml
+│   └── [-] app.properties
+├── [-] app.jar
+├── [-] 2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar
+├── [-] 2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar
+├── [-] 2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar
+├── [-] 2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar
+├── [-] 2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar
+├── [-] config (副本).md
+├── [-] a.txt
+└── [-] a (副本).dat
+
+20:38:23.053 INFO  [执行] 正在处理update文件夹...
+-----------------------------------------
+[→] 节点 / (使用本地规则: FileSameName)
+20:38:23.070 INFO  = new-test-file.txt 成功
+20:38:23.072 INFO  = config.txt 成功
+20:38:23.072 INFO  = app.jar 成功
+20:38:23.073 INFO  + 2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar 成功
+20:38:23.074 INFO  = 2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar 成功
+20:38:23.074 INFO  + 2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar 成功
+20:38:23.075 INFO  = 2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar 成功
+20:38:23.076 INFO  = 2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar 成功
+20:38:23.077 INFO  = config (副本).md 成功
+20:38:23.077 INFO  = a.txt 成功
+20:38:23.078 INFO  = a (副本).dat 成功
+[○] 节点 lib (无规则: 跳过)
+[→] 节点 config (使用本地规则: FileSameName)
+20:38:23.079 INFO  = log4j.xml 成功
+20:38:23.079 INFO  = app.properties 成功
+-----------------------------------------
+-----------------------------------------
+20:38:23.083 INFO  [STATS] 处理统计: 成功 13 个文件
+-----------------------------------------
+20:38:23.083 INFO  [成功] 文件替换操作完成！
+20:38:23.083 INFO  [执行] 正在备份操作文件...
+20:38:23.088 INFO  [成功] 备份操作文件成功！
+
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 规则生成（生成/编辑匹配规则配置文件）
+5. 清理残留备份
+6. 核心配置（设置目标/更新/删除/备份路径、日志级别）
+7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）
+8. 退出
+请输入选项 (1-8): 20:38:23.102 INFO  程序退出
+20:38:23.102 INFO  日志系统已关闭

@@ -1,0 +1,8 @@
+{
+  "strategyType" : "FileSameName",
+  "replacements" : { },
+  "patterns" : [ ],
+  "excludePatterns" : [ "*.bak", "*.tmp", "*~" ],
+  "strategyChain" : [ ],
+  "inheritToSubfolders" : false
+}

@@ -28,6 +28,7 @@ public class Config implements Serializable {
     private int maxBackupRecords = 20; // 备份记录保留上限（超出自动淘汰最旧，固定 pinned 除外；默认 20）
     private int logFontSize = 13;    // 日志区字体大小（UI 顶部 A-/A+ 按钮调整，持久化到 config.json；默认 13）
     private String theme = "light";  // UI 主题（light/dark，视图菜单切换，持久化到 config.json；默认浅色）
+    private boolean autoCheckUpdate = true; // 启动时自动检查更新开关（帮助菜单切换，持久化到 config.json；默认开启）
 
     /** 主题取值 */
     public static final String THEME_LIGHT = "light";
@@ -233,6 +234,15 @@ public class Config implements Serializable {
 
     public void setTheme(String theme) {
         this.theme = THEME_DARK.equals(theme) ? THEME_DARK : THEME_LIGHT;
+    }
+
+    /** 启动时自动检查更新开关（默认 true；关闭后手动「帮助 → 检查更新」仍可用） */
+    public boolean isAutoCheckUpdate() {
+        return autoCheckUpdate;
+    }
+
+    public void setAutoCheckUpdate(boolean autoCheckUpdate) {
+        this.autoCheckUpdate = autoCheckUpdate;
     }
 
     @Override

@@ -1,0 +1,118 @@
+20:38:32.893 INFO  日志系统初始化完成
+20:38:33.011 INFO  [信息] 从外部加载配置: /tmp/frt-iso-test/config.json
+20:38:33.048 INFO  [列表] 配置信息:
+20:38:33.049 INFO     基准目录: /tmp/frt-iso-test
+20:38:33.049 INFO     更新目录: update
+20:38:33.049 INFO     删除目录: delete
+20:38:33.049 INFO     目标目录: THtest
+20:38:33.049 INFO     备份目录: backup
+20:38:33.049 INFO     日志级别: INFO
+20:38:33.050 INFO  [成功] 使用默认目标目录: /tmp/frt-iso-test/THtest
+20:38:33.050 INFO  [成功] 使用默认更新目录: /tmp/frt-iso-test/update
+20:38:33.051 INFO  [成功] 使用默认删除目录: /tmp/frt-iso-test/delete
+20:38:33.051 INFO  [成功] 使用默认备份目录: /tmp/frt-iso-test/backup
+20:38:33.051 INFO  =========================================
+20:38:33.052 INFO  FRT v0.1.7-SNAPSHOT 启动
+20:38:33.052 INFO  GitHub: https://github.com/GatherMemories/FRT
+20:38:33.052 INFO  =========================================
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 规则生成（生成/编辑匹配规则配置文件）
+5. 清理残留备份
+6. 核心配置（设置目标/更新/删除/备份路径、日志级别）
+7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）
+8. 退出
+请输入选项 (1-8): 20:38:33.150 INFO  [执行] 执行恢复操作...
+
+=========================================
+[执行] 恢复操作
+=========================================
+
+[列表] 可用的备份记录 (按时间倒序):
+-----------------------------------------
+1. [backup-20260830-203823.json] 2026-08-30 20:38:23 | 成功:13 失败:0
+-----------------------------------------
+0. 返回主菜单
+-1. 删除备份记录
+1-1. 恢复备份记录
+
+请输入选项 (0：返回, -1：删除, 1-1：恢复): 
+[FILE] 备份详细信息:
+-----------------------------------------
+文件名: backup-20260830-203823.json
+时间: 2026-08-30 20:38:23
+成功: 13
+跳过: 0
+失败: 0
+总操作数: 13
+-----------------------------------------
+
+[列表] 操作详情:
+-----------------------------------------
+1. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/new-test-file.txt
+2. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/config.txt
+3. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/app.jar
+4. [成功] 新增 20:38:23 | /tmp/frt-iso-test/THtest/2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar
+5. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar
+6. [成功] 新增 20:38:23 | /tmp/frt-iso-test/THtest/2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar
+7. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar
+8. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar
+9. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/config (副本).md
+10. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/a.txt
+11. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/a (副本).dat
+12. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/config/log4j.xml
+13. [成功] 更新 20:38:23 | /tmp/frt-iso-test/THtest/config/app.properties
+-----------------------------------------
+
+操作：y=从此备份恢复, p=固定（永久保留）, 其他=返回 (y/p/回车): 20:38:33.157 INFO  [执行] 开始执行恢复操作...
+20:38:33.158 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/config/app.properties
+20:38:33.160 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/config/app.properties
+20:38:33.160 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/config/log4j.xml
+20:38:33.161 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/config/log4j.xml
+20:38:33.161 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/a (副本).dat
+20:38:33.161 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/a (副本).dat
+20:38:33.161 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/a.txt
+20:38:33.161 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/a.txt
+20:38:33.161 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/config (副本).md
+20:38:33.162 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/config (副本).md
+20:38:33.162 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar
+20:38:33.164 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/2-FZ[投影]litematica-forge-1.20.1-0.15.0-dev.20230619.184738.jar
+20:38:33.165 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar
+20:38:33.166 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/2-FZ[玉-方块信息显示]Jade-1.20.1-forge-11.7.1.jar
+20:38:33.167 INFO  [执行] 恢复操作: operation_add - /tmp/frt-iso-test/THtest/2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar
+20:38:33.167 INFO  [成功] 已删除文件: /tmp/frt-iso-test/THtest/2-FZ[跨肩视角]ShoulderSurfing-Forge-1.20.1-4.12.0.jar
+20:38:33.167 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar
+20:38:33.168 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/2-FZ[输入法冲突修复] IMBlocker-5.4.6-forge+1.17-1.20.4.jar
+20:38:33.168 INFO  [执行] 恢复操作: operation_add - /tmp/frt-iso-test/THtest/2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar
+20:38:33.169 INFO  [成功] 已删除文件: /tmp/frt-iso-test/THtest/2-FZ[食物属性显示-苹果皮] appleskin-forge-mc1.20.1-2.5.1.jar
+20:38:33.169 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/app.jar
+20:38:33.169 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/app.jar
+20:38:33.169 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/config.txt
+20:38:33.169 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/config.txt
+20:38:33.169 INFO  [执行] 恢复操作: operation_replace - /tmp/frt-iso-test/THtest/new-test-file.txt
+20:38:33.170 INFO  [成功] 已恢复文件: /tmp/frt-iso-test/THtest/new-test-file.txt
+20:38:33.170 INFO  [成功] 文件恢复完成！
+20:38:33.177 INFO  [STATS] 成功: 13, 失败: 0
+
+=========================================
+[STATS] 恢复结果统计
+=========================================
+20:38:33.180 INFO  [STATS] 恢复时间: 2026-08-30 20:38:33, 成功 13, 失败 0, 回滚 0
+-----------------------------------------
+20:38:33.180 INFO  [成功] 系统已成功恢复到操作前的状态
+
+=========================================
+[列表] 请选择操作:
+1. 更新文件
+2. 删除文件
+3. 执行恢复操作
+4. 规则生成（生成/编辑匹配规则配置文件）
+5. 清理残留备份
+6. 核心配置（设置目标/更新/删除/备份路径、日志级别）
+7. 打包插件（把 plugins/ 目录的 .java 策略源码编译成 jar）
+8. 退出
+请输入选项 (1-8): 20:38:33.180 INFO  程序退出
+20:38:33.180 INFO  日志系统已关闭

@@ -1,0 +1,8 @@
+{
+  "strategyType" : "FileSameName",
+  "replacements" : { },
+  "patterns" : [ "*.properties", "*.xml", "*.json", "*.yml", "*.yaml", "*.toml", "*.ini", "*.cfg" ],
+  "excludePatterns" : [ "*.bak", "*.tmp", "*.old", "*~" ],
+  "strategyChain" : [ ],
+  "inheritToSubfolders" : false
+}

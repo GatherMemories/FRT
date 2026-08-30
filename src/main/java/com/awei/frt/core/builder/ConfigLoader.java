@@ -136,6 +136,40 @@ public class ConfigLoader {
     }
 
     /**
+     * 保存启动时自动检查更新开关到外部 config.json（合并保留其他键，不弹确认、不打断 UI）。
+     * 帮助菜单勾选项切换时调用；失败仅记日志，下次启动仍可用旧值。
+     */
+    public static void saveAutoCheckUpdate(boolean enabled) {
+        saveAutoCheckUpdateTo(getExternalConfigPath(), enabled);
+    }
+
+    /**
+     * 把 autoCheckUpdate 合并写入指定 config.json（包内可见，供测试传临时路径隔离污染）；
+     * 完全照抄 saveThemeTo 模式：读现有文件（去 BOM）→ 合并写键 → 美化输出写回，
+     * 文件不存在自动创建，失败仅记日志、不抛异常、不打断 UI。
+     */
+    static void saveAutoCheckUpdateTo(Path configPath, boolean enabled) {
+        try {
+            ObjectNode root = objectMapper.createObjectNode();
+            if (Files.exists(configPath)) {
+                String text = Files.readString(configPath);
+                if (text.startsWith("\uFEFF")) {
+                    text = text.substring(1);
+                }
+                JsonNode existing = objectMapper.readTree(text);
+                if (existing != null && existing.isObject()) {
+                    root = (ObjectNode) existing;
+                }
+            }
+            root.put("autoCheckUpdate", enabled);
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+            Files.writeString(configPath, json, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            LoggerUtil.logException("[警告] 保存启动时自动检查更新设置失败", e);
+        }
+    }
+
+    /**
      * 记录信息级别日志
      */
     private static void logInfo(String message) {

@@ -8,7 +8,9 @@ import com.awei.frt.core.node.FolderNode;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
+import com.awei.frt.model.RuleTemplate;
 import com.awei.frt.model.StrategyStep;
+import com.awei.frt.service.RuleTemplateLibrary;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -64,6 +66,8 @@ public class RuleWizardForm extends JDialog {
     private final Config config;
     private Result result;
 
+    private final JComboBox<String> templateCombo = new JComboBox<>(); // 模板下拉（首项=（不使用模板））
+    private final List<RuleTemplate> templates = new ArrayList<>();    // 已加载模板（与下拉项一一对应，不含首项）
     private final JComboBox<String> baseCombo = new JComboBox<>(BASE_CHOICES);
     private final JComboBox<String> folderCombo = new JComboBox<>();
     private final JComboBox<String> strategyCombo = new JComboBox<>();
@@ -107,6 +111,31 @@ public class RuleWizardForm extends JDialog {
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1.0;
         int row = 0;
+
+        // ---- 0. 套用内置模板（可选）：模板区块放表单顶部，不重排既有区块顺序 ----
+        c.gridy = row++;
+        form.add(sectionTitle("0. 套用内置模板（可选）"), c);
+        c.gridy = row++;
+        JPanel templateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        templateRow.setBackground(UITheme.PANEL_BG);
+        templateCombo.addItem("（不使用模板）");
+        templates.addAll(RuleTemplateLibrary.loadAll());
+        for (RuleTemplate t : templates) {
+            templateCombo.addItem(t.getName());
+        }
+        JButton applyTemplateButton = new JButton("套用模板");
+        UITheme.styleButton(applyTemplateButton);
+        applyTemplateButton.addActionListener(e -> applySelectedTemplate());
+        templateRow.add(templateCombo);
+        templateRow.add(applyTemplateButton);
+        form.add(templateRow, c);
+        c.gridy = row++;
+        // 模板加载失败（空列表）→ 下拉只有（不使用模板），提示手动填写，不影响手动流程
+        JLabel templateHint = new JLabel(templates.isEmpty()
+                ? "模板库加载失败，可手动填写" : "选择模板后点套用，可继续修改任意参数");
+        templateHint.setFont(UITheme.SMALL_FONT);
+        templateHint.setForeground(UITheme.MUTED);
+        form.add(templateHint, c);
 
         // ---- 1. 作用目录 ----
         c.gridy = row++;
@@ -320,9 +349,26 @@ public class RuleWizardForm extends JDialog {
         return null;
     }
 
+    /**
+     * 套用选中的内置模板（模板区块「套用模板」按钮）：
+     * 复用 applyRuleToForm 预填全部字段（策略类型/patterns/excludePatterns/replacements/
+     * 继承开关/策略链步骤），套用后用户仍可修改任意字段，「确定生成」走既有 onOk() 流程。
+     */
+    private void applySelectedTemplate() {
+        int idx = templateCombo.getSelectedIndex();
+        if (idx <= 0 || idx > templates.size()) {
+            warningLabel.setText("请先选择要套用的模板");
+            warningLabel.setForeground(UITheme.ERROR);
+            return;
+        }
+        RuleTemplate t = templates.get(idx - 1);
+        applyRuleToForm(t.getRule().copy());
+        warningLabel.setText("已套用模板「" + t.getName() + "」，可继续修改后生成");
+        warningLabel.setForeground(UITheme.MUTED);
+    }
+
     /** 将已解析的规则填充到表单（主策略 = 规则自身即链第 1 步；链步骤 = strategyChain 中的后续步骤） */
-    private void applyRuleToForm(MatchRule rule) {
-        if (rule == null) {
+    private void applyRuleToForm(MatchRule rule) {        if (rule == null) {
             return;
         }
         // 主策略 = 规则自身（strategyChain 只存后续步骤，无"链首步=主策略"冗余）

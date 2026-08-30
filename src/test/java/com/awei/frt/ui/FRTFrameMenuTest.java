@@ -2,6 +2,7 @@ package com.awei.frt.ui;
 
 import org.junit.jupiter.api.Test;
 
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -12,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * - 三个顶级菜单：文件 / 视图 / 帮助
  * - 文件：打开目录 ▸ 更新/目标/删除/备份/日志目录 5 项、分隔线、退出
  * - 视图：主题 ▸ 浅色/深色（单选勾选，与 UITheme.isDark 一致）、日志字体 ▸ 缩小(A-)/放大(A+)
- * - 帮助：检查更新、关于
+ * - 帮助：检查更新、启动时自动检查更新（JCheckBoxMenuItem 勾选项）、分隔线、关于
  */
 class FRTFrameMenuTest {
 
@@ -86,10 +88,37 @@ class FRTFrameMenuTest {
     }
 
     @Test
-    void helpMenuHasCheckUpdateAndAbout() {
+    void helpMenuHasCheckUpdateAutoCheckAndAbout() {
         JMenuBar bar = FRTFrame.buildMenuBar(null);
         JMenu help = bar.getMenu(2);
+        // 帮助菜单结构（v0.1.15）：检查更新 / 启动时自动检查更新（勾选项）/ 分隔线 / 关于
         assertEquals("检查更新", help.getItem(0).getText());
-        assertEquals("关于", help.getItem(1).getText());
+        JMenuItem autoCheck = help.getItem(1);
+        assertEquals("启动时自动检查更新", autoCheck.getText());
+        assertTrue(autoCheck instanceof JCheckBoxMenuItem, "开关项应为复选框菜单项");
+        // 构建骨架（frame 为 null）时勾选状态取默认值 true（实现约定：见 buildMenuBar 注释）；
+        // 构建真实 frame 时与 config.isAutoCheckUpdate() 同步（AC-4.2）
+        assertTrue(((JCheckBoxMenuItem) autoCheck).isSelected(),
+                "frame 为 null 时勾选状态应取默认开启（与实现约定一致）");
+        assertTrue(help.getMenuComponent(2) instanceof JPopupMenu.Separator,
+                "开关项与关于之间应有分隔线");
+        assertEquals("关于", help.getItem(3).getText());
+    }
+
+    @Test
+    void autoCheckItemFollowsConfigWhenFrameBuilt() {
+        // 构建真实 frame 时勾选状态与 config.isAutoCheckUpdate() 同步（AC-4.2）：
+        // headless 无法实例化 JFrame，直接验证 buildMenuBar 使用的勾选取值逻辑 initialAutoCheckState——
+        // config 为 null（骨架）取默认开启；config 关闭/开启时如实跟随
+        assertTrue(FRTFrame.initialAutoCheckState(null), "config 为 null 时取默认开启");
+        com.awei.frt.model.Config off = new com.awei.frt.model.Config();
+        off.setAutoCheckUpdate(false);
+        assertFalse(FRTFrame.initialAutoCheckState(off), "config 关闭时勾选应为未选中");
+        com.awei.frt.model.Config on = new com.awei.frt.model.Config();
+        on.setAutoCheckUpdate(true);
+        assertTrue(FRTFrame.initialAutoCheckState(on), "config 开启时勾选应为选中");
+        // 骨架菜单实际展示状态与默认值一致（与 buildMenuBar 实现联动）
+        JCheckBoxMenuItem autoCheck = (JCheckBoxMenuItem) FRTFrame.buildMenuBar(null).getMenu(2).getItem(1);
+        assertEquals(FRTFrame.initialAutoCheckState(null), autoCheck.isSelected());
     }
 }
