@@ -90,7 +90,6 @@ public final class UITheme {
 
     /** 应用指定主题并写入 UIManager 默认值 */
     public static void apply(boolean darkTheme) {
-        applyNativeLookAndFeel(); // 只切换一次：Windows/macOS 用系统外观，文字渲染更平滑
         dark = darkTheme;
         if (darkTheme) {
             applyDarkColors();
@@ -98,37 +97,6 @@ public final class UITheme {
             applyLightColors();
         }
         applyUIManager();
-    }
-
-    private static boolean lookAndFeelApplied = false;
-
-    /**
-     * 平台原生外观（仅首次调用生效，避免主题切换时重装 LAF 闪烁）：
-     * - Windows：Windows LAF（原生控件 + GDI 平滑文字渲染，解决 Metal 下文字线条粗细不一）
-     * - macOS：系统 Aqua LAF
-     * - Linux：保持默认 Metal（深色主题自定义样式兼容最好）
-     * 切换后 applyUIManager() 会覆盖关键颜色/字体键，自定义主题不受影响。
-     */
-    private static void applyNativeLookAndFeel() {
-        if (lookAndFeelApplied) {
-            return;
-        }
-        lookAndFeelApplied = true;
-        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        String laf = null;
-        if (os.contains("win")) {
-            laf = "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
-        } else if (os.contains("mac") || os.contains("darwin")) {
-            laf = UIManager.getSystemLookAndFeelClassName();
-        }
-        if (laf == null) {
-            return;
-        }
-        try {
-            UIManager.setLookAndFeel(laf);
-        } catch (Exception ignored) {
-            // 切换失败保持默认，不影响功能
-        }
     }
 
     // ---------- 浅色主题（默认，大众白底深字） ----------
