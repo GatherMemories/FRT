@@ -86,6 +86,9 @@ public final class UpdateChecker {
                 return new ReleaseInfo(tag, name, published, html);
             }
         } catch (Exception e) {
+            // 网络失败静默降级，但记录真实原因到日志（便于排查：TLS 握手/超时/DNS 等）
+            com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
             return null;
         } finally {
             if (conn != null) {
