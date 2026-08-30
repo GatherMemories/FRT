@@ -22,12 +22,20 @@ import java.util.Set;
  */
 public final class UITheme {
 
+    static {
+        // Swing 文本抗锯齿（关键）：默认在部分 Linux/LAF 组合下关闭，文字渲染锯齿感强。
+        // 必须在任何文本渲染前设置；类加载即设置 + Main/MainUI 入口双保险。
+        System.setProperty("awt.useSystemAAFontSettings", "on");
+        System.setProperty("swing.aatext", "true");
+    }
+
     private static boolean dark = false;
 
-    // ---------- 字体（两套主题共用） ----------
-    public static final Font BASE_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
-    public static final Font TITLE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 14);
-    public static final Font SMALL_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
+    // ---------- 字体（两套主题共用；按平台挑选更圆润的 UI 字体） ----------
+    private static final String UI_FAMILY = pickUIFamily();
+    public static final Font BASE_FONT = new Font(UI_FAMILY, Font.PLAIN, 13);
+    public static final Font TITLE_FONT = new Font(UI_FAMILY, Font.BOLD, 14);
+    public static final Font SMALL_FONT = new Font(UI_FAMILY, Font.PLAIN, 11);
     public static final Font MONO_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 12);
     /** 日志区字体：按平台挑选已安装的好看等宽字体（Cascadia/Consolas/Menlo/JetBrains Mono…），找不到时回退系统等宽 */
     public static final Font LOG_FONT = createLogFont();
@@ -212,6 +220,44 @@ public final class UITheme {
     }
 
     /**
+     * UI 字体族：按平台挑选已安装的圆润现代字体（中文优先），找不到时回退系统无衬线。
+     * - Windows：微软雅黑 UI / 微软雅黑 / Segoe UI
+     * - macOS：苹方 / 冬青黑体 / 黑体-简
+     * - Linux：思源黑体(Noto Sans CJK SC) / Source Han Sans SC / 文泉驿微米黑 / Droid Sans Fallback
+     */
+    private static String pickUIFamily() {
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        String[] candidates;
+        if (os.contains("win")) {
+            candidates = new String[]{"Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI"};
+        } else if (os.contains("mac") || os.contains("darwin")) {
+            candidates = new String[]{"PingFang SC", "Hiragino Sans GB", "Heiti SC"};
+        } else {
+            candidates = new String[]{"Noto Sans CJK SC", "Source Han Sans SC", "Source Han Sans CN",
+                    "WenQuanYi Micro Hei", "Droid Sans Fallback"};
+        }
+        return pickFirstInstalled(candidates, Font.SANS_SERIF);
+    }
+
+    /**
+     * 从候选列表中挑第一个已安装的字体族；都没有时返回 fallback。
+     */
+    private static String pickFirstInstalled(String[] candidates, String fallback) {
+        try {
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            Set<String> available = new HashSet<>(Arrays.asList(ge.getAvailableFontFamilyNames()));
+            for (String name : candidates) {
+                if (available.contains(name)) {
+                    return name;
+                }
+            }
+        } catch (Exception ignored) {
+            // 无头环境等异常直接回退
+        }
+        return fallback;
+    }
+
+    /**
      * 日志区等宽字体：按平台候选列表挑选第一个已安装的字体，
      * 保证 Windows（Cascadia/Consolas）/ macOS（Menlo）/ Linux（JetBrains Mono/DejaVu）都好看
      */
@@ -226,17 +272,6 @@ public final class UITheme {
             candidates = new String[]{"JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono",
                     "Noto Sans Mono", "Liberation Mono", "Monospace"};
         }
-        try {
-            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-            Set<String> available = new HashSet<>(Arrays.asList(ge.getAvailableFontFamilyNames()));
-            for (String name : candidates) {
-                if (available.contains(name)) {
-                    return new Font(name, Font.PLAIN, 13);
-                }
-            }
-        } catch (Exception ignored) {
-            // 无头环境等异常直接回退系统等宽
-        }
-        return new Font(Font.MONOSPACED, Font.PLAIN, 13);
+        return new Font(pickFirstInstalled(candidates, Font.MONOSPACED), Font.PLAIN, 13);
     }
 }

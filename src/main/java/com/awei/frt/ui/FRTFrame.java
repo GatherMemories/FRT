@@ -25,6 +25,7 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollBar;
@@ -38,6 +39,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -76,6 +78,9 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
     private final JButton fontPlusButton;  // 日志字体放大（A+）
     private final JButton clearLogButton;  // 清空日志按钮（主题切换时重刷样式）
     private final JPanel statusBar;        // 状态栏（主题切换时重刷背景/边框）
+    private final JPanel topPanel;         // 顶部功能按钮栏（主题切换时重刷背景，避免深色下残留浅色）
+    private final JPanel bottomArea;       // 底部区域（进度条+输入区+状态栏，主题切换时重刷背景）
+    private final JPanel inputRow;         // 输入行（输入框+提交/取消，主题切换时重刷背景）
     private JRadioButtonMenuItem themeLightItem; // 视图→主题 浅色项（勾选与当前主题同步）
     private JRadioButtonMenuItem themeDarkItem;  // 视图→主题 深色项
     private JMenuItem fontMinusMenuItem;   // 视图→日志字体 缩小项（与 A- 按钮联动禁用）
@@ -114,31 +119,32 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         add(logScroll, BorderLayout.CENTER);
 
         // 顶部功能按钮
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
-        top.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        top.add(topButton("更新文件", this::runUpdate));
-        top.add(topButton("删除文件", this::runDelete));
-        top.add(topButton("恢复备份", this::runRestore));
-        top.add(topButton("规则生成", this::runWizard));
-        top.add(topButton("清理残留备份", this::runCleanup));
-        top.add(topButton("核心配置", this::runConfig));
-        top.add(topButton("打包插件", this::runPluginBuild));
+        topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
+        topPanel.setBackground(UITheme.PANEL_BG);
+        topPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        topPanel.add(topButton("更新文件", this::runUpdate));
+        topPanel.add(topButton("删除文件", this::runDelete));
+        topPanel.add(topButton("恢复备份", this::runRestore));
+        topPanel.add(topButton("规则生成", this::runWizard));
+        topPanel.add(topButton("清理残留备份", this::runCleanup));
+        topPanel.add(topButton("核心配置", this::runConfig));
+        topPanel.add(topButton("打包插件", this::runPluginBuild));
         clearLogButton = new JButton("清空日志");
         UITheme.styleButton(clearLogButton);
         clearLogButton.addActionListener(e -> logArea.setText(""));
-        top.add(clearLogButton);
+        topPanel.add(clearLogButton);
         // 日志字体大小调整（A-/A+）：即时生效并持久化到 config.json，重启后保留
         fontMinusButton = new JButton("A-");
         UITheme.styleButton(fontMinusButton);
         fontMinusButton.setToolTipText("缩小日志字体（最小 " + Config.MIN_LOG_FONT_SIZE + "px）");
         fontMinusButton.addActionListener(e -> adjustLogFontSize(-1));
-        top.add(fontMinusButton);
+        topPanel.add(fontMinusButton);
         fontPlusButton = new JButton("A+");
         UITheme.styleButton(fontPlusButton);
         fontPlusButton.setToolTipText("放大日志字体（最大 " + Config.MAX_LOG_FONT_SIZE + "px）");
         fontPlusButton.addActionListener(e -> adjustLogFontSize(1));
-        top.add(fontPlusButton);
-        add(top, BorderLayout.NORTH);
+        topPanel.add(fontPlusButton);
+        add(topPanel, BorderLayout.NORTH);
 
         // 底部区域：输入区（等待输入时显示）+ 最底部状态栏
         // 快捷按钮：FlowLayout 自动换行；最多显示约 3 行，超出部分右侧滚动查看
@@ -156,7 +162,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         quickScroll.setBorder(null);
         quickScroll.setBackground(UITheme.PANEL_BG);
         quickScroll.getViewport().setBackground(UITheme.PANEL_BG);
-        JPanel inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        inputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        inputRow.setBackground(UITheme.PANEL_BG);
         inputField = new JTextField(38);
         inputField.addActionListener(e -> submitInput());
         submitButton = new JButton("提交");
@@ -167,6 +174,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         inputRow.add(submitButton);
         inputRow.add(cancelButton);
         inputArea = new JPanel(new BorderLayout(0, 4));
+        inputArea.setBackground(UITheme.PANEL_BG);
         inputArea.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
         inputArea.add(quickScroll, BorderLayout.NORTH);
         inputArea.add(inputRow, BorderLayout.SOUTH);
@@ -195,7 +203,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         progressBar.setFont(UITheme.SMALL_FONT);
         progressBar.setVisible(false);
 
-        JPanel bottomArea = new JPanel(new BorderLayout());
+        bottomArea = new JPanel(new BorderLayout());
+        bottomArea.setBackground(UITheme.PANEL_BG);
         bottomArea.add(progressBar, BorderLayout.NORTH);
         bottomArea.add(inputArea, BorderLayout.CENTER);
         bottomArea.add(statusBar, BorderLayout.SOUTH);
@@ -307,6 +316,8 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         helpMenu.add(menuItem(frame, "关于", () -> frame.showAbout()));
         bar.add(helpMenu);
 
+        // 构建完成后按当前主题整树显式设色（启动即深色时初始就正确，不依赖 L&F 透传）
+        rethemeMenuTree(bar);
         return bar;
     }
 
@@ -363,6 +374,13 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         statusLabel.setForeground(UITheme.MUTED);
         statusBar.setBackground(UITheme.PANEL_BG);
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UITheme.BORDER));
+        // 顶部功能按钮栏 / 底部区域 / 输入行（updateComponentTreeUI 对纯 JPanel 背景并非总生效，显式重刷）
+        topPanel.setBackground(UITheme.PANEL_BG);
+        bottomArea.setBackground(UITheme.PANEL_BG);
+        inputArea.setBackground(UITheme.PANEL_BG);
+        inputRow.setBackground(UITheme.PANEL_BG);
+        inputField.setBackground(UITheme.PANEL_BG);
+        inputField.setForeground(UITheme.TEXT);
         // 顶部功能按钮逐个重套主题样式（直接捕获了旧色）
         for (JButton b : topButtons) {
             UITheme.styleButton(b);
@@ -370,12 +388,10 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         UITheme.styleButton(clearLogButton);
         UITheme.styleButton(fontMinusButton);
         UITheme.styleButton(fontPlusButton);
-        // 菜单栏本身（个别 L&F 不透传颜色键）与主题菜单勾选状态同步
-        JMenuBar bar = getJMenuBar();
-        if (bar != null) {
-            bar.setBackground(UITheme.PANEL_BG);
-            bar.setForeground(UITheme.TEXT);
-        }
+        // 菜单整树重刷（JMenuBar/JMenu/JMenuItem/弹出菜单逐个设色：个别 L&F 不透传 UIManager
+        // 颜色键，updateComponentTreeUI 对菜单文字前景并非总生效，深色下会残留深字看不清）
+        rethemeMenuTree(getJMenuBar());
+        // 主题菜单勾选状态同步
         if (themeLightItem != null && themeDarkItem != null) {
             themeLightItem.setSelected(!UITheme.isDark());
             themeDarkItem.setSelected(UITheme.isDark());
@@ -383,6 +399,39 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         // 重着色既有日志内容：日志行插入时把当时的 UITheme 颜色写入了字符属性，
         // 主题切换后需按当前主题重新着色（EDT 内，典型日志量级可接受）
         recolorLogContent();
+    }
+
+    /** 菜单整树重刷主题色：JMenuBar + 每个 JMenu（含子菜单/菜单项/弹出菜单）逐个显式设色 */
+    private static void rethemeMenuTree(JMenuBar bar) {
+        if (bar == null) {
+            return;
+        }
+        bar.setBackground(UITheme.PANEL_BG);
+        bar.setForeground(UITheme.TEXT);
+        for (int i = 0; i < bar.getMenuCount(); i++) {
+            rethemeMenu(bar.getMenu(i));
+        }
+    }
+
+    /** 单个菜单：自身 + 弹出菜单 + 全部菜单组件（子菜单递归）设为主题色 */
+    private static void rethemeMenu(JMenu menu) {
+        if (menu == null) {
+            return;
+        }
+        menu.setBackground(UITheme.PANEL_BG);
+        menu.setForeground(UITheme.TEXT);
+        JPopupMenu popup = menu.getPopupMenu();
+        popup.setBackground(UITheme.PANEL_BG);
+        popup.setForeground(UITheme.TEXT);
+        popup.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
+        for (Component comp : menu.getMenuComponents()) {
+            if (comp instanceof JMenu subMenu) {
+                rethemeMenu(subMenu);
+            } else if (comp instanceof JMenuItem item) {
+                item.setBackground(UITheme.PANEL_BG);
+                item.setForeground(UITheme.TEXT);
+            }
+        }
     }
 
     /** 滚动条区显式重刷：轨道/滑块用当前主题色（Metal/基础 L&F 读取 UIManager 键 + 组件级颜色双保险） */
