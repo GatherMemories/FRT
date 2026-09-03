@@ -1,13 +1,13 @@
 package com.awei.frt.core.builder;
 
 import com.awei.frt.core.context.OperationContext;
-import com.awei.frt.core.uitls.FileSignUtil;
+import com.awei.frt.core.utils.FileSignUtil;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
-import com.awei.frt.ui.ConsoleUserPrompter;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.ConsoleUserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
@@ -30,6 +30,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -39,12 +40,28 @@ import java.util.stream.Stream;
  * @Description: 备份文件加载器
  */
 public class BackupFileLoader {
-    // 加载的备份文件列表
-    private static Map<String, Path> backupFiles = new HashMap<>();
-    // 加载的操作记录集文件列表
-    private static Map<String, ProcessingResult> operationRecordFiles = new HashMap<>();
+    // 加载的备份文件列表（进程级共享索引；恢复/清理可能在 SwingWorker 后台线程与 EDT 并发访问，
+    // 用 ConcurrentHashMap 避免并发读写 HashMap 的丢失更新/扩容死循环——原 HashMap 在
+    // FRTFrame 后台清理任务与恢复操作并发时有数据竞争风险）
+    private static Map<String, Path> backupFiles = new ConcurrentHashMap<>();
+    // 加载的操作记录集文件列表（同上，并发访问安全）
+    private static Map<String, ProcessingResult> operationRecordFiles = new ConcurrentHashMap<>();
     // 未完成会话的临时记录文件名（操作过程中实时写入，异常中断后用于恢复）
     private static final String SESSION_RECORD_FILE = "session-current.json";
+
+    /**
+     * 单条记录的恢复结果（三态）：
+     * 恢复语义要求区分"真正失败"与"用户主动跳过"——用户跳过（保留当前文件）时
+     * 该记录不得进入回滚清单，否则后续回滚会覆盖/删除用户刻意保留的文件。
+     */
+    private enum RestoreOutcome {
+        /** 已按记录恢复成功（进入回滚清单，供后续失败时回滚） */
+        SUCCESS,
+        /** 用户选择跳过/保留（不进入回滚清单、不计失败，继续后续记录） */
+        SKIPPED,
+        /** 恢复失败（中断恢复流程，询问用户是否回滚已恢复项） */
+        FAILED
+    }
 
     /**
      * 备份体系共享 JSON 序列化器（线程安全可复用）：
@@ -127,13 +144,14 @@ public class BackupFileLoader {
     }
 
     /**
-     * 加载备份文件列表
+     * 加载备份文件列表（线程安全：先收集到局部 Map，成功后一次性替换静态引用——
+     * 避免"先 clear 再 walk"在 IO 失败时把已加载的索引清空（原实现缺陷：
+     * walk 抛异常返回 null 但索引已空，恢复全部报"备份文件不存在"）。
      * @param backupPath 备份目录路径
      */
-    public static Map<String, Path>loadBackupFiles(Path backupPath) {
-        if (Files.exists(backupPath)) {
-            // 清空旧数据，避免重复加载
-            backupFiles.clear();
+    public static Map<String, Path> loadBackupFiles(Path backupPath) {
+        Map<String, Path> loaded = new ConcurrentHashMap<>();
+        if (backupPath != null && Files.exists(backupPath)) {
             // 备份记录/会话文件所在的 record 子目录：这些是操作记录 JSON，不是被备份的文件，
             // 不应算进备份文件索引（否则会污染 MD5 索引并可能被误删/误恢复）
             Path recordDir = backupPath.resolve("record").normalize();
@@ -141,16 +159,20 @@ public class BackupFileLoader {
                 paths.filter(Files::isRegularFile) // 只保留文件
                         .filter(filePath -> !filePath.startsWith(recordDir)) // 排除记录目录
                         .forEach(filePath -> {
-                            if (backupFiles == null) {
-                                backupFiles = new HashMap<>();
-                            }
                             String fileMd5 = FileSignUtil.getFileMd5(filePath); // 获取文件的MD5特征码
-                            backupFiles.put(fileMd5, filePath);
+                            if (fileMd5 != null && !fileMd5.isEmpty()) {
+                                loaded.put(fileMd5, filePath);
+                            }
                         });
+                // 全量收集成功后才替换静态索引；失败（异常）时保留旧索引
+                backupFiles = loaded;
             } catch (IOException e) {
                 LoggerUtil.logException("加载备份文件列表失败", e);
                 return null;
             }
+        } else {
+            // 备份目录不存在：重置为空索引（不保留可能指向其他测试/旧目录的脏数据）
+            backupFiles = loaded;
         }
         return backupFiles;
     }
@@ -282,11 +304,13 @@ public class BackupFileLoader {
                 return false;
             }
 
-            // 5. 生成友好的备份文件名（backup-20260131-143045.json格式）
-            String fileName = generateFriendlyFileName(record.getResultTime());
+            // 5. 生成友好的备份文件名（backup-20260131-143045.json格式）；
+            //    同一秒内多次保存（更新+删除连续执行等）时文件名会冲突，自动追加序号避免覆盖上一条正式备份
+            String baseName = generateFriendlyFileName(record.getResultTime());
 
-            // 6. 构建文件路径并规范化
-            Path recordFilePath = backupPath.resolve(fileName + ".json").normalize();
+            // 6. 构建文件路径并规范化（遇同名文件递增序号：backup-xxx.json → backup-xxx-2.json …）
+            Path recordFilePath = nextAvailableRecordPath(backupPath, baseName);
+            String fileName = recordFilePath.getFileName().toString().replace(".json", "");
 
             // 7. 验证文件路径在备份目录内（防止路径遍历攻击）
             if (!recordFilePath.startsWith(backupPath.normalize())) {
@@ -307,10 +331,17 @@ public class BackupFileLoader {
                 // 9.1 先写入临时文件
                 BACKUP_MAPPER.writeValue(tempFilePath.toFile(), record);
 
-                // 9.2 写入成功后，原子性地重命名为目标文件
-                Files.move(tempFilePath, recordFilePath,
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING);
+                // 9.2 写入成功后，原子性地重命名为目标文件；
+                //     FAT32/exFAT/部分网络盘不支持 ATOMIC_MOVE，抛出后降级为普通 move
+                //     （同目录 move 即使非原子也基本安全，用户实测在这些文件系统上备份必失败）
+                try {
+                    Files.move(tempFilePath, recordFilePath,
+                            StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
+                } catch (java.nio.file.AtomicMoveNotSupportedException atomicEx) {
+                    Files.move(tempFilePath, recordFilePath,
+                            StandardCopyOption.REPLACE_EXISTING);
+                }
 
                 return true;
             } catch (Exception e) {
@@ -334,6 +365,23 @@ public class BackupFileLoader {
             LoggerUtil.logException("保存操作记录失败: 未知错误", e);
             return false;
         }
+    }
+
+    /**
+     * 计算一条新备份记录的落盘路径：目标文件名已存在（同一秒内重复保存）时，
+     * 追加递增序号（-2、-3 …），避免 REPLACE_EXISTING 覆盖上一份正式备份记录。
+     * @param recordDir 备份记录目录（backup/record）
+     * @param baseName  无序号的基础文件名（backup-yyyyMMdd-HHmmss）
+     * @return 唯一可用的记录文件路径
+     */
+    private static Path nextAvailableRecordPath(Path recordDir, String baseName) {
+        Path candidate = recordDir.resolve(baseName + ".json").normalize();
+        int seq = 2;
+        while (Files.exists(candidate)) {
+            candidate = recordDir.resolve(baseName + "-" + seq + ".json").normalize();
+            seq++;
+        }
+        return candidate;
     }
 
     /**
@@ -393,8 +441,11 @@ public class BackupFileLoader {
             if (content == null || content.isBlank()) {
                 return null;
             }
-            // 旧格式探测：整文件是 ProcessingResult（含 operationRecords 数组字段）
-            if (content.contains("\"operationRecords\"")) {
+            // 旧格式探测：整文件是一个 ProcessingResult JSON（含顶层 operationRecords 数组）。
+            // 判定收紧为"去首尾空白后以 { 开头且含顶层 operationRecords"——新格式 JSON Lines 中
+            // 单条 OperationRecord 的 errorMessage 若恰好含该子串，不应被误判成旧格式整文件解析
+            String trimmed = content.trim();
+            if (trimmed.startsWith("{") && trimmed.contains("\"operationRecords\"")) {
                 return SESSION_MAPPER.readValue(content, ProcessingResult.class);
             }
             // 新格式：逐行解析 OperationRecord
@@ -624,10 +675,16 @@ public class BackupFileLoader {
                     // 打印恢复结果
                     LoggerUtil.logInfo("[STATS] 恢复结果统计: 成功 " + restoreResult.getSuccessCount()
                             + ", 失败 " + restoreResult.getFailureCount()
+                            + ", 跳过 " + restoreResult.getSkipCount()
                             + ", 回滚 " + restoreResult.getRollbackCount());
 
                     if (restoreResult.isFullSuccess()) {
                         LoggerUtil.logInfo("[成功] 系统已成功恢复到操作前的状态");
+                    } else if (restoreResult.getFailureCount() > 0 && restoreResult.getRollbackCount() > 0) {
+                        LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
+                    } else if (restoreResult.getFailureCount() == 0 && restoreResult.getSkipCount() > 0) {
+                        LoggerUtil.logWarn("[警告] 有 " + restoreResult.getSkipCount()
+                                + " 个文件按用户选择保留（未恢复），其余已恢复到操作前的状态");
                     } else if (restoreResult.getRollbackCount() > 0) {
                         LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
                     } else {
@@ -671,9 +728,19 @@ public class BackupFileLoader {
                 return restoreResult;
             }
 
-            // 2. 不预检"备份文件列表为空"（纯新增的备份——如第一次初始化场景——
-            //    恢复只需删除目标文件，不需要旧备份文件；REPLACE/DELETE 需要旧文件时
-            //    由 restoreSingleRecord 按需查找，找不到才单条失败并可回滚）
+            // 2.5 冷启动预加载备份索引：REPLACE/DELETE 恢复按 MD5 查 backupFiles 静态缓存，
+            //     若进程启动后未执行过任何操作/未加载过备份目录，缓存为空会导致
+            //     所有"找备份文件"失败（用户实测：中断会话在重启后无法恢复）。
+            //     这里仅当记录里确实存在需要查备份的 REPLACE/DELETE 时才触发一次加载
+            //     （getBackupFiles() 内部已有"空缓存才扫描磁盘"的判断；纯 ADD 恢复不触发，
+            //      避免无谓的全量 MD5 扫描与目录副作用）。
+            boolean needsBackupLookup = records.stream().anyMatch(r ->
+                    (OperationContext.OPERATION_REPLACE.equals(r.getOperationType())
+                            || OperationContext.OPERATION_DELETE.equals(r.getOperationType()))
+                            && r.getTargetFileSign() != null);
+            if (needsBackupLookup) {
+                getBackupFiles();
+            }
 
             // 3. 记录已恢复的操作，用于回滚
             List<OperationRecord> restoredRecords = new ArrayList<>();
@@ -690,11 +757,15 @@ public class BackupFileLoader {
 
                 LoggerUtil.logInfo("[执行] 恢复操作: " + record.getOperationType() + " - " + record.getTargetPath());
 
-                // 恢复单个记录
-                boolean success = restoreSingleRecord(record, restoreResult, prompter);
+                // 恢复单个记录（三态：成功/用户跳过/失败）
+                RestoreOutcome outcome = restoreSingleRecord(record, restoreResult, prompter);
 
-                if (success) {
+                if (outcome == RestoreOutcome.SUCCESS) {
                     restoredRecords.add(record);
+                } else if (outcome == RestoreOutcome.SKIPPED) {
+                    // 用户选择保留（跳过）：不入回滚清单，避免回滚覆盖用户刻意保留的文件
+                    LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + record.getTargetPath());
+                    continue;
                 } else {
                     // 恢复失败，询问用户是否回滚
                     LoggerUtil.logError("[失败] 恢复失败: " + record.getTargetPath());
@@ -710,7 +781,9 @@ public class BackupFileLoader {
             }
 
             LoggerUtil.logInfo("[成功] 文件恢复完成！");
-            LoggerUtil.logInfo("[STATS] 成功: " + restoreResult.getSuccessCount() + ", 失败: " + restoreResult.getFailureCount());
+            LoggerUtil.logInfo("[STATS] 成功: " + restoreResult.getSuccessCount()
+                    + ", 失败: " + restoreResult.getFailureCount()
+                    + ", 跳过: " + restoreResult.getSkipCount());
 
         } catch (Exception e) {
             LoggerUtil.logException("恢复操作失败", e);
@@ -721,11 +794,36 @@ public class BackupFileLoader {
     }
 
     /**
-     * 恢复单个操作记录
+     * 恢复单个操作记录（三态）
      * @param record 操作记录
      * @param restoreResult 恢复结果
-     * @return 是否成功
+     * @param prompter 交互对象
+     * @return SUCCESS=已恢复；SKIPPED=用户选择跳过（保留当前内容，不计失败、不入回滚清单）；
+     *         FAILED=恢复失败（已计入失败并中断流程）
      */
+    private static RestoreOutcome restoreSingleRecord(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
+        try {
+            String operationType = record.getOperationType();
+
+            switch (operationType) {
+                case OperationContext.OPERATION_ADD:
+                    return restoreAddOperation(record, restoreResult, prompter);
+                case OperationContext.OPERATION_REPLACE:
+                    return restoreReplaceOperation(record, restoreResult, prompter);
+                case OperationContext.OPERATION_DELETE:
+                    return restoreDeleteOperation(record, restoreResult, prompter);
+                default:
+                    LoggerUtil.logErrorMsg("未知操作类型: " + operationType);
+                    restoreResult.incrementFailure("未知操作类型: " + operationType);
+                    return RestoreOutcome.FAILED;
+            }
+        } catch (Exception e) {
+            LoggerUtil.logException("恢复单个记录失败", e);
+            restoreResult.incrementFailure("恢复失败: " + e.getMessage());
+            return RestoreOutcome.FAILED;
+        }
+    }
+
     /**
      * 恢复时目标内容与备份记录不一致：询问用户是否跳过该文件。
      * @param prompter 交互对象（null 时默认继续执行恢复动作）
@@ -764,43 +862,20 @@ public class BackupFileLoader {
         }
     }
 
-    private static boolean restoreSingleRecord(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
-        try {
-            String operationType = record.getOperationType();
-
-            switch (operationType) {
-                case OperationContext.OPERATION_ADD:
-                    return restoreAddOperation(record, restoreResult, prompter);
-                case OperationContext.OPERATION_REPLACE:
-                    return restoreReplaceOperation(record, restoreResult, prompter);
-                case OperationContext.OPERATION_DELETE:
-                    return restoreDeleteOperation(record, restoreResult, prompter);
-                default:
-                    LoggerUtil.logErrorMsg("未知操作类型: " + operationType);
-                    restoreResult.incrementFailure("未知操作类型: " + operationType);
-                    return false;
-            }
-        } catch (Exception e) {
-            LoggerUtil.logException("恢复单个记录失败", e);
-            restoreResult.incrementFailure("恢复失败: " + e.getMessage());
-            return false;
-        }
-    }
-
     /**
      * 恢复 ADD 操作（删除新添加的文件）
      * @param record 操作记录
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreAddOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
+    private static RestoreOutcome restoreAddOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
 
             if (targetPath == null) {
                 LoggerUtil.logErrorMsg("ADD 操作恢复失败: 目标路径为空");
                 restoreResult.incrementFailure("目标路径为空");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // 检查文件是否存在
@@ -816,17 +891,17 @@ public class BackupFileLoader {
                     if (askSkipOrProceed(prompter, "目标文件不存在，但发现内容相同（MD5 匹配）的文件（可能被改名）: "
                             + renamedRel, "删除该改名文件")) {
                         LoggerUtil.logWarn("[跳过] 用户选择保留，未删除改名文件: " + renamed);
-                        restoreResult.incrementFailure("用户选择跳过改名文件: " + renamedRel);
-                        return true;
+                        restoreResult.incrementSkip();
+                        return RestoreOutcome.SKIPPED;
                     }
                     Files.delete(renamed);
                     LoggerUtil.logInfo("[成功] 已删除改名文件: " + renamed);
                     restoreResult.incrementSuccess();
-                    return true;
+                    return RestoreOutcome.SUCCESS;
                 }
                 LoggerUtil.logInfo("[信息] 文件不存在，无需删除: " + targetPath);
                 restoreResult.incrementSuccess();
-                return true;
+                return RestoreOutcome.SUCCESS;
             }
 
             // MD5 校验：确认目标还是"当时新增的文件"（未被用户修改），避免误删改动
@@ -838,8 +913,8 @@ public class BackupFileLoader {
                     if (askSkipOrProceed(prompter, "目标文件内容与备份记录不一致（可能被修改/加载改写）: "
                             + targetPath.getFileName(), "仍删除")) {
                         LoggerUtil.logWarn("[跳过] 用户选择保留，未删除: " + targetPath);
-                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
-                        return true;
+                        restoreResult.incrementSkip();
+                        return RestoreOutcome.SKIPPED;
                     }
                 }
             }
@@ -848,12 +923,12 @@ public class BackupFileLoader {
             Files.delete(targetPath);
             LoggerUtil.logInfo("[成功] 已删除文件: " + targetPath);
             restoreResult.incrementSuccess();
-            return true;
+            return RestoreOutcome.SUCCESS;
 
         } catch (Exception e) {
             LoggerUtil.logException("ADD 操作恢复失败", e);
             restoreResult.incrementFailure("删除文件失败: " + e.getMessage());
-            return false;
+            return RestoreOutcome.FAILED;
         }
     }
 
@@ -863,7 +938,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
+    private static RestoreOutcome restoreReplaceOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
             // 替换前目标文件的签名（即备份文件索引 key），用于查找被替换前的原文件
@@ -872,7 +947,7 @@ public class BackupFileLoader {
             if (targetPath == null || targetFileSign == null) {
                 LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 目标路径或文件签名为空");
                 restoreResult.incrementFailure("目标路径或文件签名为空");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // 通过替换前目标文件签名查找备份文件
@@ -880,14 +955,14 @@ public class BackupFileLoader {
             if (backupFile == null) {
                 LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
                 restoreResult.incrementFailure("未找到备份文件");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // 检查备份文件是否存在
             if (!Files.exists(backupFile)) {
                 LoggerUtil.logErrorMsg("REPLACE 操作恢复失败: 备份文件不存在: " + backupFile);
                 restoreResult.incrementFailure("备份文件不存在");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // MD5 校验：确认目标还是"替换后的新内容"（未被用户修改），避免覆盖改动
@@ -899,8 +974,8 @@ public class BackupFileLoader {
                     if (askSkipOrProceed(prompter, "目标文件内容与备份记录不一致（可能被修改/加载改写）: "
                             + targetPath.getFileName(), "仍用备份覆盖")) {
                         LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + targetPath);
-                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
-                        return true;
+                        restoreResult.incrementSkip();
+                        return RestoreOutcome.SKIPPED;
                     }
                 }
             }
@@ -915,12 +990,12 @@ public class BackupFileLoader {
             Files.copy(backupFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
             LoggerUtil.logInfo("[成功] 已恢复文件: " + targetPath);
             restoreResult.incrementSuccess();
-            return true;
+            return RestoreOutcome.SUCCESS;
 
         } catch (Exception e) {
             LoggerUtil.logException("REPLACE 操作恢复失败", e);
             restoreResult.incrementFailure("恢复文件失败: " + e.getMessage());
-            return false;
+            return RestoreOutcome.FAILED;
         }
     }
 
@@ -930,7 +1005,7 @@ public class BackupFileLoader {
      * @param restoreResult 恢复结果
      * @return 是否成功
      */
-    private static boolean restoreDeleteOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
+    private static RestoreOutcome restoreDeleteOperation(OperationRecord record, RestoreResult restoreResult, UserPrompter prompter) {
         try {
             Path targetPath = record.getTargetPath();
             String targetFileSign = record.getTargetFileSign();
@@ -938,7 +1013,7 @@ public class BackupFileLoader {
             if (targetPath == null || targetFileSign == null) {
                 LoggerUtil.logErrorMsg("DELETE 操作恢复失败: 目标路径或目标文件签名为空");
                 restoreResult.incrementFailure("目标路径或目标文件签名为空");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // 检查文件是否已存在
@@ -950,13 +1025,13 @@ public class BackupFileLoader {
                     if (askSkipOrProceed(prompter, "目标文件已存在且内容与备份记录不一致: "
                             + targetPath.getFileName(), "仍从备份覆盖")) {
                         LoggerUtil.logWarn("[跳过] 用户选择保留，未恢复: " + targetPath);
-                        restoreResult.incrementFailure("用户选择跳过: " + targetPath.getFileName());
-                        return true;
+                        restoreResult.incrementSkip();
+                        return RestoreOutcome.SKIPPED;
                     }
                 }
                 LoggerUtil.logInfo("[信息] 文件已存在，无需恢复: " + targetPath);
                 restoreResult.incrementSuccess();
-                return true;
+                return RestoreOutcome.SUCCESS;
             }
 
             // 通过 MD5 查找备份文件
@@ -964,14 +1039,14 @@ public class BackupFileLoader {
             if (backupFile == null) {
                 LoggerUtil.logErrorMsg("DELETE 操作恢复失败: 未找到备份文件 (MD5: " + targetFileSign + ")");
                 restoreResult.incrementFailure("未找到备份文件");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // 检查备份文件是否存在
             if (!Files.exists(backupFile)) {
                 LoggerUtil.logErrorMsg("DELETE 操作恢复失败: 备份文件不存在: " + backupFile);
                 restoreResult.incrementFailure("备份文件不存在");
-                return false;
+                return RestoreOutcome.FAILED;
             }
 
             // 确保目标目录存在
@@ -984,12 +1059,12 @@ public class BackupFileLoader {
             Files.copy(backupFile, targetPath);
             LoggerUtil.logInfo("[成功] 已恢复文件: " + targetPath);
             restoreResult.incrementSuccess();
-            return true;
+            return RestoreOutcome.SUCCESS;
 
         } catch (Exception e) {
             LoggerUtil.logException("DELETE 操作恢复失败", e);
             restoreResult.incrementFailure("恢复文件失败: " + e.getMessage());
-            return false;
+            return RestoreOutcome.FAILED;
         }
     }
 
@@ -1174,11 +1249,6 @@ public class BackupFileLoader {
     }
 
     /**
-     * 删除备份记录文件及其相关的备份文件
-     * @param fileName 备份记录文件名（不含扩展名）
-     * @return 是否成功
-     */
-    /**
      * 更新备份记录的固定标记并持久化（写回 backup-xxx.json）。
      * @param fileName 备份记录文件名（含 .json）
      * @param pinned 是否固定（固定后不受备份数量淘汰影响）
@@ -1200,7 +1270,11 @@ public class BackupFileLoader {
             }
             Path temp = recordFile.resolveSibling(fileName + ".tmp");
             BACKUP_MAPPER.writeValue(temp.toFile(), result);
-            Files.move(temp, recordFile, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(temp, recordFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, recordFile, StandardCopyOption.REPLACE_EXISTING);
+            }
             return true;
         } catch (IOException e) {
             LoggerUtil.logException("更新备份固定标记失败", e);

@@ -102,15 +102,4 @@ public class RuleInheritanceContext {
         return null;
     }
 
-    /**
-     * 创建子节点的上下文
-     * 如果子节点有自己的规则，则将其添加到规则链中
-     * 否则继承父节点的规则
-     */
-    public RuleInheritanceContext createChildContext(FileNode childPath) {
-        MatchRule childRule = getEffectiveRule(childPath);
-
-        return new RuleInheritanceContext(childRule);
-    }
-
 }

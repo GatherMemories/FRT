@@ -33,4 +33,10 @@ public final class RulesConstants {
         };
     }
 
+    /** 程序运行相关路径常量（收敛散落的硬编码目录名，改目录只需改一处） */
+    public static final class Paths {
+        /** 外部策略插件目录（工作目录下；StrategyLoader 扫描 / PluginCompiler 打包共用） */
+        public static final String PLUGINS_DIR = "plugins";
+    }
+
 }

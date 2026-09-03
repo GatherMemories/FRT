@@ -30,6 +30,8 @@ public final class UpdateChecker {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 5000;
+    /** 整条查询（含证书回退多级尝试）的总时间预算：默认库失败后系统库/兜底最多再试约 5s */
+    private static final int TOTAL_BUDGET_MS = 10000;
 
     /** 最新版信息（从 Releases API 解析） */
     public record ReleaseInfo(String tagName, String name, String publishedAt, String htmlUrl) {
@@ -56,7 +58,8 @@ public final class UpdateChecker {
     }
 
     /**
-     * 查询最新发布（网络操作，最多等 5s）。任何异常返回 null。
+     * 查询最新发布（网络操作，连接+读取总预算不超过 {@link #TOTAL_BUDGET_MS}，默认约 10s）。
+     * 任何异常返回 null。
      */
     public static ReleaseInfo fetchLatestRelease() {
         return fetchLatestRelease(latestReleaseApiUrl());
@@ -82,35 +85,56 @@ public final class UpdateChecker {
     }
 
     /**
-     * 三层证书兜底查询（私有实现，quiet 控制失败/降级时是否 logWarn）：
-     * 1) 默认 Java 信任库；2) 证书校验失败时 Windows 上回退系统证书库重试一次；
-     * 3) 最后兜底绕过证书校验（仅"检查更新"这一个只读请求）。
+     * 三层证书兜底查询（私有实现，quiet 控制失败/降级时是否向 UI/控制台输出）：
+     * 1) 默认 Java 信任库；
+     * 2) 仅当证书校验失败（SSLHandshakeException 等）时，Windows 上回退系统证书库重试一次；
+     * 3) 仍仅当证书校验失败时，最后兜底绕过证书校验（仅"检查更新"这一个只读请求）。
+     *
+     * 注意：证书兜底链只对"证书类异常"触发——DNS 失败/超时/连接拒绝等网络异常属于
+     * 环境不可达，走 trust-all 也救不回来，直接快速失败返回 null（避免非证书故障
+     * 误入"绕过证书校验"路径——该路径信任任意证书，一旦非证书故障也触发，
+     * 会在网络异常时悄悄把连接切换到不校验证书的模式）。
      */
     private static ReleaseInfo fetchLatestReleaseInternal(String apiUrl, boolean quiet) {
         if (apiUrl == null || apiUrl.isBlank()) {
             return null;
         }
+        long deadline = System.currentTimeMillis() + TOTAL_BUDGET_MS;
+
         // 1) 默认 Java 信任库
         try {
-            return fetch(apiUrl, null);
+            return trustedFetch(apiUrl, null, deadline);
         } catch (Exception e) {
+            // 只有证书校验类失败才进入兜底链；网络类失败直接走"失败降级"（快速返回，不尝试 trust-all）
+            if (!isCertificateException(e)) {
+                logFailure(quiet, e);
+                return null;
+            }
             // 2) 证书校验失败：Windows 上回退系统证书库重试一次
             //（安全软件/代理 HTTPS 拦截时其证书通常已装入 Windows 信任库）
             SSLContext winTrust = windowsSystemTrustContext();
             if (winTrust != null) {
                 try {
-                    return fetch(apiUrl, winTrust);
-                } catch (Exception ignored) {
+                    return trustedFetch(apiUrl, winTrust, deadline);
+                } catch (Exception e2) {
+                    if (!isCertificateException(e2)) {
+                        logFailure(quiet, e2);
+                        return null;
+                    }
                     // 继续最后兜底
                 }
             }
             // 3) 最后兜底：绕过证书校验（仅限"检查更新"读取版本号这一个只读请求；
             //    拦截证书既不在 Java 信任库也不在系统库时仍能工作，并明确记录日志提示环境风险）
             SSLContext trustAll = trustAllContext();
-            if (trustAll != null) {
+            if (trustAll != null && System.currentTimeMillis() < deadline) {
                 try {
-                    ReleaseInfo info = fetch(apiUrl, trustAll);
+                    ReleaseInfo info = trustedFetch(apiUrl, trustAll, deadline);
                     if (info != null) {
+                        // 环境风险提示：quiet（启动自动检查）也写文件日志，仅不打扰 UI/控制台
+                        com.awei.frt.util.LoggerUtil.getInstance(null).logWarnFileOnly(
+                                "[检查更新] 已绕过 HTTPS 证书校验获取最新版——你的网络环境可能拦截了 HTTPS"
+                                        + "（安全软件/代理），请确认网络可信后再下载");
                         if (!quiet) {
                             com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 已绕过 HTTPS 证书校验获取最新版——"
                                     + "你的网络环境可能拦截了 HTTPS（安全软件/代理），请确认网络可信后再下载");
@@ -121,12 +145,91 @@ public final class UpdateChecker {
                     // 网络层失败，兜底也无效
                 }
             }
-            // 网络失败静默降级：非静默路径记录真实原因到日志（便于排查：TLS 握手/超时/DNS/证书等）
-            if (!quiet) {
-                com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
-                        + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
-            }
+            // 证书兜底链全部失败：静默降级（非静默路径记录真实原因到日志，便于排查）
+            logFailure(quiet, e);
             return null;
+        }
+    }
+
+    /**
+     * 执行请求并对返回结果做安全校验：
+     * 1. htmlUrl 必须来自本仓库域（防止 trust-all 兜底路径下，被中间人篡改的
+     *    "最新版"页面把用户诱导到钓鱼下载站——见 H3 审查项）；
+     * 2. 校验不通过按失败处理（返回 null）。
+     */
+    private static ReleaseInfo trustedFetch(String apiUrl, SSLContext sslContext, long deadline) throws Exception {
+        ReleaseInfo info = fetch(apiUrl, sslContext, deadline);
+        if (info == null) {
+            return null;
+        }
+        String htmlUrl = info.htmlUrl();
+        String githubUrl = BuildInfo.GITHUB_URL;
+        if (htmlUrl != null && !htmlUrl.isBlank()
+                && githubUrl != null && !githubUrl.isBlank()) {
+            // GitHub Releases 的 html_url 形如 https://github.com/<owner>/<repo>/releases/tag/<tag>
+            // 校验：host 与仓库页一致、路径以 /<owner>/<repo> 开头
+            if (!isSameRepositoryPage(htmlUrl, githubUrl)) {
+                return null; // 来源可疑（非本仓库域名/路径），拒绝展示与打开
+            }
+        }
+        return info;
+    }
+
+    /**
+     * 判断页面 URL 是否属于本仓库（host 一致 + 路径前缀 /owner/repo）。
+     * 纯函数，可测试。
+     */
+    static boolean isSameRepositoryPage(String pageUrl, String repoUrl) {
+        if (pageUrl == null || repoUrl == null || pageUrl.isBlank() || repoUrl.isBlank()) {
+            return false;
+        }
+        try {
+            URI page = URI.create(pageUrl);
+            URI repo = URI.create(repoUrl.trim());
+            String pageHost = page.getHost();
+            String repoHost = repo.getHost();
+            if (pageHost == null || repoHost == null || !pageHost.equalsIgnoreCase(repoHost)) {
+                return false;
+            }
+            String pagePath = normalizeRepoPath(page.getPath());
+            String repoPath = normalizeRepoPath(repo.getPath());
+            return pagePath != null && repoPath != null && pagePath.startsWith(repoPath + "/");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 归一化仓库路径：去首尾斜杠与 .git 后缀，小写比较（GitHub owner/repo 大小写不敏感） */
+    private static String normalizeRepoPath(String path) {
+        if (path == null) {
+            return null;
+        }
+        String p = path.trim();
+        while (p.startsWith("/")) {
+            p = p.substring(1);
+        }
+        while (p.endsWith("/")) {
+            p = p.substring(0, p.length() - 1);
+        }
+        if (p.toLowerCase(java.util.Locale.ROOT).endsWith(".git")) {
+            p = p.substring(0, p.length() - 4);
+        }
+        return p.isEmpty() ? null : p.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** 判断异常是否为证书校验类（SSL 握手/证书路径）——只有这类异常才值得走证书兜底链 */
+    private static boolean isCertificateException(Exception e) {
+        return e instanceof javax.net.ssl.SSLHandshakeException
+                || e instanceof javax.net.ssl.SSLPeerUnverifiedException
+                || e instanceof javax.net.ssl.SSLException
+                || (e.getCause() instanceof javax.net.ssl.SSLException);
+    }
+
+    /** 失败降级日志：quiet 时完全静默（UI 不打扰），否则输出真实原因 */
+    private static void logFailure(boolean quiet, Exception e) {
+        if (!quiet) {
+            com.awei.frt.util.LoggerUtil.logWarn("[检查更新] 查询 GitHub 最新版失败: "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
         }
     }
 
@@ -155,8 +258,12 @@ public final class UpdateChecker {
         }
     }
 
-    /** 执行一次 HTTPS GET 并解析最新版信息；失败抛异常由调用方决定是否回退/降级 */
-    private static ReleaseInfo fetch(String apiUrl, SSLContext sslContext) throws Exception {
+    /** 执行一次 HTTPS GET 并解析最新版信息；失败抛异常由调用方决定是否回退/降级。
+     *  连接/读取超时按剩余总预算动态收缩（受 deadline 约束，避免多级回退串行累计超时） */
+    private static ReleaseInfo fetch(String apiUrl, SSLContext sslContext, long deadline) throws Exception {
+        int remaining = (int) Math.max(1000, deadline - System.currentTimeMillis());
+        int connectTimeout = Math.min(CONNECT_TIMEOUT_MS, remaining);
+        int readTimeout = Math.min(READ_TIMEOUT_MS, remaining);
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) URI.create(apiUrl).toURL().openConnection();
@@ -164,8 +271,8 @@ public final class UpdateChecker {
                 https.setSSLSocketFactory(sslContext.getSocketFactory());
             }
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            conn.setReadTimeout(READ_TIMEOUT_MS);
+            conn.setConnectTimeout(connectTimeout);
+            conn.setReadTimeout(readTimeout);
             conn.setRequestProperty("Accept", "application/vnd.github+json");
             conn.setRequestProperty("User-Agent", "FRT/" + BuildInfo.VERSION);
             if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {

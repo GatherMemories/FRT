@@ -70,3 +70,9 @@ pom.xml.versionsBackup
 
 # 用户自定义规则模板（程序运行时生成，不入库）
 templates/
+
+# 产品默认工作目录（无外部 config.json 时程序/测试按 classpath 默认创建；不入库）
+/update/
+/THtest/
+/delete/
+/backup/

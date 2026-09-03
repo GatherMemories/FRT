@@ -3,7 +3,7 @@ package com.awei.frt;
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.core.context.OperationContext;
-import com.awei.frt.core.uitls.FileSignUtil;
+import com.awei.frt.core.utils.FileSignUtil;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
@@ -78,16 +78,21 @@ public class BackupFileLoaderTest {
      */
     @Test
     public void loadWindowsPathRecordDoesNotThrow() throws IOException {
-        // 模拟 Windows 平台生成的历史备份记录 JSON（反斜杠路径）
-        String json = "{\"resultTime\":\"2026-02-22T00:15:00\",\"successCount\":1,\"skipCount\":0,\"errorCount\":0,"
-                + "\"operationRecords\":[{\"strategyType\":\"McMod\",\"operationType\":\"operation_replace\","
-                + "\"sourcePath\":\"C:\\\\Users\\\\5454564546\\\\Desktop\\\\update\\\\mod.jar\","
-                + "\"targetPath\":\"C:\\\\Users\\\\5454564546\\\\Desktop\\\\THtest\\\\mod.jar\","
-                + "\"sourceFileSign\":\"abc\",\"targetFileSign\":\"def\",\"timestamp\":\"2026-02-22T00:15:00\","
-                + "\"success\":true,\"errorMessage\":null}],\"success\":true,\"resultPath\":null}";
-        Path recordFile = ConfigLoader.getBackupPath().resolve("record").resolve("backup-win-test.json");
-        Files.writeString(recordFile, json);
+        // 隔离到 @TempDir：不依赖工作区 backup 目录是否存在（无外部 config.json 的 CI 上，
+        // getBackupPath() 指向不存在的 backup/ → 直接写会 NoSuchFileException）
+        TestSupport.isolateBackup(tempDir);
         try {
+            // 模拟 Windows 平台生成的历史备份记录 JSON（反斜杠路径）
+            String json = "{\"resultTime\":\"2026-02-22T00:15:00\",\"successCount\":1,\"skipCount\":0,\"errorCount\":0,"
+                    + "\"operationRecords\":[{\"strategyType\":\"McMod\",\"operationType\":\"operation_replace\","
+                    + "\"sourcePath\":\"C:\\\\Users\\\\5454564546\\\\Desktop\\\\update\\\\mod.jar\","
+                    + "\"targetPath\":\"C:\\\\Users\\\\5454564546\\\\Desktop\\\\THtest\\\\mod.jar\","
+                    + "\"sourceFileSign\":\"abc\",\"targetFileSign\":\"def\",\"timestamp\":\"2026-02-22T00:15:00\","
+                    + "\"success\":true,\"errorMessage\":null}],\"success\":true,\"resultPath\":null}";
+            Path recordDir = Files.createDirectories(
+                    ConfigLoader.getBackupPath().resolve("record"));
+            Path recordFile = recordDir.resolve("backup-win-test.json");
+            Files.writeString(recordFile, json);
             ProcessingResult result = BackupFileLoader.loadOperationRecord("backup-win-test.json");
             assertNotNull(result, "含 Windows 路径的历史记录应能加载");
             assertEquals(1, result.getOperationRecords().size());
@@ -95,7 +100,7 @@ public class BackupFileLoaderTest {
             assertTrue(result.getOperationRecords().get(0).getSourcePath().toString().contains("Desktop"),
                     "sourcePath 应保留原路径内容");
         } finally {
-            Files.deleteIfExists(recordFile);
+            TestSupport.restoreBackupPath();
         }
     }
 
@@ -118,7 +123,8 @@ public class BackupFileLoaderTest {
      */
     @Test
     public void loadBackupFilesExcludesRecordDir() throws IOException {
-        Path temp = Files.createTempDirectory("backup-index-test");
+        // 用 @TempDir 子目录（自动清理），原实现 Files.createTempDirectory 在测试外残留 backup-index-test* 目录
+        Path temp = Files.createDirectories(tempDir.resolve("index-check"));
         try {
             Path recordDir = Files.createDirectories(temp.resolve("record"));
             Path recordJson = recordDir.resolve("backup-20260101-000000.json");
@@ -498,6 +504,126 @@ public class BackupFileLoaderTest {
                 countFinal = s.filter(Files::isRegularFile).count();
             }
             assertEquals(2, countFinal, "不同名同内容（相同 MD5）应合并为一份，不新增备份文件");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    /**
+     * 回归测试（审查 H1/支撑层高-1）：冷启动（进程启动后未加载过备份目录，静态索引为空）
+     * 直接恢复含 REPLACE 的旧记录时，必须先自动加载备份索引，否则"找备份文件"全失败。
+     * 修复前：backupFiles 静态缓存为空且无预加载 → 恢复 REPLACE/DELETE 必然失败。
+     */
+    @Test
+    public void restoreReplaceAfterColdStartAutoLoadsBackupIndex() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            // 目标文件当前为"替换后新内容"
+            Path targetDir = Files.createDirectories(tempDir.resolve("THtest"));
+            Path targetFile = targetDir.resolve("a.txt");
+            byte[] oldContent = "old-content".getBytes(StandardCharsets.UTF_8);
+            byte[] newContent = "new-content".getBytes(StandardCharsets.UTF_8);
+            Files.write(targetFile, newContent);
+
+            // 备份目录里放一份旧内容备份（REPLACE 恢复按 MD5 查找）
+            Path backupDir = Files.createDirectories(ConfigLoader.getBackupPath());
+            Path backupFile = backupDir.resolve("a.txt.bak");
+            Files.write(backupFile, oldContent);
+            String oldMd5 = FileSignUtil.getFileMd5(backupFile);
+
+            // 模拟冷启动：把静态索引重置为空（进程启动后未执行任何操作/加载——
+            // loadBackupFiles(不存在的目录) 使索引重建为空；不能用 getBackupFiles()
+            // 断言状态，它会自动扫描磁盘加载，那正是被测的预加载行为）
+            BackupFileLoader.loadBackupFiles(tempDir.resolve("nonexistent-backup-dir"));
+
+            ProcessingResult result = new ProcessingResult();
+            OperationRecord record = new OperationRecord();
+            record.setStrategyType("FileSameName");
+            record.setOperationType(OperationContext.OPERATION_REPLACE);
+            record.setTargetPath(targetFile);
+            record.setSourceFileSign(FileSignUtil.getFileMd5(
+                    Files.write(tempDir.resolve("new-src.txt"), newContent)));
+            record.setTargetFileSign(oldMd5); // 替换前旧内容（备份索引 key）
+            record.setTimestamp(LocalDateTime.now());
+            record.setSuccess(true);
+            result.addOperationRecord(record);
+
+            RestoreResult rr = BackupFileLoader.restoreFromResult(result, () -> "n");
+            assertTrue(rr.isFullSuccess(), "冷启动恢复 REPLACE 应成功（索引自动加载）: " + rr.getFailureMessages());
+            assertArrayEquals(oldContent, Files.readAllBytes(targetFile), "目标应恢复为旧内容");
+        } finally {
+            TestSupport.restoreBackupPath();
+        }
+    }
+
+    /**
+     * 回归测试（审查 core H1）：恢复中用户选择"跳过/保留"的记录不得进入回滚清单——
+     * 否则后续失败触发回滚时，会重新覆盖/删除用户明确选择保留的文件（数据丢失路径）。
+     * 三态语义：跳过（SKIPPED）既不计失败、也不参与回滚。
+     */
+    @Test
+    public void skippedRecordsAreExcludedFromRollback() throws IOException {
+        TestSupport.isolateBackup(tempDir);
+        try {
+            Path targetDir = Files.createDirectories(tempDir.resolve("THtest"));
+
+            // ---- 记录 1（先处理，倒序所以放列表后面）：REPLACE，目标被用户改动 → 用户选择跳过 ----
+            Path t1 = targetDir.resolve("keep.txt");
+            byte[] t1Old = "v1-old".getBytes(StandardCharsets.UTF_8);
+            byte[] t1New = "v1-new".getBytes(StandardCharsets.UTF_8);
+            byte[] t1UserModified = "user-kept-v1".getBytes(StandardCharsets.UTF_8);
+            // 目标当前内容 = 用户改过的版本（≠ 替换后的新内容 → 触发"是否跳过"询问）
+            Files.write(t1, t1UserModified);
+            // 备份目录放记录 1 的旧内容（供恢复查找，随后用户跳过）
+            Path backupDir = Files.createDirectories(ConfigLoader.getBackupPath());
+            Path bak1 = backupDir.resolve("keep.txt.bak");
+            Files.write(bak1, t1Old);
+            String t1OldMd5 = FileSignUtil.getFileMd5(bak1);
+            // 显式重建索引指向隔离目录（避免同 JVM 其他测试残留索引指向别处）
+            BackupFileLoader.loadBackupFiles(backupDir);
+
+            OperationRecord rec1 = new OperationRecord();
+            rec1.setStrategyType("FileSameName");
+            rec1.setOperationType(OperationContext.OPERATION_REPLACE);
+            rec1.setTargetPath(t1);
+            rec1.setSourceFileSign(FileSignUtil.getFileMd5(
+                    Files.write(tempDir.resolve("t1-new-src.txt"), t1New)));
+            rec1.setTargetFileSign(t1OldMd5);
+            rec1.setTimestamp(LocalDateTime.now());
+            rec1.setSuccess(true);
+
+            // ---- 记录 2（后处理，放列表前面）：REPLACE，备份文件缺失 → 恢复失败触发回滚询问 ----
+            Path t2 = targetDir.resolve("broken.txt");
+            byte[] t2New = "v2-new".getBytes(StandardCharsets.UTF_8);
+            Files.write(t2, t2New);
+            OperationRecord rec2 = new OperationRecord();
+            rec2.setStrategyType("FileSameName");
+            rec2.setOperationType(OperationContext.OPERATION_REPLACE);
+            rec2.setTargetPath(t2);
+            rec2.setSourceFileSign(FileSignUtil.getFileMd5(
+                    Files.write(tempDir.resolve("t2-new-src.txt"), t2New)));
+            rec2.setTargetFileSign("00000000000000000000000000000000"); // 无此备份 → 找不到
+            rec2.setTimestamp(LocalDateTime.now());
+            rec2.setSuccess(true);
+
+            ProcessingResult result = new ProcessingResult();
+            result.addOperationRecord(rec2); // 倒序遍历：rec1 先处理，rec2 后处理触发失败
+            result.addOperationRecord(rec1);
+
+            // 交互脚本：第一次 askSkipOrProceed 答 y（跳过 rec1），失败后回滚询问答 y（回滚）
+            // 先给 rec1 的跳过提示 y，再给失败回滚提示 y
+            java.util.ArrayDeque<String> answers = new java.util.ArrayDeque<>(List.of("y", "y"));
+            RestoreResult rr = BackupFileLoader.restoreFromResult(result, answers::removeFirst);
+
+            assertEquals(0, rr.getSuccessCount(), "两条记录都没真正恢复成功");
+            assertEquals(1, rr.getFailureCount(), "rec2（备份缺失）应计失败");
+            assertEquals(1, rr.getSkipCount(), "rec1（用户跳过保留）应计跳过而非失败");
+            assertFalse(rr.isFullSuccess(), "有失败不应 full success");
+
+            // 关键断言：rec1 用户选择保留的文件必须原封不动——
+            // 若跳过项误入回滚清单，回滚会把 t1 重新覆盖为 t1New
+            assertArrayEquals(t1UserModified, Files.readAllBytes(t1),
+                    "跳过项不得被回滚覆盖（用户明确选择保留的文件）");
         } finally {
             TestSupport.restoreBackupPath();
         }

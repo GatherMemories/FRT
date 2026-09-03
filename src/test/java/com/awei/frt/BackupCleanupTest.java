@@ -2,7 +2,7 @@ package com.awei.frt;
 
 import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.builder.ConfigLoader;
-import com.awei.frt.core.uitls.FileSignUtil;
+import com.awei.frt.core.utils.FileSignUtil;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
 import org.junit.jupiter.api.Test;

@@ -7,7 +7,7 @@ import com.awei.frt.model.MatchRule;
 import com.awei.frt.model.RuleTemplate;
 import com.awei.frt.service.RuleConfigWizard;
 import com.awei.frt.service.RuleTemplateLibrary;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

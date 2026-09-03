@@ -27,45 +27,95 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ModMetadataParserTest {
 
-    private static final Path UPDATE_DIR = Path.of("testDic/update");
-
-    // ---------------- 真实 jar ----------------
+    // ---------------- 真实场景（构造 jar 复现，不依赖 gitignore 的本地 jar） ----------------
 
     @Test
     void parseRealForgeModsToml() throws IOException {
-        // litematica: META-INF/mods.toml 里是真实版本 0.15.0-dev
-        ModInfo litematica = parseFirstJarMatching("litematica");
-        assertNotNull(litematica, "应能解析 litematica");
-        assertEquals("litematica", litematica.getId());
-        assertEquals("0.15.0-dev", litematica.getVersion());
-        assertNotNull(litematica.getName());
+        // 复现 litematica：mods.toml 里真实版本 0.15.0-dev
+        String toml = """
+                modLoader="javafml"
+                loaderVersion="[47,)"
+                license="MIT"
+
+                [[mods]]
+                modId="litematica"
+                version="0.15.0-dev"
+                displayName="Litematica"
+                """;
+        Path jar = createTestJar(Map.of("META-INF/mods.toml", toml));
+        try {
+            List<ModInfo> mods = ModMetadataParser.parseJar(jar);
+            assertEquals(1, mods.size());
+            assertEquals("litematica", mods.get(0).getId());
+            assertEquals("0.15.0-dev", mods.get(0).getVersion());
+            assertNotNull(mods.get(0).getName());
+        } finally {
+            Files.deleteIfExists(jar);
+        }
     }
 
     @Test
     void parseRealImBlocker() throws IOException {
-        // IMBlocker: mods.toml 真实版本 5.4.6（文件名里的 1.20.4 是 mc 版本，不能误用）
-        ModInfo imblocker = parseFirstJarMatching("IMBlocker");
-        assertNotNull(imblocker, "应能解析 IMBlocker");
-        assertEquals("imblocker", imblocker.getId());
-        assertEquals("5.4.6", imblocker.getVersion());
+        // 复现 IMBlocker：mods.toml 真实版本 5.4.6（文件名里的 1.20.4 是 mc 版本，不能误用）
+        String toml = """
+                modLoader="javafml"
+                loaderVersion="[47,)"
+
+                [[mods]]
+                modId="imblocker"
+                version="5.4.6"
+                displayName="IMBlocker"
+                """;
+        Path jar = createTestJar(Map.of("META-INF/mods.toml", toml));
+        Path renamed = jar.resolveSibling("IMBlocker-1.20.4-forge-5.4.6.jar");
+        Files.move(jar, renamed);
+        try {
+            List<ModInfo> mods = ModMetadataParser.parseJar(renamed);
+            assertEquals(1, mods.size());
+            assertEquals("imblocker", mods.get(0).getId());
+            assertEquals("5.4.6", mods.get(0).getVersion(), "不得误用文件名里的 mc 版本 1.20.4");
+        } finally {
+            Files.deleteIfExists(renamed);
+        }
     }
 
     @Test
     void placeholderVersionFallbackToManifest() throws IOException {
-        // appleskin: mods.toml version=${file.jarVersion}（占位符）
+        // 复现 appleskin：mods.toml version=${file.jarVersion}（占位符）
         // 应兜底到 MANIFEST.MF 的 Implementation-Version: 2.5.1+mc1.20.1
-        ModInfo appleskin = parseFirstJarMatching("appleskin");
-        assertNotNull(appleskin, "应能解析 appleskin");
-        assertEquals("appleskin", appleskin.getId());
-        assertFalse(appleskin.getVersion().contains("${"), "版本不应残留占位符，实际: " + appleskin.getVersion());
-        assertEquals("2.5.1+mc1.20.1", appleskin.getVersion());
+        String toml = """
+                modLoader="javafml"
+                loaderVersion="[47,)"
+
+                [[mods]]
+                modId="appleskin"
+                version="${file.jarVersion}"
+                displayName="AppleSkin"
+                """;
+        Path jar = createTestJar(Map.of(
+                "META-INF/mods.toml", toml,
+                "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nImplementation-Version: 2.5.1+mc1.20.1\r\n"));
+        try {
+            List<ModInfo> mods = ModMetadataParser.parseJar(jar);
+            assertEquals(1, mods.size());
+            assertEquals("appleskin", mods.get(0).getId());
+            assertFalse(mods.get(0).getVersion().contains("${"), "版本不应残留占位符，实际: " + mods.get(0).getVersion());
+            assertEquals("2.5.1+mc1.20.1", mods.get(0).getVersion());
+        } finally {
+            Files.deleteIfExists(jar);
+        }
     }
 
     @Test
     void noMetadataJarReturnsEmpty() throws IOException {
-        // app.jar: 无任何 mod 元数据 -> 空列表（不报错）
-        List<ModInfo> mods = ModMetadataParser.parseJar(UPDATE_DIR.resolve("app.jar"));
-        assertTrue(mods.isEmpty());
+        // app.jar 复现：无任何 mod 元数据 -> 空列表（不报错）
+        Path jar = createTestJar(Map.of("data.txt", "no metadata here"));
+        try {
+            List<ModInfo> mods = ModMetadataParser.parseJar(jar);
+            assertTrue(mods.isEmpty());
+        } finally {
+            Files.deleteIfExists(jar);
+        }
     }
 
     // ---------------- 构造 jar：各格式 ----------------
@@ -211,19 +261,6 @@ class ModMetadataParserTest {
     }
 
     // ---------------- 辅助 ----------------
-
-    /** 在 testDic/update 下找第一个文件名包含关键字 jar，解析并返回第一个 ModInfo */
-    private ModInfo parseFirstJarMatching(String keyword) throws IOException {
-        try (Stream<Path> files = Files.list(UPDATE_DIR)) {
-            Path jar = files.filter(f -> f.getFileName().toString().contains(keyword)
-                    && f.getFileName().toString().endsWith(".jar"))
-                    .findFirst().orElse(null);
-            assertNotNull(jar, "testDic/update 下应存在包含 " + keyword + " 的 jar");
-            List<ModInfo> mods = ModMetadataParser.parseJar(jar);
-            assertFalse(mods.isEmpty(), keyword + " 应解析出至少一个 mod");
-            return mods.get(0);
-        }
-    }
 
     /** 构造一个只含指定 entry 的临时 jar */
     private Path createTestJar(Map<String, String> entries) throws IOException {

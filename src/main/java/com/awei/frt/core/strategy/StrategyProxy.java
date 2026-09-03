@@ -44,6 +44,9 @@ public class StrategyProxy implements InvocationHandler {
 
         FileNode node = (FileNode) args[0];
         OperationContext context = (OperationContext) args[1];
+        // 第三个参数是操作类型数组（UPDATE_OPERATION/DELETE_OPERATION），
+        // 供失败记录补齐 operationType（审查 M6：原失败记录无类型/路径，无法参与恢复/展示）
+        String[] operationType = args.length > 2 && args[2] instanceof String[] arr ? arr : null;
         String rel = node == null ? "null" : node.getRelativePath();
         String type = target.getStrategyType();
 
@@ -55,23 +58,33 @@ public class StrategyProxy implements InvocationHandler {
         } catch (InvocationTargetException e) {
             // 目标方法抛出的异常在这里被拦截：记录日志与失败统计，不中断整个更新流程
             Throwable cause = e.getCause() != null ? e.getCause() : e;
-            handleError(type, rel, context, cause);
+            handleError(type, rel, node, context, operationType, cause);
         } catch (Throwable t) {
-            handleError(type, rel, context, t);
+            handleError(type, rel, node, context, operationType, t);
         }
         return null;
     }
 
     /**
-     * 异常兜底：记日志 + 记失败操作记录（计入 errorCount，随备份/恢复体系走）
+     * 异常兜底：记日志 + 记失败操作记录（计入 errorCount，随备份/恢复体系走）。
+     * 失败记录补齐 operationType/targetPath：恢复流程只处理 isSuccess 的记录、
+     * 失败记录会被跳过（不会触发"未知操作类型"或误恢复），但 UI/备份列表能看到
+     * 失败项的类型与目标路径（审查 M6 原实现记录为半空壳）。
      */
-    private void handleError(String type, String rel, OperationContext context, Throwable cause) {
+    private void handleError(String type, String rel, FileNode node,
+                             OperationContext context, String[] operationType, Throwable cause) {
         LoggerUtil.logException("[策略] " + type + " 执行异常: " + rel, cause);
         if (context != null) {
             OperationRecord record = new OperationRecord();
             record.setStrategyType(type);
+            if (operationType != null && operationType.length > 0) {
+                record.setOperationType(operationType[0]);
+            }
             record.setErrorMessage(cause.toString());
             record.setSuccess(false);
+            if (node != null && node.getPath() != null) {
+                record.setTargetPath(node.getPath());
+            }
             context.recordOperation(record);
         }
     }

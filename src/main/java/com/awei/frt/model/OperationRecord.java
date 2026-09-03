@@ -1,5 +1,7 @@
 package com.awei.frt.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 
@@ -7,6 +9,7 @@ import java.time.LocalDateTime;
  * 操作记录模型
  * 记录每次文件操作的详细信息
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OperationRecord {
 
 

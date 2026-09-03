@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * 匹配规则模型
  * 定义文件操作的规则配置
  */
-@JsonIgnoreProperties({"path"})
+@JsonIgnoreProperties(value = {"path"}, ignoreUnknown = true)
 public class MatchRule {
     private String strategyType;                // 策略类型（单策略时使用）
     private Map<String, String> replacements;   // 策略扩展参数（键值对）：供各策略读取自定义配置，如 {"onlyIfVersionChanged": "true"}

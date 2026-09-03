@@ -1,6 +1,7 @@
 package com.awei.frt.factory;
 
 import com.awei.frt.core.strategy.OperationStrategy;
+import com.awei.frt.constants.RulesConstants;
 import com.awei.frt.util.LoggerUtil;
 
 import java.io.IOException;
@@ -41,7 +42,7 @@ public final class StrategyLoader {
      * 由 StrategyFactory 静态初始化时调用一次
      */
     public static void loadExternalStrategies() {
-        loadExternalStrategies(Path.of("plugins"));
+        loadExternalStrategies(Path.of(RulesConstants.Paths.PLUGINS_DIR));
     }
 
     /**
@@ -61,6 +62,9 @@ public final class StrategyLoader {
             LoggerUtil.logException("扫描插件目录失败: " + pluginsDir, e);
             return;
         }
+        // 目录枚举顺序由文件系统决定（无定义）：排序后加载，保证同名策略冲突时
+        // "谁先生效"确定（外部-外部冲突由文件名字典序决定，并输出可定位告警，见 register）
+        jars.sort(java.util.Comparator.comparing(p -> p.getFileName().toString()));
         for (Path jar : jars) {
             loadPluginJar(jar);
         }

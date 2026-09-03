@@ -1,6 +1,7 @@
 package com.awei.frt.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.util.List;
  * 处理结果模型
  * 存储文件处理操作的总体结果
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ProcessingResult {
     private LocalDateTime resultTime;  // 处理结果时间
     private int successCount;          // 成功处理的文件数

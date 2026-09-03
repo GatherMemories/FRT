@@ -1,4 +1,4 @@
-package com.awei.frt.ui;
+package com.awei.frt.interaction;
 
 import java.util.Scanner;
 

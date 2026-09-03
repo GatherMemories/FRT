@@ -1,0 +1,44 @@
+name: test
+
+# 每个 push / PR 在干净检出上跑全量单元测试（审查 B-3）：
+# release.yml 用 -DskipTests 发版，测试从不进自动化——本 job 保证任何改动
+# 在干净环境（无本地 config.json/testDic/plugins）也能通过全套 286+ 用例。
+# 套件已自包含：ModMetadataParserTest 用构造 jar、ConfigLoaderTest 纯解析零副作用、
+# E2E 测试全部隔离备份路径（不写真实 testDic/工作区）。
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 全量单元测试
+        run: mvn -B -q test
+
+      # 测试不应污染工作区。注：update/THtest/delete/backup 四个目录是 ConfigLoader
+      # 的"无外部配置 → 加载 classpath 默认并创建默认目录"产品语义（干净检出必然出现），
+      # 不算污染；断言的是非预期残留：测试专用目录、备份会话污染等。
+      - name: 断言测试无异常工作区污染
+        run: |
+          for d in abs-update chain-test mcmod-test backup-index-test frt-plugin-build; do
+            if [ -e "$d" ]; then
+              echo "::error::测试在工作区创建了非预期目录 $d"
+              exit 1
+            fi
+          done
+          if [ -e "testDic/backup/record/session-current.json" ]; then
+            echo "::error::E2E 测试未隔离备份路径，污染了 testDic/backup（审查 B 实测问题）"
+            exit 1
+          fi
+          echo "工作区无异常污染（默认目录 update/THtest/delete/backup 属产品语义，允许存在）"

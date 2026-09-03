@@ -47,14 +47,16 @@ class McModStrategyTest {
 
     @Test
     void onlyIfContentSameSkipsWhenMd5Equal() throws IOException {
-        // 准备：update 与 target 各放一份【内容完全相同】的真实 mod jar
+        // 准备：update 与 target 各放一份【内容完全相同】的构造 mod jar（不依赖 gitignore 的真实 jar）
         Path base = Files.createTempDirectory("mcmod-test-eq");
         try {
             Path updateDir = Files.createDirectories(base.resolve("update"));
             Path targetDir = Files.createDirectories(base.resolve("target"));
-            Path srcJar = findTestJar("litematica");
-            Files.copy(srcJar, updateDir.resolve("mod.jar"));
-            Files.copy(srcJar, targetDir.resolve("mod.jar"));
+            byte[] sameContent = "identical-mod-content".getBytes(StandardCharsets.UTF_8);
+            createJar(updateDir, "mod.jar", Map.of(
+                    "META-INF/mods.toml", MODS_TOML, "data.txt", new String(sameContent, StandardCharsets.UTF_8)));
+            createJar(targetDir, "mod.jar", Map.of(
+                    "META-INF/mods.toml", MODS_TOML, "data.txt", new String(sameContent, StandardCharsets.UTF_8)));
 
             OperationContext ctx = buildContext(updateDir, targetDir, Map.of("onlyIfContentSame", "true"));
             new McModStrategy().execute(buildNode(updateDir), ctx, new String[]{OperationContext.OPERATION_REPLACE});
@@ -63,6 +65,49 @@ class McModStrategyTest {
             assertTrue(ctx.getProcessingResult().getOperationRecords().isEmpty(),
                     "MD5 相同时应跳过替换，实际产生了操作记录");
         } finally {
+            deleteRecursively(base);
+        }
+    }
+
+    /**
+     * 回归测试（审查 core H2）：同 modId 升级时源/目标文件名不同（版本号变化），
+     * 替换必须写回目标侧<b>原文件名</b>并覆盖旧文件——
+     * 修复前按源文件名推导目标路径（目标侧通常不存在该文件）→ 替换失败
+     * 或成功后旧 jar 残留 → 目标目录同 modId 双 jar（Minecraft 重复加载风险）。
+     */
+    @Test
+    void replaceWritesToExistingTargetFileNameNoDuplicateJar() throws IOException {
+        Path base = Files.createTempDirectory("mcmod-h2-dup");
+        try {
+            TestSupport.isolateBackup(base);
+            Path updateDir = Files.createDirectories(base.resolve("update"));
+            Path targetDir = Files.createDirectories(base.resolve("target"));
+            // 目标侧旧版本 jar（文件名含 1.0.0），update 侧新版本 jar（文件名含 2.0.0，同 modId）
+            createJar(targetDir, "testmod-1.0.0.jar", Map.of(
+                    "META-INF/mods.toml", MODS_TOML, "payload.txt", "old"));
+            String newToml = MODS_TOML.replace("version=\"1.0.0\"", "version=\"2.0.0\"");
+            createJar(updateDir, "testmod-2.0.0.jar", Map.of(
+                    "META-INF/mods.toml", newToml, "payload.txt", "new"));
+
+            OperationContext ctx = buildContext(updateDir, targetDir, Map.of());
+            new McModStrategy().execute(buildNode(updateDir), ctx, new String[]{OperationContext.OPERATION_REPLACE});
+
+            // 替换成功且只产生 1 条记录
+            assertEquals(1, ctx.getProcessingResult().getOperationRecords().size(),
+                    "同 modId 升级应产生一次替换记录");
+            assertTrue(ctx.getProcessingResult().getOperationRecords().get(0).isSuccess(),
+                    "替换应成功（写回目标侧原文件名，而非不存在的源文件名路径）");
+            // 目标目录仍是单个 jar（无同 modId 双 jar 残留），内容已是新版
+            try (Stream<Path> files = Files.list(targetDir)) {
+                List<Path> jars = files.filter(f -> f.getFileName().toString().endsWith(".jar")).toList();
+                assertEquals(1, jars.size(), "目标目录不得出现同 modId 双 jar");
+            }
+            assertTrue(ctx.getProcessingResult().getOperationRecords().get(0).getTargetPath()
+                    .getFileName().toString().startsWith("testmod-1.0.0"),
+                    "替换应写回目标侧原文件名: "
+                            + ctx.getProcessingResult().getOperationRecords().get(0).getTargetPath());
+        } finally {
+            TestSupport.restoreBackupPath();
             deleteRecursively(base);
         }
     }

@@ -1,6 +1,7 @@
 package com.awei.frt;
 
 import com.awei.frt.core.builder.BackupFileLoader;
+import com.awei.frt.constants.RulesConstants;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
@@ -29,12 +30,49 @@ public class Main {
                 System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win") ? "lcd" : "on");
         System.setProperty("swing.aatext", "true");
 
+        // 参数解析：--ui / --console(-c) 可在任意位置出现（不限于首位），--help 打印用法。
+        // 未知参数静默忽略并进入控制台（与启动脚本透传行为一致）
+        boolean uiMode = false;
+        for (String arg : args) {
+            if (arg == null) {
+                continue;
+            }
+            if ("--ui".equals(arg)) {
+                uiMode = true;
+            } else if ("--console".equals(arg) || "-c".equals(arg)) {
+                uiMode = false;
+            } else if ("--help".equals(arg) || "-h".equals(arg)) {
+                printUsage();
+                return;
+            }
+        }
+
         // UI 模式入口：java -jar FRT.jar --ui（或 java -cp ... com.awei.frt.ui.MainUI）
-        if (args.length > 0 && "--ui".equals(args[0])) {
+        if (uiMode) {
             com.awei.frt.ui.MainUI.main(args);
             return;
         }
 
+        int exitCode = runConsole();
+        if (exitCode != 0) {
+            System.exit(exitCode);
+        }
+    }
+
+    /** 打印用法说明（--help） */
+    private static void printUsage() {
+        System.out.println("多层级文件夹更新工具 (FRT)");
+        System.out.println("用法: java -jar FRT.jar [选项]");
+        System.out.println("  --ui         启动图形界面（默认）");
+        System.out.println("  --console, -c 启动控制台菜单模式");
+        System.out.println("  --help, -h   显示本帮助");
+    }
+
+    /**
+     * 控制台模式主体
+     * @return 进程退出码：0=正常退出；1=启动/运行失败
+     */
+    private static int runConsole() {
         LoggerUtil logger = null;// 日志工具类
         Scanner scanner = null;
 
@@ -48,8 +86,7 @@ public class Main {
             if (config == null) {
                 // 配置加载失败，退出程序
                 LoggerUtil.logError("[失败] 配置加载失败，请检查配置文件");
-                System.exit(1);
-                return;
+                return 1;
             }
 
             LoggerUtil.logInfo("=========================================");
@@ -116,7 +153,7 @@ public class Main {
                         break;
                     case "7":
                         LoggerUtil.logInfo("[打包] 编译打包 plugins/ 目录的 .java 策略源码...");
-                        PluginCompiler.CompileResult buildResult = PluginCompiler.compilePluginsToJar(Path.of("plugins"));
+                        PluginCompiler.CompileResult buildResult = PluginCompiler.compilePluginsToJar(Path.of(RulesConstants.Paths.PLUGINS_DIR));
                         if (buildResult.isSuccess()) {
                             LoggerUtil.logInfo("[成功] " + buildResult.getMessage());
                         } else {
@@ -125,7 +162,7 @@ public class Main {
                         break;
                     case "8":
                         LoggerUtil.logInfo("程序退出");
-                        return;
+                        return 0;
                     default:
                         LoggerUtil.logWarn("[失败] 无效选项，请重新选择");
                         break;
@@ -139,6 +176,7 @@ public class Main {
             // （LoggerUtil.logException 内部会自动初始化日志系统，logger 为 null 也能记录）
             LoggerUtil.logException("[失败] 程序执行失败", e);
             System.err.println("[提示] 请查看日志 logs/frt.log 了解详细错误信息");
+            return 1;
         } finally {
             // 确保资源正确释放
             if (logger != null) {
@@ -183,6 +221,7 @@ public class Main {
 
             LoggerUtil.logInfo("[STATS] 恢复结果统计: 成功 " + restoreResult.getSuccessCount()
                     + ", 失败 " + restoreResult.getFailureCount()
+                    + ", 跳过 " + restoreResult.getSkipCount()
                     + ", 回滚 " + restoreResult.getRollbackCount());
 
             if (restoreResult.isFullSuccess()) {

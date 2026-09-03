@@ -40,6 +40,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.awei.frt.util.RuleInputParser;
 
 /**
  * 规则生成向导 —— 表单式（一次填完所有参数，含策略链配置）
@@ -92,6 +93,9 @@ public class RuleWizardForm extends JDialog {
     private final JLabel folderCountLabel = new JLabel("");
     private final Map<String, Path> folderMap = new LinkedHashMap<>(); // 下拉显示名 -> 目录路径
     private final List<String> strategyTypes = new ArrayList<>();      // 注册表顺序（与下拉一一对应）
+    /** 套用模板前的表单快照：切回"（不使用模板）"时还原用户手填参数
+     *  （v0.1.17 修复：原实现切回无模板后表单仍保留模板值） */
+    private FormSnapshot preApplySnapshot;
 
     public RuleWizardForm(Frame owner, Config config) {
         super(owner, "规则生成 - 表单式配置", true);
@@ -135,7 +139,12 @@ public class RuleWizardForm extends JDialog {
         // 选中真实模板（非占位项/分隔项）即自动套用：切换模板配置立即生效（按钮保留用于修改后重新套用）
         templateCombo.addActionListener(e -> {
             Object sel = templateCombo.getSelectedItem();
-            if (sel == null || NO_TEMPLATE_ITEM.equals(sel) || CUSTOM_SEPARATOR_ITEM.equals(sel)) {
+            if (sel == null || CUSTOM_SEPARATOR_ITEM.equals(sel)) {
+                return;
+            }
+            if (NO_TEMPLATE_ITEM.equals(sel)) {
+                // 切回"（不使用模板）"：还原套用前的用户手填参数，而不是残留模板字段
+                revertToPreApplyState();
                 return;
             }
             applySelectedTemplate();
@@ -421,6 +430,11 @@ public class RuleWizardForm extends JDialog {
             warningLabel.setForeground(UITheme.ERROR);
             return;
         }
+        // 套用前捕获一次表单快照：仅当尚未捕获（首次套用/上次已还原）时保存，
+        // 之后切回"（不使用模板）"可还原到这次套用前的用户手填状态
+        if (preApplySnapshot == null) {
+            preApplySnapshot = FormSnapshot.capture(this);
+        }
         applyRuleToForm(t.getRule().copy()); // 深拷贝：模板资源不被表单修改污染
         warningLabel.setText("已套用模板「" + t.getName() + "」，可继续修改后生成");
         warningLabel.setForeground(UITheme.MUTED);
@@ -428,6 +442,24 @@ public class RuleWizardForm extends JDialog {
         if (templateHint != null) {
             templateHint.setText("已套用模板「" + t.getName() + "」，可继续修改任意参数后「确定生成」");
             templateHint.setForeground(UITheme.SUCCESS);
+        }
+    }
+
+    /**
+     * 切回"（不使用模板）"：还原套用模板前的用户手填参数（策略/patterns/exclude/
+     * replacements/继承开关/链步骤）；无快照（从未套用模板）时无操作。
+     */
+    private void revertToPreApplyState() {
+        if (preApplySnapshot == null) {
+            return; // 从未套用模板，无需还原
+        }
+        preApplySnapshot.restoreTo(this);
+        preApplySnapshot = null; // 一次性还原：下次再套用模板时重新捕获
+        warningLabel.setText("已还原为套用模板前的参数，可手动填写后生成");
+        warningLabel.setForeground(UITheme.MUTED);
+        if (templateHint != null) {
+            templateHint.setText("已还原为套用模板前的参数（未套用模板）");
+            templateHint.setForeground(UITheme.MUTED);
         }
     }
 
@@ -841,6 +873,83 @@ public class RuleWizardForm extends JDialog {
         }
     }
 
+    // ---------------- 套用模板前快照（切回"无模板"时还原用户手填） ----------------
+
+    /** 策略链一行步骤的纯数据快照（脱离 Swing 组件） */
+    private static final class ChainStepSnapshot {
+        final String strategyType;
+        final String patterns;
+        final String excludes;
+        final String replacements;
+
+        ChainStepSnapshot(String strategyType, String patterns, String excludes, String replacements) {
+            this.strategyType = strategyType;
+            this.patterns = patterns;
+            this.excludes = excludes;
+            this.replacements = replacements;
+        }
+    }
+
+    /**
+     * 表单规则区快照：策略类型/patterns/excludePatterns/replacements/继承开关/链步骤。
+     * capture 于每次真实套用模板前调用一次；restoreTo 用于切回"（不使用模板）"。
+     */
+    private static final class FormSnapshot {
+        final int strategyIndex;                    // 主策略下拉索引
+        final String patterns;
+        final String excludes;
+        final String replacements;
+        final boolean inherit;
+        final List<ChainStepSnapshot> chain = new ArrayList<>();
+
+        static FormSnapshot capture(RuleWizardForm form) {
+            FormSnapshot s = new FormSnapshot(form.strategyCombo.getSelectedIndex(),
+                    form.patternsField.getText(), form.excludeField.getText(),
+                    form.replacementsField.getText(), form.inheritCheck.isSelected());
+            for (ChainRow row : form.chainRows) {
+                s.chain.add(new ChainStepSnapshot(
+                        (String) row.typeCombo.getSelectedItem(),
+                        row.patterns.getText(), row.excludes.getText(), row.replacements.getText()));
+            }
+            return s;
+        }
+
+        FormSnapshot(int strategyIndex, String patterns, String excludes, String replacements, boolean inherit) {
+            this.strategyIndex = strategyIndex;
+            this.patterns = patterns;
+            this.excludes = excludes;
+            this.replacements = replacements;
+            this.inherit = inherit;
+        }
+
+        void restoreTo(RuleWizardForm form) {
+            if (strategyIndex >= 0 && strategyIndex < form.strategyCombo.getItemCount()) {
+                form.strategyCombo.setSelectedIndex(strategyIndex);
+            }
+            form.patternsField.setText(patterns);
+            form.excludeField.setText(excludes);
+            form.replacementsField.setText(replacements);
+            form.inheritCheck.setSelected(inherit);
+            // 清空链并重建
+            form.chainRows.clear();
+            form.chainPanel.removeAll();
+            for (ChainStepSnapshot step : chain) {
+                form.addChainRowFromSnapshot(step);
+            }
+            form.rebuildChainPanel();
+        }
+    }
+
+    /** 按快照重建一行链步骤（复用 addChainRow(StrategyStep) 的预填路径） */
+    private void addChainRowFromSnapshot(ChainStepSnapshot step) {
+        StrategyStep s = new StrategyStep();
+        s.setStrategyType(step.strategyType);
+        s.setPatterns(parseList(step.patterns));
+        s.setExcludePatterns(parseList(step.excludes));
+        s.setReplacements(parseMap(step.replacements));
+        addChainRow(s);
+    }
+
     // ---------------- 确定/取消 ----------------
 
     /**
@@ -896,43 +1005,13 @@ public class RuleWizardForm extends JDialog {
         javax.swing.JOptionPane.showMessageDialog(this, message, "规则生成", javax.swing.JOptionPane.WARNING_MESSAGE);
     }
 
-    // ---------------- 解析工具（与 RuleConfigWizard 一致） ----------------
+    // ---------------- 解析工具（与 RuleConfigWizard 共用 RuleInputParser，审查 L1 收敛） ----------------
 
     private static List<String> parseList(String input) {
-        List<String> list = new ArrayList<>();
-        if (input == null || input.trim().isEmpty()) {
-            return list;
-        }
-        for (String item : input.split(",")) {
-            String trimmed = item.trim();
-            if (!trimmed.isEmpty()) {
-                list.add(trimmed);
-            }
-        }
-        return list;
+        return RuleInputParser.parseList(input);
     }
 
     private static Map<String, String> parseMap(String input) {
-        Map<String, String> map = new LinkedHashMap<>();
-        if (input == null || input.trim().isEmpty()) {
-            return map;
-        }
-        for (String item : input.split(",")) {
-            String trimmed = item.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            int eq = trimmed.indexOf('=');
-            if (eq > 0) {
-                String key = trimmed.substring(0, eq).trim();
-                String value = trimmed.substring(eq + 1).trim();
-                if (!key.isEmpty()) {
-                    map.put(key, value);
-                    continue;
-                }
-            }
-            System.out.println("[警告] 忽略格式错误的参数项: " + trimmed + " (应为 key=value)");
-        }
-        return map;
+        return RuleInputParser.parseMap(input);
     }
 }

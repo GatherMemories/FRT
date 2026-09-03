@@ -329,13 +329,16 @@ public final class RuleTemplateLibrary {
     // ---------------- 包内钩子（供测试注入临时路径隔离污染） ----------------
 
     /**
-     * 从指定文件加载自定义模板（文件缺失/损坏 → 空列表 + logWarn，不抛异常；逐条校验复用内置逻辑）
+     * 从指定文件加载自定义模板（文件缺失/损坏 → 空列表 + logWarn，不抛异常；逐条校验复用内置逻辑）。
+     * 与写侧共用 LOCK 互斥：GUI/控制台保存/删除/改名写盘期间读侧等待，避免读到写了一半的文件。
      */
     static List<RuleTemplate> loadCustomFrom(Path file) {
-        if (file == null || !Files.isRegularFile(file)) {
-            return Collections.emptyList(); // 文件缺失 = 无自定义模板（首次使用静默，不刷警告）
+        synchronized (LOCK) {
+            if (file == null || !Files.isRegularFile(file)) {
+                return Collections.emptyList(); // 文件缺失 = 无自定义模板（首次使用静默，不刷警告）
+            }
+            return loadFrom(file);
         }
-        return loadFrom(file);
     }
 
     /**
@@ -631,10 +634,20 @@ public final class RuleTemplateLibrary {
     /**
      * 把模板列表写入指定文件：顶层结构 {"templates":[...]} 与内置 rule-templates.json 同构；
      * templates/ 目录不存在自动创建；UTF-8 + 美化输出；失败返回 IO_ERROR 并 logWarn，不抛异常。
+     * <p>
+     * 写盘采用"临时文件 + 原子移动"（tmp → ATOMIC_MOVE）：崩溃/断电不会留下半截文件，
+     * 读侧并发读要么看到旧完整文件要么看到新完整文件（不会读到截断 JSON——原直写
+     * Files.writeString 在写中读会解析失败返回空列表，自定义模板列表瞬间"消失"）。
+     * FAT32/exFAT 等不支持 ATOMIC_MOVE 的文件系统自动降级为普通 move。
+     * 调用方（save/delete/rename）已持 LOCK，读侧 loadCustomFrom/findById 也以 LOCK 互斥。
      */
     private static SaveStatus writeTemplatesFile(Path file, List<RuleTemplate> templates) {
+        if (file == null) {
+            return SaveStatus.IO_ERROR;
+        }
+        Path tmpFile = null;
         try {
-            if (file != null && file.getParent() != null) {
+            if (file.getParent() != null) {
                 Files.createDirectories(file.getParent());
             }
             ObjectNode root = MAPPER.createObjectNode();
@@ -643,24 +656,44 @@ public final class RuleTemplateLibrary {
                 arr.add(MAPPER.valueToTree(t));
             }
             String json = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root);
-            Files.writeString(file, json, StandardCharsets.UTF_8);
+            // 先写同目录临时文件，再原子移动（同目录保证 ATOMIC_MOVE 可用性）
+            tmpFile = file.resolveSibling(file.getFileName() + ".tmp");
+            Files.writeString(tmpFile, json, StandardCharsets.UTF_8);
+            try {
+                Files.move(tmpFile, file,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                // 不支持原子移动的文件系统：降级为普通 move（同目录 rename 基本安全）
+                Files.move(tmpFile, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
             return SaveStatus.SUCCESS;
         } catch (Exception e) {
+            // 清理可能残留的临时文件
+            if (tmpFile != null) {
+                try {
+                    Files.deleteIfExists(tmpFile);
+                } catch (IOException ignored) {
+                }
+            }
             LoggerUtil.logWarn("[模板库] 写入自定义模板文件失败: " + file + " - " + e.getMessage());
             return SaveStatus.IO_ERROR;
         }
     }
 
-    /** 读取现有自定义列表；文件缺失/损坏 → 空集重建（坏文件不阻塞后续保存） */
+    /** 读取现有自定义列表；文件缺失/损坏 → 空集重建（坏文件不阻塞后续保存）。
+     *  与写侧共用 LOCK：写中读不会读到半截文件（配合 writeTemplatesFile 的原子移动） */
     private static List<RuleTemplate> safeLoad(Path file) {
-        if (file == null || !Files.isRegularFile(file)) {
-            return new ArrayList<>();
-        }
-        try {
-            return new ArrayList<>(loadFrom(file));
-        } catch (Exception e) {
-            LoggerUtil.logWarn("[模板库] 读取自定义模板失败，按空集重建: " + e.getMessage());
-            return new ArrayList<>();
+        synchronized (LOCK) {
+            if (file == null || !Files.isRegularFile(file)) {
+                return new ArrayList<>();
+            }
+            try {
+                return new ArrayList<>(loadFrom(file));
+            } catch (Exception e) {
+                LoggerUtil.logWarn("[模板库] 读取自定义模板失败，按空集重建: " + e.getMessage());
+                return new ArrayList<>();
+            }
         }
     }
 

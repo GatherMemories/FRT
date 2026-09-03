@@ -116,7 +116,18 @@ class StrategyChainTest {
 
     // ---------------- 辅助 ----------------
 
+    /** 每个用例后恢复真实备份路径（隔离仅作用于本测试的临时目录） */
+    @org.junit.jupiter.api.AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
+
     private OperationContext runUpdate(Path updateDir, Path targetDir) {
+        // 真实执行会写备份/会话：把备份路径隔离到该测试的临时根目录，避免污染真实 testDic/backup
+        Path base = updateDir.getParent();
+        if (base != null && Files.isDirectory(base)) {
+            TestSupport.isolateBackup(base);
+        }
         Config config = ConfigLoader.getConfig();
         config.setUpdatePath(updateDir.toAbsolutePath());
         config.setTargetPath(targetDir.toAbsolutePath());

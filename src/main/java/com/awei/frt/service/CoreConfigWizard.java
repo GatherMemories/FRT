@@ -1,9 +1,10 @@
 package com.awei.frt.service;
 
 import com.awei.frt.model.Config;
-import com.awei.frt.ui.ConsoleUserPrompter;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.ConsoleUserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.awei.frt.util.RuleInputParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -13,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Scanner;
@@ -137,12 +139,13 @@ public class CoreConfigWizard {
                 return false;
             }
 
-            // 5. 创建缺失目录 + 写入
+            // 5. 创建缺失目录 + 写入（临时文件 + 原子移动，避免进程崩溃/断电留下半截 config.json；
+            //    FAT32 等不支持 ATOMIC_MOVE 的文件系统降级为普通 move）
             for (Path p : missing) {
                 Files.createDirectories(p);
                 System.out.println("[创建] 自动创建目录: " + p);
             }
-            Files.writeString(configPath, json, StandardCharsets.UTF_8);
+            atomicWrite(configPath, json);
             System.out.println("[成功] 已保存核心配置: " + configPath);
 
             // 6. 自校验（仅 JSON 解析，不做目录校验——避免新配置目录尚未就绪时报错）
@@ -154,12 +157,34 @@ public class CoreConfigWizard {
                 System.out.println("[警告] 配置解析校验失败，请检查内容");
                 return false;
             }
-            System.out.println("[提示] 修改将在下次启动时生效");
+            // 日志级别即时生效（无需重启）；目录类修改仍需重启（进程内路径静态缓存）
+            LoggerUtil.applyLogLevel(level);
+            System.out.println("[提示] 目录修改将在下次启动时生效；日志级别已即时生效");
             return true;
         } catch (IOException e) {
             LoggerUtil.logException("保存核心配置失败", e);
             return false;
         }
+    }
+
+    /**
+     * 原子写文件：先写临时文件再 move（含 ATOMIC_MOVE 降级与非原子回退），
+     * 成功后清理临时文件；失败抛出由调用方处理。
+     */
+    private static void atomicWrite(Path target, String content) throws IOException {
+        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+        Files.writeString(temp, content, StandardCharsets.UTF_8);
+        try {
+            try {
+                Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
+        Files.deleteIfExists(temp);
     }
 
     // ---------------- 控制台输入 ----------------
@@ -227,10 +252,6 @@ public class CoreConfigWizard {
     }
 
     private static boolean parseBoolean(String input, boolean defaultValue) {
-        if (input == null || input.trim().isEmpty()) {
-            return defaultValue;
-        }
-        String lower = input.trim().toLowerCase();
-        return lower.equals("y") || lower.equals("yes") || lower.equals("true");
+        return RuleInputParser.parseBoolean(input, defaultValue);
     }
 }

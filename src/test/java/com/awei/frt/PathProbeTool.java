@@ -7,10 +7,10 @@ import java.nio.file.Paths;
 /**
  * 路径检测测试工具
  */
-public class PathTest {
+public class PathProbeTool {
     
     public static void main(String[] args) {
-        PathTest tester = new PathTest();
+        PathProbeTool tester = new PathProbeTool();
         tester.testPaths();
     }
     

@@ -1,6 +1,7 @@
 package com.awei.frt.service;
 
 import com.awei.frt.util.LoggerUtil;
+import com.awei.frt.constants.RulesConstants;
 
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -76,7 +77,7 @@ public final class PluginCompiler {
      * @return 打包结果（成功=生成 jar；失败=错误提示，message 含第一个编译错误位置）
      */
     public static CompileResult compilePluginsToJar(Path pluginsDir) {
-        Path dir = pluginsDir == null ? Path.of("plugins") : pluginsDir;
+        Path dir = pluginsDir == null ? Path.of(RulesConstants.Paths.PLUGINS_DIR) : pluginsDir;
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
@@ -107,7 +108,8 @@ public final class PluginCompiler {
                     "打包需要完整 JDK（当前运行环境的精简运行时不含编译器）。请用系统 JDK 启动程序（java -jar FRT-*.jar --ui）后再打包");
         }
 
-        // 临时输出目录（编译后的 .class）
+        // 临时输出目录（编译后的 .class）——创建后立即进入 try/finally，
+        // 无论编译失败/异常/打包成功都确保删除，避免临时目录残留
         Path outDir;
         try {
             outDir = Files.createTempDirectory("frt-plugin-build");
@@ -116,26 +118,27 @@ public final class PluginCompiler {
             return new CompileResult(false, List.of(), "创建编译临时目录失败");
         }
 
-        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
-            List<String> options = List.of(
-                    "-encoding", "UTF-8",
-                    "-cp", System.getProperty("java.class.path"),
-                    "-d", outDir.toString());
-            Iterable<? extends JavaFileObject> units = fileManager.getJavaFileObjectsFromPaths(sources);
-
-            boolean ok = compiler.getTask(null, fileManager, diagnostics, options, null, units).call();
-
-            if (!ok) {
-                return new CompileResult(false, List.of(), formatCompileErrors(diagnostics, sources));
-            }
-        } catch (Exception e) {
-            LoggerUtil.logException("编译插件源码失败", e);
-            return new CompileResult(false, List.of(), "编译插件源码失败: " + e.getMessage());
-        }
-
-        // 编译成功 → 打成 jar 输出回 plugins/
         try {
+            DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+            try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+                List<String> options = List.of(
+                        "-encoding", "UTF-8",
+                        "-cp", System.getProperty("java.class.path"),
+                        "-d", outDir.toString());
+                Iterable<? extends JavaFileObject> units = fileManager.getJavaFileObjectsFromPaths(sources);
+
+                boolean ok = compiler.getTask(null, fileManager, diagnostics, options, null, units).call();
+
+                if (!ok) {
+                    // 编译失败：清理临时目录后返回错误提示
+                    return new CompileResult(false, List.of(), formatCompileErrors(diagnostics, sources));
+                }
+            } catch (Exception e) {
+                LoggerUtil.logException("编译插件源码失败", e);
+                return new CompileResult(false, List.of(), "编译插件源码失败: " + e.getMessage());
+            }
+
+            // 编译成功 → 打成 jar 输出回 plugins/
             Path jar = sources.size() == 1
                     ? dir.resolve(renameToJar(sources.get(0).getFileName().toString()))
                     : dir.resolve(MULTI_JAR_NAME);

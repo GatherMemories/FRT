@@ -5,8 +5,8 @@ import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.model.RestoreResult;
-import com.awei.frt.ui.ConsoleUserPrompter;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.ConsoleUserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 
 import java.io.IOException;
@@ -269,6 +269,7 @@ public class RestoreService {
                             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                             + ", 成功 " + restoreResult.getSuccessCount()
                             + ", 失败 " + restoreResult.getFailureCount()
+                            + ", 跳过 " + restoreResult.getSkipCount()
                             + ", 回滚 " + restoreResult.getRollbackCount());
 
                     if (restoreResult.getFailureCount() > 0) {
@@ -286,6 +287,9 @@ public class RestoreService {
                         return;
                     } else if (restoreResult.getRollbackCount() > 0) {
                         LoggerUtil.logWarn("[警告] 系统已回滚，但可能处于部分恢复状态");
+                    } else if (restoreResult.getFailureCount() == 0 && restoreResult.getSkipCount() > 0) {
+                        LoggerUtil.logWarn("[警告] 有 " + restoreResult.getSkipCount()
+                                + " 个文件按用户选择保留（未恢复），其余已恢复；可重新选择备份继续处理");
                     } else {
                         LoggerUtil.logError("[失败] 系统恢复失败，可能处于不一致状态");
                     }

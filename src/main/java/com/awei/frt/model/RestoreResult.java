@@ -12,6 +12,7 @@ public class RestoreResult {
     private LocalDateTime restoreTime;      // 恢复时间
     private int successCount;               // 成功恢复的文件数
     private int failureCount;               // 恢复失败的文件数
+    private int skipCount;                  // 用户选择跳过（保留当前内容，未恢复）的文件数
     private int rollbackCount;              // 回滚的文件数
     private boolean partialRestore;         // 是否部分恢复（是否有失败）
     private List<String> failureMessages;  // 失败信息列表
@@ -20,6 +21,7 @@ public class RestoreResult {
         this.restoreTime = LocalDateTime.now();
         this.successCount = 0;
         this.failureCount = 0;
+        this.skipCount = 0;
         this.rollbackCount = 0;
         this.partialRestore = false;
         this.failureMessages = new ArrayList<>();
@@ -58,6 +60,14 @@ public class RestoreResult {
         this.rollbackCount = rollbackCount;
     }
 
+    public int getSkipCount() {
+        return skipCount;
+    }
+
+    public void setSkipCount(int skipCount) {
+        this.skipCount = skipCount;
+    }
+
     public boolean isPartialRestore() {
         return partialRestore;
     }
@@ -94,6 +104,16 @@ public class RestoreResult {
     }
 
     /**
+     * 增加"用户跳过"计数：目标被用户改动/改名、用户明确选择保留时调用。
+     * 跳过不是失败——不计入 failureCount、不加入 failureMessages，
+     * 以便上层区分"真正失败"与"用户有意保留"，且跳过项不会进入回滚清单
+     * （避免回滚覆盖用户刻意保留的文件）。
+     */
+    public void incrementSkip() {
+        this.skipCount++;
+    }
+
+    /**
      * 增加回滚计数
      */
     public void incrementRollback() {
@@ -101,10 +121,12 @@ public class RestoreResult {
     }
 
     /**
-     * 判断恢复是否完全成功
+     * 判断恢复是否完全成功：无失败、无回滚、且无用户跳过。
+     * 跳过的文件（用户选择保留）没有恢复到操作前状态，因此也不算"完全成功"；
+     * 但它区别于失败——不计入 failureCount/failureMessages，也不进入回滚清单。
      */
     public boolean isFullSuccess() {
-        return failureCount == 0 && rollbackCount == 0;
+        return failureCount == 0 && rollbackCount == 0 && skipCount == 0;
     }
 
     @Override

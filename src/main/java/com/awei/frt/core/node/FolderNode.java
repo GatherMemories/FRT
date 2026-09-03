@@ -47,8 +47,8 @@ public class FolderNode extends FileNode {
     public void process(RuleInheritanceContext localRuleIC, OperationContext context, String[] operationType) {
         // 创建任务栈，用于模拟递归调用栈
         Deque<ProcessTask> stack = new ArrayDeque<>();
-        // 将根节点任务压入栈（初始状态：非后处理）
-        stack.push(new ProcessTask(this, localRuleIC, false));
+        // 将根节点任务压入栈
+        stack.push(new ProcessTask(this, localRuleIC));
 
         // 主循环：只要栈不为空，就继续处理
         while (!stack.isEmpty()) {
@@ -56,14 +56,8 @@ public class FolderNode extends FileNode {
             FolderNode node = task.node;
             RuleInheritanceContext parentRuleIC = task.ruleContext;
 
-            // 根据任务类型执行不同操作
-            if (task.isPostProcess) {
-                // 后处理阶段（当前未使用，预留扩展）
-                processFolderNode(node, parentRuleIC, context, operationType, stack);
-            } else {
-                // 正常处理阶段
-                prepareAndScheduleProcess(node, parentRuleIC, context, operationType, stack);
-            }
+            // 正常处理阶段：取规则 → 执行策略 → 子文件处理 → 子文件夹入栈
+            prepareAndScheduleProcess(node, parentRuleIC, context, operationType, stack);
         }
     }
 
@@ -89,8 +83,13 @@ public class FolderNode extends FileNode {
         // 将规则上下文设置到操作上下文中（供策略类访问）
         context.setRuleInheritanceContext(ruleContext);
 
-        // 如果没有有效规则（或规则没有任何可执行的策略步骤），直接返回
+        // 本层无有效规则（含继承被禁用且无本地规则）：本层文件不做任何处理，
+        // 但<b>仍须下钻子文件夹</b>——深层子目录可能自带本地规则文件（"按目录放规则文件"
+        // 的约定），若父层无规则就直接剪枝整棵子树，深层规则将永远不可达（审查 H4）。
+        // 同时把本层被跳过的文件计入进度（done/total 对齐，进度条可达 100%）。
         if (effectiveRule == null || effectiveRule.getEffectiveStrategies().isEmpty()) {
+            reportSkippedFiles(node, context);
+            scheduleChildFolders(node, ruleContext, stack);
             return;
         }
 
@@ -110,32 +109,35 @@ public class FolderNode extends FileNode {
             ric.setRuleChain(savedRule);
         }
 
-        // 收集子节点：文件直接处理，文件夹暂存
-        List<FolderNode> folderNodes = new ArrayList<>();
+        // 处理直接子文件；子文件夹压栈稍后处理
         for (FileNode child : node.children) {
-            if (child.isDirectory()) {
-                // 子文件夹：暂存，稍后压入栈
-                folderNodes.add((FolderNode) child);
-            } else {
-                // 子文件：直接递归处理（文件节点没有子节点，不会导致栈溢出）
+            if (!child.isDirectory()) {
                 child.process(ruleContext, context, operationType);
             }
         }
 
-        // 将子文件夹节点倒序压入栈
-        // 倒序是为了保证正序处理（栈是后进先出）
-        for (int i = folderNodes.size() - 1; i >= 0; i--) {
-            stack.push(new ProcessTask(folderNodes.get(i), ruleContext, false));
+        scheduleChildFolders(node, ruleContext, stack);
+    }
+
+    /** 把子文件夹压入任务栈（倒序保证正序处理） */
+    private void scheduleChildFolders(FolderNode node, RuleInheritanceContext ruleContext,
+            Deque<ProcessTask> stack) {
+        // 子文件夹：全部入栈（是否处理由各层自己的规则决定，父层无规则不剪枝子树）
+        for (int i = node.children.size() - 1; i >= 0; i--) {
+            FileNode child = node.children.get(i);
+            if (child.isDirectory()) {
+                stack.push(new ProcessTask((FolderNode) child, ruleContext));
+            }
         }
     }
 
-    /**
-     * 文件夹节点后处理（预留扩展用）
-     */
-    private void processFolderNode(FolderNode node, RuleInheritanceContext ruleContext,
-            OperationContext context, String[] operationType, Deque<ProcessTask> stack) {
-        // 当前未实现后处理逻辑，预留此方法用于未来扩展
-        // 例如：文件夹处理完成后的清理操作、统计信息等
+    /** 本层因无规则被跳过的直接子文件：计入进度（不产生操作记录，仅对齐 done/total） */
+    private void reportSkippedFiles(FolderNode node, OperationContext context) {
+        for (FileNode child : node.children) {
+            if (!child.isDirectory()) {
+                context.reportProgress(child.getRelativePath());
+            }
+        }
     }
 
     /**
@@ -145,12 +147,10 @@ public class FolderNode extends FileNode {
     private static class ProcessTask {
         final FolderNode node;                    // 要处理的节点
         final RuleInheritanceContext ruleContext; // 规则上下文
-        final boolean isPostProcess;              // 是否为后处理阶段
 
-        ProcessTask(FolderNode node, RuleInheritanceContext ruleContext, boolean isPostProcess) {
+        ProcessTask(FolderNode node, RuleInheritanceContext ruleContext) {
             this.node = node;
             this.ruleContext = ruleContext;
-            this.isPostProcess = isPostProcess;
         }
     }
 

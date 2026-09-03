@@ -15,6 +15,9 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <fileNamePattern>logs/frt.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
+            <!-- 总体积上限：单日日志超 20MB 仍按天滚动（每日保留上限 20MB），
+                 防长期运行日志体积失控（审查 low 项） -->
+            <totalSizeCap>600MB</totalSizeCap>
         </rollingPolicy>
         <encoder charset="UTF-8">
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{30} - %msg%n%ex</pattern>

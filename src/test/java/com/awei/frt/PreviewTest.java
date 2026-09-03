@@ -5,7 +5,7 @@ import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

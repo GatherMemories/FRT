@@ -5,7 +5,7 @@ import com.awei.frt.core.builder.BackupFileLoader;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.model.ProcessingResult;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

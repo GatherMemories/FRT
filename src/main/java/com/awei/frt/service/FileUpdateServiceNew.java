@@ -5,11 +5,11 @@ import com.awei.frt.core.builder.FileTreeBuilder;
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.core.utils.FileUtil;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
-import com.awei.frt.ui.ConsoleUserPrompter;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.ConsoleUserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 import com.awei.frt.util.PreviewUtil;
 
@@ -89,7 +89,7 @@ public class FileUpdateServiceNew {
             // 执行处理
             LoggerUtil.logInfo("[执行] 正在处理update文件夹...");
             System.out.println("-----------------------------------------");
-            updateTree.process(null, context, updateTree.UPDATE_OPERATION);
+            updateTree.process(null, context, FileNode.UPDATE_OPERATION);
             System.out.println("-----------------------------------------");
             // 打印统计信息
             context.printStatistics();

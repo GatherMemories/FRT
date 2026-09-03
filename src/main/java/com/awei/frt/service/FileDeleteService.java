@@ -7,8 +7,8 @@ import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
-import com.awei.frt.ui.ConsoleUserPrompter;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.ConsoleUserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
 import com.awei.frt.util.PreviewUtil;
 
@@ -98,12 +98,15 @@ public class FileDeleteService {
             // 打印统计信息
             context.printStatistics();
             ProcessingResult processingResult = context.getProcessingResult();
-            if(processingResult.getSuccessCount() > 0){
+            if (processingResult.getSuccessCount() > 0) {
                 LoggerUtil.logInfo("[成功] 文件删除操作完成！");
                 // 备份操作记录 + 失败恢复询问（公共流程，见 BackupFileLoader.finishOperationSession）
                 BackupFileLoader.finishOperationSession(processingResult, prompter);
-            }else{
+            } else if (processingResult.getErrorCount() > 0) {
                 LoggerUtil.logError("[失败] 文件删除操作失败！");
+            } else {
+                // 成功 0 且失败 0：预览后文件被外部删除 / 全部被规则跳过——是"无需删除"而非失败
+                LoggerUtil.logInfo("[信息] 没有文件需要删除（预览列出的文件可能已被外部删除或全部跳过）");
             }
 
             return context.getProcessingResult();

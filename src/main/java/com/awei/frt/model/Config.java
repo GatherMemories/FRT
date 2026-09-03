@@ -14,7 +14,7 @@ import java.nio.file.Paths;
  * 配置模型
  * 存储系统运行所需的基本配置信息
  */
-@JsonIgnoreProperties({"baseDirectory"})
+@JsonIgnoreProperties(value = {"baseDirectory"}, ignoreUnknown = true)
 public class Config implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -251,8 +251,13 @@ public class Config implements Serializable {
                 "baseDirectory=" + baseDirectory +
                 ", updatePath=" + updatePath +
                 ", targetPath=" + targetPath +
+                ", deletePath=" + deletePath +
                 ", backupPath=" + backupPath +
                 ", logLevel='" + logLevel + '\'' +
+                ", maxBackupRecords=" + maxBackupRecords +
+                ", logFontSize=" + logFontSize +
+                ", theme='" + theme + '\'' +
+                ", autoCheckUpdate=" + autoCheckUpdate +
                 '}';
     }
 

@@ -11,13 +11,13 @@ import java.util.List;
 
 /**
  * 模组元数据解析手动测试工具
- * 用法：java ... ModMatchTest [jar目录]，默认读取 mods/ 目录（相对工作目录），
+ * 用法：java ... ModMatchTool [jar目录]，默认读取 mods/ 目录（相对工作目录），
  * 逐个解析其中 .jar 并打印模组元数据
  *
  * @Author: mou_ren
  * @Date: 2026/1/18 00:24
  */
-public class ModMatchTest {
+public class ModMatchTool {
 
 
     public static void main(String[] args) {

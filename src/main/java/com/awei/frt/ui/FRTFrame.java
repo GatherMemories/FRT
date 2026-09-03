@@ -1,10 +1,12 @@
 package com.awei.frt.ui;
 
 import com.awei.frt.core.builder.BackupFileLoader;
+import com.awei.frt.constants.RulesConstants;
 import com.awei.frt.core.builder.ConfigLoader;
 import com.awei.frt.core.context.ProgressCallback;
 import com.awei.frt.model.Config;
 import com.awei.frt.model.ProcessingResult;
+import com.awei.frt.model.RestoreResult;
 import com.awei.frt.service.CoreConfigWizard;
 import com.awei.frt.service.FileDeleteService;
 import com.awei.frt.service.FileUpdateServiceNew;
@@ -254,6 +256,48 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
         // 启动时自动检查更新（FR-1）：config 未加载或开关关闭时静默跳过；查询在后台线程，
         // 发现新版仅状态栏+日志区非侵入提示，不阻塞 EDT、窗口显示前不弹任何东西
         startAutoCheckUpdateIfEnabled();
+        // GUI 模式接入中断会话恢复（与控制台 Main.checkInterruptedSession 对等）：
+        // 窗口显示后再询问（不阻塞构造），用户确认后在后台线程恢复
+        checkInterruptedSessionInGui();
+    }
+
+    /**
+     * GUI 启动时检测未完成操作会话（上次异常中断遗留 session-current.json）：
+     * 非侵入询问是否立即恢复（与 Main 控制台入口行为对等——原实现只有控制台
+     * 分支检查 hasSessionRecord，GUI 用户遇到中断会话无任何入口，审查支撑层中-6）。
+     * 用户确认 → 后台线程 loadSessionRecord → restoreFromResult（交互走底部输入区）。
+     */
+    private void checkInterruptedSessionInGui() {
+        // 构造末尾时窗口尚未显示：延迟到 show() 之后弹窗，避免"窗口未出现先弹框"
+        SwingUtilities.invokeLater(() -> {
+            if (!BackupFileLoader.hasSessionRecord()) {
+                return;
+            }
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "检测到未完成的操作会话（上次程序异常中断遗留）。\n是否立即恢复，将系统恢复到操作前的状态？",
+                    "恢复未完成会话", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (choice != JOptionPane.YES_OPTION) {
+                LoggerUtil.getInstance(null).logWarnFileOnly("[会话] 用户跳过 GUI 中断会话恢复");
+                return;
+            }
+            runService("恢复未完成会话", () -> {
+                ProcessingResult sessionResult = BackupFileLoader.loadSessionRecord();
+                if (sessionResult == null) {
+                    return "[失败] 会话记录加载失败";
+                }
+                RestoreResult restoreResult = BackupFileLoader.restoreFromResult(sessionResult, prompter);
+                if (restoreResult.isFullSuccess()) {
+                    BackupFileLoader.clearSessionRecord();
+                    return "[成功] 系统已成功恢复到操作前的状态（会话已清除）";
+                }
+                LoggerUtil.getInstance(null).logWarnFileOnly(
+                        "[会话] GUI 恢复未完全成功: 失败 " + restoreResult.getFailureCount()
+                                + ", 跳过 " + restoreResult.getSkipCount()
+                                + ", 回滚 " + restoreResult.getRollbackCount());
+                return "[警告] 恢复未完全成功（失败 " + restoreResult.getFailureCount()
+                        + ", 跳过 " + restoreResult.getSkipCount() + "），会话记录已保留可再次尝试";
+            });
+        });
     }
 
     private JButton topButton(String label, Runnable action) {
@@ -823,7 +867,7 @@ public class FRTFrame extends JFrame implements SwingPrompter.PromptSource, Swin
      */
     private void runPluginBuild() {
         runService("打包插件", () -> {
-            PluginCompiler.CompileResult r = PluginCompiler.compilePluginsToJar(Path.of("plugins"));
+            PluginCompiler.CompileResult r = PluginCompiler.compilePluginsToJar(Path.of(RulesConstants.Paths.PLUGINS_DIR));
             return r.isSuccess() ? r.getMessage() : "[失败] " + r.getMessage();
         });
     }

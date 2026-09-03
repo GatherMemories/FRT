@@ -2,8 +2,8 @@ package com.awei.frt.core.strategy;
 
 import com.awei.frt.core.context.OperationContext;
 import com.awei.frt.core.node.FileNode;
-import com.awei.frt.core.uitls.FileSignUtil;
-import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.core.utils.FileSignUtil;
+import com.awei.frt.core.utils.FileUtil;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.util.LoggerUtil;
 

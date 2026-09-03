@@ -5,8 +5,8 @@ import com.awei.frt.core.mod.ModInfo;
 import com.awei.frt.core.mod.ModMetadataParser;
 import com.awei.frt.core.node.FileNode;
 import com.awei.frt.core.node.FolderNode;
-import com.awei.frt.core.uitls.FileSignUtil;
-import com.awei.frt.core.uitls.FileUtil;
+import com.awei.frt.core.utils.FileSignUtil;
+import com.awei.frt.core.utils.FileUtil;
 import com.awei.frt.model.OperationRecord;
 import com.awei.frt.util.LoggerUtil;
 
@@ -121,7 +121,12 @@ public class McModStrategy extends AbstractOperationStrategy {
             }
 
             Path sourceFilePath = currentModInfo.getPath();
-            Path targetFilePath = entryTargetPath.resolve(currentModInfo.getPath().getFileName()).normalize();
+            // 落盘目标 = 目标侧该 modId 的<b>原文件路径</b>（保持目标文件名不变），而不是按源文件名推导——
+            // 同 modId 升级时源/目标文件名往往不同（版本号变化，如 A-1.0.jar → A-1.1.jar）：
+            // ① 若按源文件名解析，目标侧通常不存在该文件，replaceFile 会因"目标路径不存在"而失败；
+            // ② 即使成功，新文件旁旧 jar 残留 → 目标目录同 modId 双 jar（Minecraft 重复加载风险，审查 H2）。
+            // 写回目标原路径 = 覆盖旧文件，目录内 modId 与文件一一对应；恢复时按记录的目标路径还原旧版。
+            Path targetFilePath = targetModInfo.getPath();
 
             // 参数 onlyIfContentSame=true：源与目标文件 MD5 相同则跳过替换（内容一致无需更新）
             if (onlyIfContentSame && isFileContentSame(sourceFilePath, targetFilePath)) {
@@ -204,14 +209,6 @@ public class McModStrategy extends AbstractOperationStrategy {
     }
 
     /**
-     * 标记目录下与 mod jar 同名的文件节点为已处理（handled）。
-     * 目的：McMod 是目录级策略，已按 modId 对该 jar 执行了增/删/改；
-     * 若不标记，链中后续文件级策略（如 FileSameName 空 patterns 匹配所有）
-     * 会在文件级再次按文件名处理同一 jar（预览显示同一文件两次操作，
-     * 真实执行变为"新增+替换"的重复写入）。无效 mod 的 jar（如 app.jar）
-     * 不被 McMod 处理，不会被标记，仍由文件级策略正常处理。
-     */
-    /**
      * 判断目录下与 mod jar 同名的文件节点是否已被标记为已处理（doAdd 刚新增时标记）。
      * 用于 doReplace 跳过"同一 UPDATE 操作里 doAdd 刚新增"的 mod，避免先增后替重复写入。
      */
@@ -260,9 +257,11 @@ public class McModStrategy extends AbstractOperationStrategy {
             fileStream
                     .filter(file -> file.toString().endsWith(".jar"))
                     .forEach(file -> {
+                // 解析缓存 key：jar 未变化（mtime+size 相同）时复用上次解析结果，
+                // 避免大 mods 目录反复解压。在 try 之前计算一次——正常/异常路径共用
+                // 同一 key（异常兜底缓存空结果，文件本会话内变化前不再重复解析/告警）
+                String cacheKey = cacheKeyOf(file);
                 try {
-                    // 解析缓存：jar 未变化（mtime+size 相同）时复用上次解析结果，避免大 mods 目录反复解压
-                    String cacheKey = file.toString() + "|" + Files.getLastModifiedTime(file).toMillis() + "|" + Files.size(file);
                     List<ModInfo> modInfos = MOD_INFO_CACHE.get(cacheKey);
                     if (modInfos == null) {
                         // 自研解析器：自动检测平台（NeoForge/Forge/Fabric/Quilt/旧版Forge），
@@ -270,7 +269,9 @@ public class McModStrategy extends AbstractOperationStrategy {
                         modInfos = ModMetadataParser.parseJar(file);
                         MOD_INFO_CACHE.put(cacheKey, modInfos);
                         if (modInfos.isEmpty()) {
-                            // 首次解析失败：警告一次（带完整路径，区分 update/target 同名 jar）
+                            // 首次解析失败/不支持：警告一次（带完整路径，区分 update/target 同名 jar），
+                            // 结果已入缓存——同一 jar 在 doAdd/doReplace/doDelete 等多次钩子扫描时
+                            // 只警告一次，后续命中缓存空结果静默跳过（不刷屏）
                             LoggerUtil.logWarn("未找到支持的模组元数据（已跳过）: " + file);
                             return;
                         }
@@ -283,10 +284,13 @@ public class McModStrategy extends AbstractOperationStrategy {
                         modInfoMap.put(modInfo.getId(), modInfo);
                     }
                 }
-                catch (Throwable e) {
-                    // 兜底：单个 jar 解析失败只跳过该 jar，不影响整个更新流程
-                    if(!(e instanceof ZipException)){
-                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file + " - " + e);
+                catch (Exception e) {
+                    // 兜底：单个 jar 解析失败只跳过该 jar，不影响整个更新流程；
+                    // 失败也入缓存（空结果），同一 jar 重复扫描不再反复解析/警告。
+                    // 仅捕获 Exception——OOM/ThreadDeath 等 Error 让上层处理，不吞
+                    MOD_INFO_CACHE.putIfAbsent(cacheKey, List.of());
+                    if (!(e instanceof ZipException)) {
+                        LoggerUtil.logWarn("读取 mod 文件失败（已跳过）: " + file + " - " + e.getMessage());
                     }
                 }
             });
@@ -294,5 +298,17 @@ public class McModStrategy extends AbstractOperationStrategy {
             LoggerUtil.logException("读取文件夹失败: " + entryPath, e);
         }
         return modInfoMap;
+    }
+
+    /**
+     * 构造 mod 解析缓存 key（path|mtime|size）：文件系统读取失败时退化为
+     * 仅路径前缀，保证后续调用仍命中同一 key（不会因 stat 抖动无限重试）。
+     */
+    private static String cacheKeyOf(Path file) {
+        try {
+            return file.toString() + "|" + Files.getLastModifiedTime(file).toMillis() + "|" + Files.size(file);
+        } catch (IOException e) {
+            return "unreadable|" + file.toString();
+        }
     }
 }

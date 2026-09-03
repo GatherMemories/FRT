@@ -7,8 +7,10 @@ import com.awei.frt.core.strategy.OperationStrategy;
 import com.awei.frt.core.strategy.StrategyProxy;
 import com.awei.frt.factory.StrategyFactory;
 import com.awei.frt.model.Config;
+import com.awei.frt.model.OperationRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
@@ -22,6 +24,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * - 策略抛异常时：代理记录日志与失败统计，不向上抛（更新流程不中断）
  */
 class StrategyProxyTest {
+
+    @TempDir
+    Path tempDir;
 
     @AfterEach
     void restoreBackupPath() {
@@ -53,8 +58,9 @@ class StrategyProxyTest {
 
         OperationStrategy proxy = StrategyProxy.wrap(failing);
 
-        // 备份路径隔离到临时目录，避免会话记录污染真实 testDic/backup
-        TestSupport.isolateBackup(Path.of(System.getProperty("java.io.tmpdir"), "frt-proxy-test"));
+        // 备份路径隔离到 JUnit 临时目录（@TempDir 自动清理），
+        // 避免会话记录污染真实 testDic/backup 或固定 /tmp 路径跨构建残留
+        TestSupport.isolateBackup(tempDir);
         try {
             Config config = ConfigLoader.getConfig();
             config.setTargetPath(Path.of("target-tmp"));
@@ -67,7 +73,12 @@ class StrategyProxyTest {
             // 失败被统计
             assertEquals(1, ctx.getProcessingResult().getErrorCount());
             assertFalse(ctx.getProcessingResult().isSuccess());
-            assertFalse(ctx.getProcessingResult().getOperationRecords().get(0).isSuccess());
+            OperationRecord failed = ctx.getProcessingResult().getOperationRecords().get(0);
+            assertFalse(failed.isSuccess());
+            // 审查 M6：失败记录应补齐操作类型与目标路径（原实现为半空壳，UI/恢复无法定位失败项）
+            assertEquals(OperationContext.OPERATION_ADD, failed.getOperationType(),
+                    "失败记录应带 operationType（来自 execute 的操作类型参数）");
+            assertNotNull(failed.getTargetPath(), "失败记录应带目标路径（定位失败项）");
         } finally {
             TestSupport.restoreBackupPath();
         }

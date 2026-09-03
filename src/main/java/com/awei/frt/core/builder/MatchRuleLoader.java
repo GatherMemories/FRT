@@ -23,7 +23,7 @@ public class MatchRuleLoader {
     public static MatchRule fromJson(String json) {
         try {
             // 去除 UTF-8 BOM（如果有），兼容记事本等编辑器保存的带BOM文件
-            if (json != null && json.startsWith("﻿")) {
+            if (json != null && json.startsWith("\uFEFF")) {
                 json = json.substring(1);
             }
             // 使用 Jackson 直接反序列化为对象

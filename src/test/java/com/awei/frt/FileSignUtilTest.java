@@ -1,6 +1,6 @@
 package com.awei.frt;
 
-import com.awei.frt.core.uitls.FileSignUtil;
+import com.awei.frt.core.utils.FileSignUtil;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;

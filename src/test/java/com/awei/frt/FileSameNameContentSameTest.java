@@ -37,6 +37,8 @@ class FileSameNameContentSameTest {
             c.setUpdatePath(saved.getUpdatePath());
             c.setTargetPath(saved.getTargetPath());
         }
+        // 恢复真实备份路径（本类直接 process 触发真实替换/备份，需隔离；审查 B-4 实测污染 testDic/backup）
+        TestSupport.restoreBackupPath();
     }
 
     @Test
@@ -107,6 +109,8 @@ class FileSameNameContentSameTest {
     }
 
     private OperationContext runUpdate(Path updateDir, Path targetDir) {
+        // 真实替换会写备份与会话记录：备份路径隔离到 @TempDir，避免污染真实 testDic/backup
+        TestSupport.isolateBackup(tempDir);
         Config config = ConfigLoader.getConfig();
         saved = new Config();
         saved.setUpdatePath(config.getUpdatePath());

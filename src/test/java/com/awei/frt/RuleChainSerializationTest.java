@@ -6,7 +6,7 @@ import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
 import com.awei.frt.model.StrategyStep;
 import com.awei.frt.service.RuleConfigWizard;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.Test;

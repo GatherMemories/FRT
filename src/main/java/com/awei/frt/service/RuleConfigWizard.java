@@ -10,9 +10,10 @@ import com.awei.frt.model.Config;
 import com.awei.frt.model.MatchRule;
 import com.awei.frt.model.RuleTemplate;
 import com.awei.frt.model.StrategyStep;
-import com.awei.frt.ui.ConsoleUserPrompter;
-import com.awei.frt.ui.UserPrompter;
+import com.awei.frt.interaction.ConsoleUserPrompter;
+import com.awei.frt.interaction.UserPrompter;
 import com.awei.frt.util.LoggerUtil;
+import com.awei.frt.util.RuleInputParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -598,55 +599,21 @@ public class RuleConfigWizard {
      * 解析逗号分隔字符串为列表（去空白、去空项）
      */
     private List<String> parseList(String input) {
-        List<String> list = new ArrayList<>();
-        if (input == null || input.trim().isEmpty()) {
-            return list;
-        }
-        for (String item : input.split(",")) {
-            String trimmed = item.trim();
-            if (!trimmed.isEmpty()) {
-                list.add(trimmed);
-            }
-        }
-        return list;
+        return RuleInputParser.parseList(input);
     }
 
     /**
      * 解析键值对字符串为 Map（格式 key=value, 多个逗号分隔；忽略格式错误的项）
      */
     private Map<String, String> parseMap(String input) {
-        Map<String, String> map = new LinkedHashMap<>();
-        if (input == null || input.trim().isEmpty()) {
-            return map;
-        }
-        for (String item : input.split(",")) {
-            String trimmed = item.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            int eq = trimmed.indexOf('=');
-            if (eq > 0) {
-                String key = trimmed.substring(0, eq).trim();
-                String value = trimmed.substring(eq + 1).trim();
-                if (!key.isEmpty()) {
-                    map.put(key, value);
-                    continue;
-                }
-            }
-            System.out.println("  [警告] 忽略格式错误的参数项: " + trimmed + " (应为 key=value)");
-        }
-        return map;
+        return RuleInputParser.parseMap(input);
     }
 
     /**
      * 解析布尔输入（y/yes/true=真, 其它=默认值）
      */
     private boolean parseBoolean(String input, boolean defaultValue) {
-        if (input == null || input.trim().isEmpty()) {
-            return defaultValue;
-        }
-        String lower = input.trim().toLowerCase();
-        return lower.equals("y") || lower.equals("yes") || lower.equals("true");
+        return RuleInputParser.parseBoolean(input, defaultValue);
     }
 
     /**

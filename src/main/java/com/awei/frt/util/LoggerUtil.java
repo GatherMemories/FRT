@@ -27,6 +27,7 @@ public class LoggerUtil {
     private final PrintStream originalOut;
     private final PrintStream originalErr;
     private static boolean initialized = false;
+    private static boolean closed = false;
 
     private volatile boolean captureSystemOutput = true;
 
@@ -53,9 +54,15 @@ public class LoggerUtil {
                 }
             }
         }
-        if (!initialized) {
-            instance.initializeLogger();
-            initialized = true;
+        // close() 后不再重新接管 System.out/err（否则后台线程日志会把已还原的流二次包装，
+        // 且 originalOut 指向的旧流与当前流不一致）；日志仍可写入（logback 直接持文件 appender）
+        if (!initialized && !closed) {
+            synchronized (LoggerUtil.class) {
+                if (!initialized && !closed) {
+                    instance.initializeLogger();
+                    initialized = true;
+                }
+            }
         }
         return instance;
     }
@@ -226,11 +233,45 @@ public class LoggerUtil {
         getInstance(null).logger.error(message);
     }
 
+    /**
+     * 按配置的日志级别动态设置 logback 中 com.awei.frt 包日志器的级别
+     * （config.json 的 logLevel 字段真正生效的入口）。
+     *
+     * 背景：logback.xml 对 com.awei.frt 与 root 均硬编码 INFO，导致配置里的
+     * DEBUG/WARN/ERROR 从不生效（logDebug 输出永不可见）。本方法在配置加载成功后
+     * 调用一次即可让级别立即生效；调用时机早于 LoggerUtil 初始化也安全
+     * （logback 工厂可独立工作，且 initializeLogger 不会覆盖已设级别）。
+     *
+     * @param level 配置中的日志级别（INFO/DEBUG/WARN/ERROR/TRACE，大小写不敏感）；
+     *              null/空白/非法值 = 不修改（保持 logback.xml 的 INFO）
+     */
+    public static void applyLogLevel(String level) {
+        if (level == null || level.isBlank()) {
+            return;
+        }
+        try {
+            String upper = level.trim().toUpperCase(java.util.Locale.ROOT);
+            ch.qos.logback.classic.Level target = ch.qos.logback.classic.Level.toLevel(upper, null);
+            if (target == null) {
+                return; // 非法级别，保持默认
+            }
+            // 动态设置 com.awei.frt 包日志器（logback.xml 已为其装配 CONSOLE+FILE appender，
+            // additivity=false；子树日志器未单独设级别时继承该级别）
+            org.slf4j.Logger pkgLogger = LoggerFactory.getLogger("com.awei.frt");
+            if (pkgLogger instanceof ch.qos.logback.classic.Logger lb) {
+                lb.setLevel(target);
+            }
+        } catch (Exception e) {
+            // 设置失败不影响主流程（保持默认级别）
+        }
+    }
+
     public void close() {
         System.setOut(originalOut);
         System.setErr(originalErr);
         logger.info("日志系统已关闭");
         initialized = false;
+        closed = true;
     }
 
     private static class LoggingOutputStream extends OutputStream {
@@ -263,12 +304,19 @@ public class LoggerUtil {
         @Override
         public void write(byte[] b, int off, int len) {
             originalStream.write(b, off, len);
-            buffer.write(b, off, len);
-            for (int i = off; i < off + len; i++) {
+            // 审查 low-7：一次批量写入可能含多行（多个换行）。必须"边写缓冲边按换行切分"，
+            // 不能整段先入 buffer 再 flush（那样首行后的行仍与首行合并成一条日志）。
+            int end = off + len;
+            int chunkStart = off;
+            for (int i = off; i < end; i++) {
                 if (b[i] == '\n') {
+                    buffer.write(b, chunkStart, i - chunkStart + 1); // 含换行
                     flushBuffer();
-                    break;
+                    chunkStart = i + 1;
                 }
+            }
+            if (chunkStart < end) {
+                buffer.write(b, chunkStart, end - chunkStart); // 无换行的尾部留待下次
             }
         }
 

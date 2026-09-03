@@ -1,6 +1,6 @@
 package com.awei.frt;
 
-import com.awei.frt.core.uitls.GlobMatcher;
+import com.awei.frt.core.utils.GlobMatcher;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

@@ -33,8 +33,16 @@ public final class PreviewUtil {
             LoggerUtil.logInfo("[预览] 没有需要" + actionName + "的文件");
             return 0;
         }
-        int planCount = 0;
-        System.out.println("\n[预览] 将执行以下 " + records.size() + " 个" + actionName + "操作（预览模式：尚未执行任何操作，确认后才真正执行）:");
+        // 两遍统计：先数失败行，再逐行打印（标题与确认数字口径统一，只报"将执行"的可执行数；
+        // 原实现标题按 records.size() 而确认按 planCount，有失败行时两个数字不一致易误解，审查 L9）
+        int failedCount = 0;
+        for (OperationRecord r : records) {
+            if (!r.isSuccess()) {
+                failedCount++;
+            }
+        }
+        int planCount = records.size() - failedCount;
+        System.out.println("\n[预览] 将执行以下 " + planCount + " 个" + actionName + "操作（预览模式：尚未执行任何操作，确认后才真正执行）:");
         System.out.println("-----------------------------------------");
         for (OperationRecord r : records) {
             if (!r.isSuccess()) {
@@ -50,9 +58,11 @@ public final class PreviewUtil {
             }
             Path target = r.getTargetPath();
             System.out.println("  " + op + ": " + (target != null ? target : r.getSourcePath()));
-            planCount++;
         }
         System.out.println("-----------------------------------------");
+        if (failedCount > 0) {
+            System.out.println("[提示] 另有 " + failedCount + " 行未找到目标文件（见上方 [!]），不纳入上述执行数");
+        }
         return planCount;
     }
 

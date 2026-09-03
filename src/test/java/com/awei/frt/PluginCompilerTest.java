@@ -150,6 +150,11 @@ class PluginCompilerTest {
         assertTrue(r.getMessage().contains("编译失败"), "错误提示应说明编译失败: " + r.getMessage());
         assertTrue(r.getMessage().contains("第"), "错误提示应带行号: " + r.getMessage());
         assertFalse(Files.exists(plugins.resolve("BrokenStrategy.jar")), "编译失败不得产出 jar");
+        // 回归（审查 H2）：编译失败/异常路径也必须清理临时编译目录，不得残留 frt-plugin-build*
+        try (java.util.stream.Stream<Path> tmp = Files.list(Path.of(System.getProperty("java.io.tmpdir")))) {
+            long leaked = tmp.filter(p -> p.getFileName().toString().startsWith("frt-plugin-build")).count();
+            assertEquals(0, leaked, "编译失败后不应残留 frt-plugin-build* 临时目录（现实现已统一 finally 清理）");
+        }
     }
 
     @Test

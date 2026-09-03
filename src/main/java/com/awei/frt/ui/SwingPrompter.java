@@ -1,12 +1,20 @@
 package com.awei.frt.ui;
 
+import com.awei.frt.interaction.UserPrompter;
+
 import javax.swing.SwingUtilities;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * Swing 交互实现（固定输入框版，无弹窗）：
  * 服务线程在 readLine() 处挂起等待；主窗口底部固定输入区（提示行 + 快捷按钮 + 输入框）
  * 由用户在窗口内输入/点击后提交，UI 不被打断，长内容始终在日志区可滚动查看。
+ * <p>
+ * 线程协议：readLine() 在服务线程调用并阻塞；submit() 由 EDT 调用。
+ * 原实现用 CountDownLatch + volatile 握手存在竞态——EDT 若在服务线程重置 latch 之前
+ * submit（提前 countDown），输入会污染下一轮或丢失。现改为 BlockingQueue：
+ * 每次提交的文本入队，readLine 阻塞取队，天然消除"提前提交丢失/污染下一轮"竞态。
  */
 public class SwingPrompter implements UserPrompter {
 
@@ -32,8 +40,7 @@ public class SwingPrompter implements UserPrompter {
 
     private final PromptSource promptSource;
     private final InputPanel inputPanel;
-    private CountDownLatch latch = new CountDownLatch(1);
-    private volatile String pendingResult = "";
+    private final BlockingQueue<String> responses = new LinkedBlockingQueue<>();
 
     public SwingPrompter(PromptSource promptSource, InputPanel inputPanel) {
         this.promptSource = promptSource;
@@ -42,18 +49,19 @@ public class SwingPrompter implements UserPrompter {
 
     @Override
     public String readLine() {
+        // 丢弃上一轮残留的未消费输入（如用户连按两次回车/取消），
+        // 避免残留文本静默"回答"本轮提示（旧 latch 实现在每轮开始时重置 pendingResult 同效）
+        responses.clear();
         String prompt = promptSource.takePrompt();
         String safe = (prompt == null || prompt.isBlank()) ? "请输入:" : prompt;
-        latch = new CountDownLatch(1);
-        pendingResult = "";
         SwingUtilities.invokeLater(() -> inputPanel.showPrompt(safe));
         try {
-            latch.await();
+            // 阻塞等待用户提交（submit 在 EDT 入队）；中断（服务取消）时返回空串
+            return responses.take();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return "";
         }
-        return pendingResult;
     }
 
     /**
@@ -61,9 +69,13 @@ public class SwingPrompter implements UserPrompter {
      */
     public void submit(String text) {
         promptSource.ensureLineBreak(); // 提示行未换行时先补换行，避免与后续日志拼接同行
-        pendingResult = text == null ? "" : text.trim();
-        if (latch.getCount() > 0) {
-            latch.countDown();
-        }
+        responses.offer(text == null ? "" : text.trim());
+    }
+
+    /**
+     * 丢弃尚未被消费的输入（服务线程取消/中断时清理，避免残留输入污染下一轮提示）
+     */
+    void clearPending() {
+        responses.clear();
     }
 }

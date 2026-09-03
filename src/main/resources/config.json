@@ -1,8 +1,8 @@
 {
-  "updatePath": "./testDic/update",
-  "targetPath": "./testDic/THtest",
-  "deletePath": "./testDic/delete",
-  "backupPath": "./testDic/backup",
+  "updatePath": "update",
+  "targetPath": "THtest",
+  "deletePath": "delete",
+  "backupPath": "backup",
   "logLevel": "INFO",
   "autoCheckUpdate": true
 }

@@ -1,4 +1,4 @@
-package com.awei.frt.ui;
+package com.awei.frt.interaction;
 
 /**
  * 用户交互抽象（UI 化改造）

@@ -10,6 +10,7 @@ import com.awei.frt.model.MatchRule;
 import com.awei.frt.model.StrategyStep;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -40,6 +41,12 @@ class StrategyStepBehaviorTest {
 
     @TempDir
     Path tempDir;
+
+    /** 真实执行的用例会写备份/会话：每例后恢复备份路径隔离（隔离在用例内做，@TempDir 自动清理） */
+    @AfterEach
+    void restoreBackupPath() {
+        TestSupport.restoreBackupPath();
+    }
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
@@ -124,6 +131,8 @@ class StrategyStepBehaviorTest {
         Files.writeString(updateDir.resolve("matching-rules.json"), ruleJson, StandardCharsets.UTF_8);
 
         Config config = ConfigLoader.getConfig();
+        // 真实链执行会写备份/会话：隔离到 @TempDir（审查 B：未隔离会写真实 testDic/backup）
+        TestSupport.isolateBackup(tempDir);
         config.setUpdatePath(updateDir.toAbsolutePath());
         config.setTargetPath(targetDir.toAbsolutePath());
         OperationContext ctx = new OperationContext(config);
