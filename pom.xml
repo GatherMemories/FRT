@@ -7,9 +7,9 @@
     <groupId>com.awei</groupId>
     <artifactId>FRT</artifactId>
     <name>FRT</name>
-    <version>0.1.18-SNAPSHOT</version>
+    <version>0.1.19-SNAPSHOT</version>
     <!-- 版本号约定：开发版常驻 SNAPSHOT，指向"最新发布 tag 的下一版"
-         （当前发布 v0.1.17 → 0.1.18-SNAPSHOT）；正式发版由 CI（release.yml）按 tag
+         （当前发布 v0.1.18 → 0.1.19-SNAPSHOT）；正式发版由 CI（release.yml）按 tag
          用 versions:set 注入真实版本号，pom 无需手动改。
          注意：BuildInfoTest 与 BuildInfo.fallbackVersionFromPom 的正则要求
          <artifactId>FRT</artifactId> → <name> → <version> 紧邻，本注释须放在
