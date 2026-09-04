@@ -2,10 +2,17 @@ package com.awei.frt.ui;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.SwingConstants;
 import javax.swing.UIManager;
+import javax.swing.Icon;
 import javax.swing.border.Border;
+import javax.swing.plaf.metal.MetalComboBoxButton;
+import javax.swing.plaf.metal.MetalComboBoxUI;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Font;
+import java.awt.Graphics;
 import java.awt.GraphicsEnvironment;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -257,6 +264,64 @@ public final class UITheme {
 
     public static Border lineBorder() {
         return BorderFactory.createLineBorder(BORDER);
+    }
+
+    // ---------- 主题化下拉箭头（解决 Metal 固定深灰箭头在深色主题下几乎不可见） ----------
+
+    /**
+     * 给下拉框换上"能随主题变色"的箭头（同时适用于 可编辑/非编辑 下拉）：
+     * Metal 的 {@code MetalComboBoxIcon} 用 LAF 内置固定深灰（约 #333333），在深色主题的暗底上
+     * 几乎看不清。这里仍用原生 {@link MetalComboBoxUI} 构造箭头按钮（保留"编辑态窄箭头 /
+     * 非编辑态值+箭头"的正确形态），仅把箭头图标换成主题色的 {@code ArrowIcon}。
+     * 图标尺寸与 MetalComboBoxIcon 一致（10×5），箭头按钮最小宽度不变（≈原版 20px），布局不动。
+     */
+    public static void applyComboArrowTheme(JComboBox<?> combo) {
+        combo.setUI(new MetalComboBoxUI() {
+            @Override
+            protected JButton createArrowButton() {
+                JButton b = super.createArrowButton(); // 原生 Metal 按钮（值渲染/编辑态由 LAF 保证）
+                if (b instanceof MetalComboBoxButton mcb) {
+                    mcb.setComboIcon(new ArrowIcon(SwingConstants.SOUTH)); // 只换箭头色
+                }
+                return b;
+            }
+        });
+    }
+
+    /** 简单实心三角箭头（尺寸 10×5 与 MetalComboBoxIcon 一致，色随主题 MUTED，浅/深主题均清晰可见） */
+    private static final class ArrowIcon implements Icon {
+        private final int direction;
+        private final int w = 10;
+        private final int h = 5;
+
+        ArrowIcon(int direction) {
+            this.direction = direction;
+        }
+
+        @Override
+        public int getIconWidth() {
+            return w;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return h;
+        }
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            g.setColor(MUTED);
+            int[] xs;
+            int[] ys;
+            if (direction == SwingConstants.NORTH) {
+                xs = new int[]{x, x + w / 2, x + w};
+                ys = new int[]{y + h, y, y + h};
+            } else { // SOUTH 等默认向下
+                xs = new int[]{x, x + w / 2, x + w};
+                ys = new int[]{y, y + h, y};
+            }
+            g.fillPolygon(xs, ys, 3);
+        }
     }
 
     /**

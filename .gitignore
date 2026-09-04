@@ -44,6 +44,8 @@ dependency-reduced-pom.xml
 
 # 本地专属配置（含本机路径，不入库）
 /config.json
+# 核心配置表单路径历史 sidecar（程序随 config.json 生成，含本机路径历史，不入库）
+/config-history.json
 
 # IDE 本地配置
 .idea/

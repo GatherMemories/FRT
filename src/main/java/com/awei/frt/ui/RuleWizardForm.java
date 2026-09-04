@@ -101,6 +101,10 @@ public class RuleWizardForm extends JDialog {
         super(owner, "规则生成 - 表单式配置", true);
         this.config = config;
         UITheme.apply();
+        UITheme.applyComboArrowTheme(templateCombo); // 下拉箭头随主题（深色下 Metal 默认箭头不可见）
+        UITheme.applyComboArrowTheme(baseCombo);
+        UITheme.applyComboArrowTheme(folderCombo);
+        UITheme.applyComboArrowTheme(strategyCombo);
         buildContent();
         pack();
         setSize(700, 640);
@@ -826,6 +830,7 @@ public class RuleWizardForm extends JDialog {
             for (String type : StrategyFactory.getSupportedTypes()) {
                 typeCombo.addItem(type);
             }
+            UITheme.applyComboArrowTheme(typeCombo); // 链步骤策略类型下拉箭头随主题
             if (step != null) {
                 int idx = strategyTypes.indexOf(step.getStrategyType());
                 if (idx >= 0) {

@@ -2,12 +2,13 @@
 
 基于 Java 17 的多层级文件夹更新工具：按规则文件（`matching-rules.json` 等）将**更新目录**的文件新增/替换到**目标目录**，或按**删除目录**匹配删除目标文件，全程自动备份、可恢复。特别适用于 Minecraft 模组管理等需要精细化文件操作的场景。
 
-> 仓库：[https://github.com/GatherMemories/FRT](https://github.com/GatherMemories/FRT) ｜ 版本号有两条路径：**本地/开发构建**取自 `pom.xml` 的 `<version>`（常驻下一开发版 SNAPSHOT，如 `0.1.18-SNAPSHOT`）；**正式发布包**（GitHub Release zip）由 CI 按 tag 注入真实版本（如 `v0.1.18` → `0.1.18`）。界面标题、状态栏与控制台启动横幅自动显示当前版本。
+> 仓库：[https://github.com/GatherMemories/FRT](https://github.com/GatherMemories/FRT) ｜ 版本号有两条路径：**本地/开发构建**取自 `pom.xml` 的 `<version>`（常驻下一开发版 SNAPSHOT，如 `0.1.19-SNAPSHOT`）；**正式发布包**（GitHub Release zip）由 CI 按 tag 注入真实版本（如 `v0.1.19` → `0.1.19`）。界面标题、状态栏与控制台启动横幅自动显示当前版本。
 
 ## 更新日志
 
 | 版本 | 内容 |
 |------|------|
+| v0.1.19 | 核心配置表单路径历史记忆：更新/目标/删除/备份四个路径输入框升级为"可编辑 + 历史下拉"，每次成功保存核心配置时把本次实际变更的路径记入 config.json 同目录的 `config-history.json`（sidecar，最近优先、字符串原样去重、每字段上限 10 条），再次打开表单可下拉点选历史路径快速切换组合；留空 = 保留、可自由编辑/清空语义不变，日志级别不受影响。另修复深色主题下下拉框箭头不可见：Metal 固定深灰箭头改为随主题色（核心配置/规则生成表单的下拉箭头均生效） |
 | v0.1.18 | 深度审查修复批次：恢复"跳过"语义修正（用户保留文件不进回滚清单）、备份失败即中止操作、冷启动自动加载备份索引、深层目录自带规则可达、模组同 modId 升级不再残留旧 jar、日志级别配置生效、Main 退出码/参数、更新检查证书兜底收窄 + 链接同域校验；架构收口（交互接口移出 ui 包、uitls→utils 拼写修正带兼容层、解析工具合并）；测试套件自包含 + CI 自动化测试 + 零工作区污染（286 例全绿） |
 | v0.1.17 | 规则模板修复批次：模板列表"选中即自动套用"（顶部套用确认提示）；用户自定义模板目录 `templates/` 加入 gitignore |
 | v0.1.16 | 规则模板保存（自定义模板）：把当前规则保存为自定义模板，两级存储定位（工作目录 `templates/`，不可写回退用户主目录 `.frt/templates/`）、内置模板只读保护、保存前规则校验；弹窗/表单深色主题修复 |
@@ -296,7 +297,7 @@ public class MyStrategy extends AbstractOperationStrategy {
 **方法 B：命令行**（需要 JDK 17+；`FRT-*.jar` 换成你实际的 jar 文件名）：
 
 ```bash
-javac -encoding UTF-8 -cp FRT-0.1.18-SNAPSHOT.jar -d out MyStrategy.java
+javac -encoding UTF-8 -cp FRT-0.1.19-SNAPSHOT.jar -d out MyStrategy.java
 jar --create --file my-strategy.jar -C out .
 ```
 
@@ -398,6 +399,6 @@ public class MyStrategy implements OperationStrategy {
 
 ## 测试
 
-`mvn test`（surefire 3.2.5，JUnit5 真实运行）：当前 **286 个测试全绿**，覆盖策略注册表/模板方法/动态代理/多策略链/外部插件加载（含读取与执行全面测试）、压缩包策略、模组元数据解析、备份恢复/残留清理/会话记录、恢复"跳过"语义、深层目录本地规则可达、配置持久化、进度回调等。
+`mvn test`（surefire 3.2.5，JUnit5 真实运行）：当前 **301 个测试全绿**，覆盖策略注册表/模板方法/动态代理/多策略链/外部插件加载（含读取与执行全面测试）、压缩包策略、模组元数据解析、备份恢复/残留清理/会话记录、恢复"跳过"语义、深层目录本地规则可达、配置持久化、核心配置路径历史（sidecar 存取/去重/限量/容错）、进度回调等。
 
 > **CI 自动化测试**：`.github/workflows/test.yml` 在每次 push/PR 于干净检出上跑全量测试，并断言测试无异常工作区污染。测试套件已自包含（不依赖本地 config.json/testDic/真实 mod jar，备份路径全部隔离），在无本地配置的干净环境同样全绿。

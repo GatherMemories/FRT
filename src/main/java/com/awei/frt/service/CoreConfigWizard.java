@@ -84,7 +84,9 @@ public class CoreConfigWizard {
     }
 
     /**
-     * 保存核心配置（控制台 / UI 表单共用）
+     * 保存核心配置（控制台 / UI 表单共用）。
+     * 保存成功（返回 true）后会把本次实际变更的路径静默记入 config.json 同目录的
+     * config-history.json（GUI 表单历史下拉的数据源；失败仅记日志，不影响保存结果）。
      * @param updatePath 更新目录（空 = 保留原值）
      * @param targetPath 目标目录
      * @param deletePath 删除目录
@@ -110,6 +112,16 @@ public class CoreConfigWizard {
                     root = (ObjectNode) existing;
                 }
             }
+            // 记录"写入前"各路径字段的旧值（文件现值优先，文件缺失该键时以内存配置为基准，
+            // 与表单预填/留空保留的语义对齐），供保存成功后判断哪些路径发生了实际变更并入历史
+            String prevUpdate = fieldBaseline(root, PathHistoryStore.FIELD_UPDATE_PATH,
+                    config != null ? config.getUpdatePath() : null);
+            String prevTarget = fieldBaseline(root, PathHistoryStore.FIELD_TARGET_PATH,
+                    config != null ? config.getTargetPath() : null);
+            String prevDelete = fieldBaseline(root, PathHistoryStore.FIELD_DELETE_PATH,
+                    config != null ? config.getDeletePath() : null);
+            String prevBackup = fieldBaseline(root, PathHistoryStore.FIELD_BACKUP_PATH,
+                    config != null ? config.getBackupPath() : null);
             root.put("updatePath", updatePath == null ? null : updatePath.toString());
             root.put("targetPath", targetPath == null ? null : targetPath.toString());
             root.put("deletePath", deletePath == null ? null : deletePath.toString());
@@ -160,6 +172,10 @@ public class CoreConfigWizard {
             // 日志级别即时生效（无需重启）；目录类修改仍需重启（进程内路径静态缓存）
             LoggerUtil.applyLogLevel(level);
             System.out.println("[提示] 目录修改将在下次启动时生效；日志级别已即时生效");
+            // 6b. 保存成功后，把本次实际变更的路径记入历史（config.json 同目录 config-history.json，
+            //     体验数据：失败只记日志、不影响已完成的保存；GUI 表单据此提供历史下拉快速切换）
+            recordPathHistory(prevUpdate, prevTarget, prevDelete, prevBackup,
+                    updatePath, targetPath, deletePath, backupPath);
             return true;
         } catch (IOException e) {
             LoggerUtil.logException("保存核心配置失败", e);
@@ -217,6 +233,55 @@ public class CoreConfigWizard {
 
     private Path resolveConfigFile() {
         return configFile != null ? configFile : Paths.get("config.json");
+    }
+
+    /**
+     * 字段"变更基准"：已解析 JSON 中的现值优先（外部编辑过文件也能如实对比）；
+     * 文件缺失该键（首次写入/测试空文件）时退回内存配置值——内存配置正是表单预填与
+     * "留空=保留"的来源，以此兜底可避免首次空保存把默认值误记入历史。
+     */
+    private static String fieldBaseline(ObjectNode root, String key, Path inMemory) {
+        JsonNode node = root.get(key);
+        if (node != null && !node.isNull() && node.isTextual()) {
+            return node.asText();
+        }
+        return inMemory == null ? null : inMemory.toString();
+    }
+
+    /**
+     * 保存成功后把实际写入且发生变更的路径记入历史（GUI 表单与控制台共用此记录点）。
+     * 仅记录非空且与变更基准不同的字段：留空=保留（值未变）不会重复入史，去重/限量
+     * 由 PathHistoryStore 处理。全程静默容错——目录不可写/IO 异常只记日志，不影响本次保存。
+     */
+    private void recordPathHistory(String prevUpdate, String prevTarget, String prevDelete,
+                                   String prevBackup, Path updatePath, Path targetPath,
+                                   Path deletePath, Path backupPath) {
+        try {
+            PathHistoryStore history = new PathHistoryStore(
+                    PathHistoryStore.historyFileFor(resolveConfigFile()));
+            recordChanged(history, PathHistoryStore.FIELD_UPDATE_PATH, updatePath, prevUpdate);
+            recordChanged(history, PathHistoryStore.FIELD_TARGET_PATH, targetPath, prevTarget);
+            recordChanged(history, PathHistoryStore.FIELD_DELETE_PATH, deletePath, prevDelete);
+            recordChanged(history, PathHistoryStore.FIELD_BACKUP_PATH, backupPath, prevBackup);
+            history.saveIfDirty();
+        } catch (Exception e) {
+            // 防御性兜底：历史属体验数据，任何意外都不得阻断核心配置保存
+            LoggerUtil.logWarn("记录核心配置路径历史失败（不影响本次保存）: " + e.getClass().getSimpleName()
+                    + (e.getMessage() != null ? ": " + e.getMessage() : ""));
+        }
+    }
+
+    /** 变更的字段才入史；null/空串（未填写语义）直接跳过 */
+    private static void recordChanged(PathHistoryStore history, String field,
+                                      Path written, String previous) {
+        if (written == null) {
+            return;
+        }
+        String value = written.toString();
+        if (value.isEmpty() || value.equals(previous)) {
+            return; // 留空保留或值未变化：不入史，避免默认值/重复值刷屏
+        }
+        history.record(field, value);
     }
 
     /** 收集不存在的目录（相对路径基于基准目录解析），确认后由向导自动创建 */
